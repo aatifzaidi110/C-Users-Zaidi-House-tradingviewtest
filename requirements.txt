@@ -1,0 +1,13 @@
+# requirements.txt
+beautifulsoup4
+streamlit>=1.22.0
+yfinance>=0.2.37
+ta>=0.10.2
+mplfinance>=0.12.9
+textblob>=0.17.1
+requests>=2.28.1
+pandas>=1.5.0
+numpy>=1.23.0
+matplotlib>=3.6.0
+vaderSentiment>=3.3.2  # Optional alternative
+nltk
