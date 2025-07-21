@@ -149,7 +149,6 @@ OPTIONS_GREEKS_DESCRIPTIONS = {
         "example": "A Volume of 200 means 200 contracts have been traded today."
     }
 }
-
 def display_glossary_tab(current_stock_price=None):
     """Displays a comprehensive glossary of technical indicators and options Greeks."""
     st.subheader("📚 Glossary: Technical Indicators & Options Concepts")
@@ -165,7 +164,7 @@ def display_glossary_tab(current_stock_price=None):
             st.markdown(f"**Ideal (Bullish):** {data['ideal']}")
             if 'example' in data:
                 st.markdown(f"**Example:** {data['example']}")
-    
+
     st.markdown("---")
 
     st.markdown("### Options Concepts & Greeks")
@@ -176,4 +175,3 @@ def display_glossary_tab(current_stock_price=None):
             st.markdown(f"**Ideal for Buyers/Sellers:** {data['ideal']}")
             if 'example' in data:
                 st.markdown(f"**Example:** {data['example']}")
-

@@ -1,4 +1,4 @@
-# display_components.py - Version 1.39
+# display_components.py - Version 1.40
 
 import streamlit as st
 import pandas as pd
@@ -10,6 +10,7 @@ import numpy as np # For numerical operations in payoff chart
 
 # Import functions from utils.py
 from utils import backtest_strategy, calculate_indicators, generate_signals_for_row, generate_option_trade_plan, get_options_chain, get_data, get_finviz_data, calculate_pivot_points, EXPERT_RATING_MAP, get_moneyness, analyze_options_chain # Import get_moneyness and analyze_options_chain
+from glossary_components import INDICATOR_DESCRIPTIONS, OPTIONS_GREEKS_DESCRIPTIONS
 
 # === Helper for Indicator Display ===
 def format_indicator_display(signal_key, current_value, selected, signals_dict):
@@ -18,7 +19,7 @@ def format_indicator_display(signal_key, current_value, selected, signals_dict):
     """
     if not selected:
         return ""
-    
+
     is_fired = signals_dict.get(signal_key, False)
     status_icon = '🟢' if is_fired else '🔴'
     display_name = signal_key.split('(')[0].strip()
@@ -94,7 +95,7 @@ def plot_generic_payoff_chart(stock_prices, payoffs, legs, strategy_name, ticker
             if (y2 - y1) != 0: # Avoid division by zero
                 breakeven = x1 - y1 * (x2 - x1) / (y2 - y1)
                 breakeven_points.append(breakeven)
-    
+
     # Filter unique breakeven points and plot them
     unique_breakeven_points = sorted(list(set(round(bp, 2) for bp in breakeven_points)))
     for bp in unique_breakeven_points:
@@ -103,7 +104,7 @@ def plot_generic_payoff_chart(stock_prices, payoffs, legs, strategy_name, ticker
     # Calculate and mark max profit/loss from the payoff array
     max_payoff = np.max(payoffs)
     min_payoff = np.min(payoffs)
-    
+
     # Add text annotations for max profit/loss
     # Adjust position slightly to avoid overlap with plot line
     if max_payoff > 0:
@@ -128,7 +129,7 @@ def plot_automated_strategy_payoff(strategy_details, current_stock_price, ticker
     ax.axhline(0, color='gray', linestyle='--', linewidth=0.8, label='Breakeven Line') # Breakeven line
 
     strategy_type = strategy_details['Strategy']
-    
+
     # Determine the range of stock prices for the chart
     # Use current stock price and relevant strikes to set a good range
     min_price = current_stock_price * 0.8
@@ -145,22 +146,22 @@ def plot_automated_strategy_payoff(strategy_details, current_stock_price, ticker
         max_price = max(buy_strike, sell_strike, current_stock_price) * 1.1
 
         stock_prices = np.linspace(min_price, max_price, 200)
-        
+
         # Calculate payoff for Bull Call Spread
         payoff = np.maximum(0, stock_prices - buy_strike) - np.maximum(0, stock_prices - sell_strike) - net_debit
-        
+
         ax.plot(stock_prices, payoff, label=f'{strategy_type} Payoff', color='blue')
-        
+
         # Mark key points
         ax.axvline(buy_strike, color='green', linestyle=':', label=f'Buy Strike: ${buy_strike:.2f}')
         ax.axvline(sell_strike, color='red', linestyle=':', label=f'Sell Strike: ${sell_strike:.2f}')
-        
+
         breakeven = buy_strike + net_debit
         ax.axvline(breakeven, color='purple', linestyle='--', label=f'Breakeven: ${breakeven:.2f}')
-        
+
         max_profit = (sell_strike - buy_strike) - net_debit
         max_loss = -net_debit
-        
+
         ax.text(stock_prices[-1], max_profit, f'Max Profit: ${max_profit:.2f}', verticalalignment='bottom', horizontalalignment='right', color='green', fontsize=9)
         ax.text(stock_prices[-1], max_loss, f'Max Loss: ${max_loss:.2f}', verticalalignment='top', horizontalalignment='right', color='red', fontsize=9)
 
@@ -169,25 +170,25 @@ def plot_automated_strategy_payoff(strategy_details, current_stock_price, ticker
         # Safely convert entry_price string to float
         entry_premium_str = strategy_details['Entry Price'].replace('~', '').replace('$', '')
         entry_premium = float(entry_premium_str) if entry_premium_str else 0.0
-        
+
         min_price = min(strike, current_stock_price) * 0.9
         max_price = max(strike, current_stock_price) * 1.1 + entry_premium * 2 # Extend range for unlimited profit
-        
+
         stock_prices = np.linspace(min_price, max_price, 200)
-        
+
         # Calculate payoff for Buy Call
         payoff = np.maximum(0, stock_prices - strike) - entry_premium
-        
+
         ax.plot(stock_prices, payoff, label=f'{strategy_type} Payoff', color='blue')
-        
+
         # Mark key points
         ax.axvline(strike, color='green', linestyle=':', label=f'Strike: ${strike:.2f}')
-        
+
         breakeven = strike + entry_premium
         ax.axvline(breakeven, color='purple', linestyle='--', label=f'Breakeven: ${breakeven:.2f}')
-        
+
         max_loss = -entry_premium
-        
+
         ax.text(stock_prices[-1], payoff[-1], 'Max Profit: Unlimited', verticalalignment='bottom', horizontalalignment='right', color='green', fontsize=9)
         ax.text(stock_prices[-1], max_loss, f'Max Loss: ${max_loss:.2f}', verticalalignment='top', horizontalalignment='right', color='red', fontsize=9)
 
@@ -221,12 +222,12 @@ def display_interactive_payoff_calculator(current_stock_price, ticker):
         "Bull Call Spread": "Buy ITM call, Sell OTM call. Bullish, defined risk/reward.",
         "Bear Put Spread": "Buy OTM put, Sell ITM put. Bearish, defined risk/reward."
     }
-    
+
     selected_strategy = st.selectbox("Select Strategy", list(strategy_options.keys()), key="payoff_strategy_select")
     st.markdown(f"*{strategy_options[selected_strategy]}*")
 
     legs = []
-    
+
     # Default range for stock prices on the chart
     stock_prices_for_chart = np.linspace(current_stock_price * 0.7, current_stock_price * 1.3, 200)
 
@@ -237,7 +238,7 @@ def display_interactive_payoff_calculator(current_stock_price, ticker):
         with col2:
             premium = st.number_input("Call Premium Paid", min_value=0.01, value=2.00, format="%.2f", key="lc_premium")
         legs.append({'type': 'call', 'strike': strike, 'premium': premium, 'action': 'buy'})
-        
+
         # Adjust chart range based on inputs
         stock_prices_for_chart = np.linspace(min(strike, current_stock_price) * 0.9, max(strike, current_stock_price) * 1.1 + premium * 2, 200)
 
@@ -260,13 +261,13 @@ def display_interactive_payoff_calculator(current_stock_price, ticker):
         with col2:
             sell_strike = st.number_input("Sell Call Strike", min_value=0.01, value=round(current_stock_price * 1.05, 2), format="%.2f", key="bcs_sell_strike")
             sell_premium = st.number_input("Sell Call Premium", min_value=0.01, value=1.00, format="%.2f", key="bcs_sell_premium")
-        
+
         if sell_strike <= buy_strike:
             st.warning("Sell Call Strike must be strictly greater than Buy Call Strike for a Bull Call Spread.")
         else:
             legs.append({'type': 'call', 'strike': buy_strike, 'premium': buy_premium, 'action': 'buy'})
             legs.append({'type': 'call', 'strike': sell_strike, 'premium': sell_premium, 'action': 'sell'})
-            
+
             stock_prices_for_chart = np.linspace(min(buy_strike, sell_strike, current_stock_price) * 0.9, max(buy_strike, sell_strike, current_stock_price) * 1.1, 200)
 
     elif selected_strategy == "Bear Put Spread":
@@ -277,7 +278,7 @@ def display_interactive_payoff_calculator(current_stock_price, ticker):
         with col2:
             sell_strike = st.number_input("Sell Put Strike", min_value=0.01, value=round(current_stock_price * 0.95, 2), format="%.2f", key="bps_sell_strike")
             sell_premium = st.number_input("Sell Put Premium", min_value=0.01, value=1.00, format="%.2f", key="bps_sell_premium")
-        
+
         if sell_strike >= buy_strike:
             st.warning("Sell Put Strike must be strictly less than Buy Put Strike for a Bear Put Spread.")
         else:
@@ -315,7 +316,7 @@ def display_main_analysis_tab(ticker, df, info, params, selection, overall_confi
         current_price = last['Close']
         prev_close = df['Close'].iloc[-2] if len(df) >= 2 else current_price
         price_delta = current_price - prev_close
-        
+
         # Determine bullish/bearish based on overall confidence
         sentiment_status = "Neutral"
         sentiment_icon = "⚪"
@@ -325,7 +326,7 @@ def display_main_analysis_tab(ticker, df, info, params, selection, overall_confi
         elif overall_confidence <= 35:
             sentiment_status = "Bearish"
             sentiment_icon = "⬇️"
-        
+
         st.metric(label="Current Price", value=f"${current_price:.2f}", delta=f"${price_delta:.2f}")
         st.markdown(f"**Overall Sentiment:** {sentiment_icon} {sentiment_status}")
 
@@ -334,7 +335,7 @@ def display_main_analysis_tab(ticker, df, info, params, selection, overall_confi
         st.subheader("💡 Confidence Score")
         st.metric("Overall Confidence", f"{overall_confidence:.0f}/100")
         st.progress(overall_confidence / 100)
-        
+
         # Convert numerical sentiment score to descriptive text
         sentiment_text = "N/A (Excluded)"
         if sentiment_score is not None:
@@ -359,7 +360,7 @@ def display_main_analysis_tab(ticker, df, info, params, selection, overall_confi
         st.markdown(f"- **Technical Score:** `{scores['technical']:.0f}` (Weight: `{final_weights['technical']*100:.0f}%`)\n"
                     f"- **Sentiment Score:** {sentiment_text} (Weight: `{final_weights['sentiment']*100:.0f}%`)\n"
                     f"- **Expert Rating:** {expert_text} (Weight: `{final_weights['expert']*100:.0f}%`)")
-        
+
         if show_finviz_link:
             st.markdown(f"**Source for Sentiment & Expert Scores:** [Finviz.com]({f'https://finviz.com/quote.ashx?t={ticker}'})")
 
@@ -378,13 +379,13 @@ def display_main_analysis_tab(ticker, df, info, params, selection, overall_confi
         with st.expander("📈 Trend Indicators", expanded=True):
             if selection.get("EMA Trend"):
                 st.markdown(format_indicator_display("Uptrend (21>50>200 EMA)", None, selection.get("EMA Trend"), signals))
-            
+
             if selection.get("Parabolic SAR"):
                 st.markdown(format_indicator_display("Bullish PSAR", last.get('psar'), selection.get("Parabolic SAR"), signals))
 
             if selection.get("ADX"):
                 st.markdown(format_indicator_display("Strong Trend (ADX > 25)", last.get("adx"), selection.get("ADX"), signals))
-        
+
         with st.expander("💨 Momentum & Volume Indicators", expanded=True):
             if selection.get("RSI Momentum"):
                 st.markdown(format_indicator_display("Bullish Momentum (RSI > 50)", last.get("RSI"), selection.get("RSI Momentum"), signals))
@@ -403,10 +404,10 @@ def display_main_analysis_tab(ticker, df, info, params, selection, overall_confi
 
             if selection.get("OBV"):
                 st.markdown(format_indicator_display("OBV Rising", last.get("obv"), selection.get("OBV"), signals))
-            
+
             if is_intraday and selection.get("VWAP"):
                 st.markdown(format_indicator_display("Price > VWAP", last.get("vwap"), selection.get("VWAP"), signals))
-        
+
         with st.expander("📊 Display-Only Indicators Status"):
             # Bollinger Bands Status
             if selection.get("Bollinger Bands"):
@@ -447,9 +448,9 @@ def display_main_analysis_tab(ticker, df, info, params, selection, overall_confi
     with col2:
         st.subheader("📈 Price Chart")
         mav_tuple = (21, 50, 200) if selection.get("EMA Trend") else None
-        
+
         ap = [] # Initialize addplot as an empty list
-        
+
         # Add Bollinger Bands to addplot if selected and data is available
         if selection.get("Bollinger Bands"):
             # Check if BB columns exist and are not all NaN in the tail data
@@ -466,7 +467,7 @@ def display_main_analysis_tab(ticker, df, info, params, selection, overall_confi
                 # Create Series aligned with the chart's index (df.tail(120).index)
                 # This ensures the horizontal lines span the visible chart
                 chart_index = df.tail(120).index
-                
+
                 pivot_values = pd.Series(last_pivot['Pivot'], index=chart_index)
                 r1_values = pd.Series(last_pivot['R1'], index=chart_index)
                 s1_values = pd.Series(last_pivot['S1'], index=chart_index)
@@ -507,16 +508,16 @@ def display_trade_plan_options_tab(ticker, df, overall_confidence):
     st.subheader("📋 Suggested Stock Trade Plan (Bullish Swing)")
     entry_zone_start = last['EMA21'] * 0.99 if 'EMA21' in last and not pd.isna(last['EMA21']) else last['Close'] * 0.99
     entry_zone_end = last['EMA21'] * 1.01 if 'EMA21' in last and not pd.isna(last['EMA21']) else last['Close'] * 1.01
-    
+
     stop_loss_val = last['Low'] - last['ATR'] if 'Low' in last and 'ATR' in last and not pd.isna(last['ATR']) and last['ATR'] > 0 else last['Close'] * 0.95
     profit_target_val = last['Close'] + (2 * (last['Close'] - stop_loss_val)) if 'Close' in last and stop_loss_val and not pd.isna(stop_loss_val) else last['Close'] * 1.1
-    
+
     st.info(f"**Based on {overall_confidence:.0f}% Overall Confidence:**\n\n"
             f"**Entry Zone:** Between **${entry_zone_start:.2f}** and **${entry_zone_end:.2f}**.\n"
             f"**Stop-Loss:** A close below **${stop_loss_val:.2f}**.\n"
             f"**Profit Target:** Around **${profit_target_val:.2f}** (2:1 Reward/Risk).")
     st.markdown("---")
-    
+
     st.subheader("🎭 Automated Options Strategy")
     stock_obj = yf.Ticker(ticker)
     expirations = stock_obj.options
@@ -524,12 +525,12 @@ def display_trade_plan_options_tab(ticker, df, overall_confidence):
         st.warning("No options data available for this ticker.")
     else:
         trade_plan = generate_option_trade_plan(ticker, overall_confidence, current_stock_price, expirations)
-        
+
         # --- Start of new detailed options display ---
         if trade_plan['status'] == 'success':
             st.success(f"**Recommended Strategy: {trade_plan['Strategy']}** (Confidence: {overall_confidence:.0f}%)")
             st.info(trade_plan['Reason'])
-            
+
             if trade_plan['Strategy'] == "Bull Call Spread":
                 col1, col2, col3, col4, col5 = st.columns(5)
                 col1.metric("Buy Strike", trade_plan['Buy Strike'])
@@ -540,7 +541,7 @@ def display_trade_plan_options_tab(ticker, df, overall_confidence):
                 st.write(f"**Reward / Risk:** `{trade_plan['Reward / Risk']}`")
                 st.markdown("---")
                 st.subheader("🔬 Recommended Option Deep-Dive (Spread Legs)")
-                
+
                 # Check if 'Buy' leg exists before accessing
                 if 'Buy' in trade_plan['Contracts']:
                     st.write("**Buy Leg:**")
@@ -597,7 +598,7 @@ def display_trade_plan_options_tab(ticker, df, overall_confidence):
                 rec_option = trade_plan['Contract']
                 entry_premium = rec_option.get('ask', rec_option.get('lastPrice', 0))
                 moneyness = get_moneyness(rec_option.get('strike'), current_stock_price, "call")
-                
+
                 option_metrics = [
                     {"Metric": "Strike", "Value": f"${rec_option.get('strike', 0):.2f}", "Description": "The price at which the option can be exercised.", "Ideal for Buyers": "Lower for calls, higher for puts"},
                     {"Metric": "Moneyness", "Value": moneyness, "Description": "In-The-Money (ITM), At-The-Money (ATM), or Out-of-The-Money (OTM).", "Ideal for Buyers": "Depends on strategy"},
@@ -621,17 +622,16 @@ def display_trade_plan_options_tab(ticker, df, overall_confidence):
             # --- Display Payoff Chart for Automated Strategy ---
             st.markdown("---")
             st.subheader("📊 Automated Strategy Payoff Chart")
-            # Removed the call to plot_automated_strategy_payoff here
-            # payoff_fig = plot_automated_strategy_payoff(trade_plan, current_stock_price, ticker)
-            # if payoff_fig: # Only display if a figure was successfully generated
-            #     st.pyplot(payoff_fig, clear_figure=True)
-            #     plt.close(payoff_fig) # Close the figure to free up memory
-            # else:
-            #     st.info("Automated strategy payoff chart could not be generated.")
-        
+            payoff_fig = plot_automated_strategy_payoff(trade_plan, current_stock_price, ticker)
+            if payoff_fig: # Only display if a figure was successfully generated
+                st.pyplot(payoff_fig, clear_figure=True)
+                plt.close(payoff_fig) # Close the figure to free up memory
+            else:
+                st.info("Automated strategy payoff chart could not be generated.")
+
         else: # This 'else' correctly belongs to the 'if trade_plan['status'] == 'success':
             st.warning(trade_plan['message'])
-        
+
         st.markdown("---")
         st.subheader("⛓️ Full Option Chain")
         option_type = st.radio("Select Option Type", ["Calls", "Puts"], horizontal=True, key=f"option_type_{ticker}")
@@ -642,8 +642,8 @@ def display_trade_plan_options_tab(ticker, df, overall_confidence):
             # --- New Options Chain Analysis ---
             st.markdown("##### Options Chain Highlights & Suggestions")
             # Pass exp_date_str to analyze_options_chain
-            chain_analysis_results = analyze_options_chain(calls, puts, current_stock_price, exp_date_str) 
-            
+            chain_analysis_results = analyze_options_chain(calls, puts, current_stock_price, exp_date_str)
+
             if chain_analysis_results:
                 has_content = False
                 for category, options_list in chain_analysis_results.items():
@@ -659,14 +659,14 @@ def display_trade_plan_options_tab(ticker, df, overall_confidence):
             st.markdown("---")
 
             st.markdown(f"[**🔗 Analyze this chain on OptionCharts.io**](https://optioncharts.io/options/{ticker}/chain/{exp_date_str})")
-            
+
             chain_to_display = calls if option_type == "Calls" else puts
             chain_to_display_copy = chain_to_display.copy()
             if 'strike' in chain_to_display_copy.columns:
                 chain_to_display_copy['Moneyness'] = chain_to_display_copy.apply(
                     lambda row: get_moneyness(row['strike'], current_stock_price, "call" if option_type == "Calls" else "put"), axis=1
                 )
-            
+
             # Define column descriptions for tooltips
             column_descriptions = {
                 'strike': 'The predetermined price at which the underlying asset can be bought (for a call) or sold (for a put) when the option is exercised.',
@@ -706,7 +706,7 @@ def display_trade_plan_options_tab(ticker, df, overall_confidence):
                 )
             else:
                 st.info("No relevant columns found in the options chain to display.")
-    
+
     st.markdown("---")
     # Call the interactive payoff calculator
     display_interactive_payoff_calculator(current_stock_price, ticker)
@@ -716,7 +716,7 @@ def display_backtest_tab(ticker, selection):
     """Displays the historical backtest results."""
     st.subheader(f"🧪 Historical Backtest for {ticker}")
     st.info(f"Simulating trades based on your **currently selected indicators**. Entry is triggered if ALL selected signals are positive.")
-    
+
     daily_hist, _ = get_data(ticker, "2y", "1d")
     if daily_hist is not None and not daily_hist.empty:
         daily_df_calculated = calculate_indicators(daily_hist.copy(), is_intraday=False)
@@ -724,12 +724,12 @@ def display_backtest_tab(ticker, selection):
         trades, wins, losses = backtest_strategy(daily_df_calculated, selection)
         total_trades = wins + losses
         win_rate = (wins / total_trades) * 100 if total_trades > 0 else 0
-        
+
         col1, col2, col3 = st.columns(3)
         col1.metric("Trades Simulated", total_trades)
         col2.metric("Wins", wins)
         col3.metric("Win Rate", f"{win_rate:.1f}%")
-        
+
         if trades: st.dataframe(pd.DataFrame(trades).tail(20))
         else: st.info("No trades were executed based on the current strategy and historical data. Please review the warnings above for potential reasons (e.g., insufficient data, indicator calculation issues, or strict entry conditions).")
     else:
@@ -763,5 +763,31 @@ def display_trade_log_tab(LOG_FILE, ticker, timeframe, overall_confidence):
     """Displays and manages the trade log."""
     st.subheader("📝 Log Your Trade Analysis")
     user_notes = st.text_area("Add your personal notes or trade thesis here:", key=f"trade_notes_{ticker}")
-    
+
     st.info("Trade log functionality is pending implementation.")
+
+def display_glossary(current_stock_price=None):
+    """
+    Displays a comprehensive glossary of all technical indicators and options greeks.
+    """
+    st.subheader("📚 Glossary: Technical Indicators & Options Concepts")
+    st.info("This section provides detailed explanations, ideal criteria, and examples for the various technical indicators and options-related terms used in this application.")
+
+    st.markdown("---")
+    st.markdown("### Technical Indicators")
+    for key, data in INDICATOR_DESCRIPTIONS.items():
+        with st.expander(f"**{key}**"):
+            st.markdown(f"**Description:** {data['description']}")
+            st.markdown(f"**Ideal (Bullish):** {data['ideal']}")
+            if 'example' in data:
+                st.markdown(f"**Example:** {data['example']}")
+
+    st.markdown("---")
+    st.markdown("### Options Concepts & Greeks")
+    st.info("The 'Greeks' (Delta, Theta, Gamma, Vega, Rho) are measures of an option's sensitivity to various factors. Understanding them is crucial for managing options risk.")
+    for key, data in OPTIONS_GREEKS_DESCRIPTIONS.items():
+        with st.expander(f"**{key}**"):
+            st.markdown(f"**Description:** {data['description']}")
+            st.markdown(f"**Ideal for Buyers/Sellers:** {data['ideal']}")
+            if 'example' in data:
+                st.markdown(f"**Example:** {data['example']}")
