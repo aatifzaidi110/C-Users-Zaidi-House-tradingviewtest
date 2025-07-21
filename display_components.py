@@ -759,7 +759,7 @@ def display_news_info_tab(ticker, info, finviz_data):
     else:
         st.info("No recent headlines found or automated scoring is disabled.")
 
-def display_trade_log_tab(LOG_FILE, ticker, timeframe, overall_confidence):
+def display_trade_log_tab(ticker, timeframe, overall_confidence):
     """Displays and manages the trade log."""
     st.subheader("📝 Log Your Trade Analysis")
     user_notes = st.text_area("Add your personal notes or trade thesis here:", key=f"trade_notes_{ticker}")

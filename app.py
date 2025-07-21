@@ -194,7 +194,7 @@ if st.session_state.analysis_started:
                     display_news_info_tab(ticker_to_analyze, info_data, finviz_data)
                 
                 with log_tab:
-                    display_trade_log_tab(LOG_FILE, ticker_to_analyze, timeframe, overall_confidence)
+                    display_trade_log_tab(ticker_to_analyze, timeframe, overall_confidence)
 
                 with glossary_tab:
                     display_glossary()
