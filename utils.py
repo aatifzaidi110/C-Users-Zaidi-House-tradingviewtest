@@ -404,222 +404,111 @@ EXPERT_RATING_MAP = {"Strong Buy": 100, "Buy": 85, "Hold": 50, "N/A": 50, "Sell"
 
 def convert_compound_to_100_scale(compound_score): return int((compound_score + 1) * 50)
 
-def get_moneyness(strike, current_price, option_type="call"):
+def convert_finviz_recom_to_score(recom_str):
+    """Converts Finviz numerical recommendation string to a score (0-100)."""
+    try:
+        recom_val = float(recom_str)
+        if recom_val <= 1.5: return 100 # Strong Buy
+        elif recom_val <= 2.5: return 85 # Buy
+        elif recom_val <= 3.5: return 50 # Hold
+        elif recom_val <= 4.5: return 15 # Sell
+        else: return 0 # Strong Sell
+    except ValueError:
+        return 50 # Default to Hold if not a valid number
+
+def get_moneyness(strike, current_stock_price, option_type):
     """Determines if an option is In-The-Money (ITM), At-The-Money (ATM), or Out-of-The-Money (OTM)."""
     if option_type == "call":
-        if strike < current_price:
+        if strike < current_stock_price:
             return "ITM"
-        elif strike > current_price:
-            return "OTM"
-        else:
+        elif strike == current_stock_price:
             return "ATM"
+        else:
+            return "OTM"
     elif option_type == "put":
-        if strike > current_price:
+        if strike > current_stock_price:
             return "ITM"
-        elif strike < current_price:
-            return "OTM"
-        else:
+        elif strike == current_stock_price:
             return "ATM"
+        else:
+            return "OTM"
     return "N/A"
 
 def analyze_options_chain(calls_df, puts_df, current_stock_price, expiry_date): # Added expiry_date parameter
     """
-    Analyzes the options chain to highlight key options based on various metrics
-    and provides suggestions for ITM, ATM, OTM.
+    Analyzes the options chain to provide highlights and suggestions.
     """
     analysis_results = {
-        "Highest Volume Options": [],
-        "Highest Open Interest Options": [],
-        "Highest Implied Volatility Options": [],
-        "Highest Delta Calls": [],
-        "Lowest Theta Calls": [],
-        "Highest Gamma Calls": [],
-        "Highest Vega Calls": [],
-        "ITM Call Suggestions": [],
-        "ATM Call Suggestions": [],
-        "OTM Call Suggestions": [],
-        # Added Put specific analysis categories
-        "Highest Delta Puts": [],
-        "Lowest Theta Puts": [],
-        "Highest Gamma Puts": [],
-        "Highest Vega Puts": [],
-        "ITM Put Suggestions": [],
-        "ATM Put Suggestions": [],
-        "OTM Put Suggestions": []
+        "Deep ITM Calls (Bullish)": [],
+        "Deep OTM Puts (Bullish)": [],
+        "High Volume/Open Interest Calls": [],
+        "High Volume/Open Interest Puts": [],
+        "Near-Term ATM Options": []
     }
 
-    # Helper to format option summary
-    def format_option_summary(option_row, opt_type, reason, expiration_date_for_summary): # Added expiration_date_for_summary
-        return {
-            "Type": f"{opt_type} Option",
-            "Strike": option_row.get('strike', pd.NA),
-            "Expiration": expiration_date_for_summary, # Use the passed expiration_date_for_summary
-            "Value": option_row.get('lastPrice', pd.NA),
-            "Reason": reason
-        }
-
-    # Analyze Calls
+    # Deep ITM Calls (Bullish)
     if not calls_df.empty:
-        # Add moneyness for filtering
-        calls_df_copy = calls_df.copy()
-        calls_df_copy['Moneyness'] = calls_df_copy.apply(
-            lambda row: get_moneyness(row['strike'], current_stock_price, "call"), axis=1
-        )
-        
-        # Highest Volume
-        if 'volume' in calls_df_copy.columns and not calls_df_copy['volume'].isnull().all():
-            highest_vol_call = calls_df_copy.loc[calls_df_copy['volume'].idxmax()]
-            analysis_results["Highest Volume Options"].append(format_option_summary(
-                highest_vol_call, "Call", f"Highest volume ({highest_vol_call['volume']:,}) indicates strong current interest.", expiry_date # Pass expiry_date
-            ))
+        itm_calls = calls_df[calls_df['inTheMoney']].sort_values(by='strike', ascending=False)
+        for _, row in itm_calls.head(3).iterrows(): # Top 3 ITM calls
+            analysis_results["Deep ITM Calls (Bullish)"].append({
+                "Type": "Call",
+                "Strike": row['strike'],
+                "Expiration": expiry_date, # Use the passed expiry_date
+                "Reason": "High delta, behaves like stock, good for strong bullish conviction."
+            })
 
-        # Highest Open Interest
-        if 'openInterest' in calls_df_copy.columns and not calls_df_copy['openInterest'].isnull().all():
-            highest_oi_call = calls_df_copy.loc[calls_df_copy['openInterest'].idxmax()]
-            analysis_results["Highest Open Interest Options"].append(format_option_summary(
-                highest_oi_call, "Call", f"Highest open interest ({highest_oi_call['openInterest']:,}) suggests significant market positioning.", expiry_date # Pass expiry_date
-            ))
-
-        # Highest Implied Volatility
-        if 'impliedVolatility' in calls_df_copy.columns and not calls_df_copy['impliedVolatility'].isnull().all():
-            highest_iv_call = calls_df_copy.loc[calls_df_copy['impliedVolatility'].idxmax()]
-            analysis_results["Highest Implied Volatility Options"].append(format_option_summary(
-                highest_iv_call, "Call", f"Highest IV ({highest_iv_call['impliedVolatility']:.2%}) indicates high expected price movement.", expiry_date # Pass expiry_date
-            ))
-        
-        # Highest Delta Calls
-        if 'delta' in calls_df_copy.columns and not calls_df_copy['delta'].isnull().all():
-            highest_delta_call = calls_df_copy.loc[calls_df_copy['delta'].idxmax()]
-            analysis_results["Highest Delta Calls"].append(format_option_summary(
-                highest_delta_call, "Call", f"Highest Delta ({highest_delta_call['delta']:.2f}) means price moves most with stock.", expiry_date # Pass expiry_date
-            ))
-
-        # Lowest Theta Calls (for buyers)
-        if 'theta' in calls_df_copy.columns and not calls_df_copy['theta'].isnull().all():
-            lowest_theta_call = calls_df_copy.loc[calls_df_copy['theta'].idxmax()] # Theta is typically negative, so max is closest to zero
-            analysis_results["Lowest Theta Calls"].append(format_option_summary(
-                lowest_theta_call, "Call", f"Lowest Theta ({lowest_theta_call['theta']:.3f}) means less time decay.", expiry_date # Pass expiry_date
-            ))
-        
-        # Highest Gamma Calls
-        if 'gamma' in calls_df_copy.columns and not calls_df_copy['gamma'].isnull().all():
-            highest_gamma_call = calls_df_copy.loc[calls_df_copy['gamma'].idxmax()]
-            analysis_results["Highest Gamma Calls"].append(format_option_summary(
-                highest_gamma_call, "Call", f"Highest Gamma ({highest_gamma_call['gamma']:.3f}) means fastest changing Delta.", expiry_date # Pass expiry_date
-            ))
-
-        # Highest Vega Calls
-        if 'vega' in calls_df_copy.columns and not calls_df_copy['vega'].isnull().all():
-            highest_vega_call = calls_df_copy.loc[calls_df_copy['vega'].idxmax()]
-            analysis_results["Highest Vega Calls"].append(format_option_summary(
-                highest_vega_call, "Call", f"Highest Vega ({highest_vega_call['vega']:.3f}) means most sensitive to IV changes.", expiry_date # Pass expiry_date
-            ))
-
-        # ITM Call Suggestions
-        itm_calls = calls_df_copy[calls_df_copy['Moneyness'] == 'ITM'].sort_values(by='strike', ascending=False)
-        if not itm_calls.empty:
-            best_itm = itm_calls.iloc[0]
-            analysis_results["ITM Call Suggestions"].append(format_option_summary(
-                best_itm, "Call", "Deep ITM calls offer high delta, behaving more like stock.", expiry_date # Pass expiry_date
-            ))
-        
-        # ATM Call Suggestions
-        atm_calls = calls_df_copy[calls_df_copy['Moneyness'] == 'ATM']
-        if not atm_calls.empty:
-            best_atm = atm_calls.iloc[0]
-            analysis_results["ATM Call Suggestions"].append(format_option_summary(
-                best_atm, "Call", "ATM calls balance cost and directional exposure.", expiry_date # Pass expiry_date
-            ))
-
-        # OTM Call Suggestions
-        otm_calls = calls_df_copy[calls_df_copy['Moneyness'] == 'OTM'].sort_values(by='strike', ascending=True)
-        if not otm_calls.empty:
-            best_otm = otm_calls.iloc[0]
-            analysis_results["OTM Call Suggestions"].append(format_option_summary(
-                best_otm, "Call", "OTM calls are cheaper and offer high leverage, but lower probability.", expiry_date # Pass expiry_date
-            ))
-
-    # Analyze Puts (similar logic, but for puts)
+    # Deep OTM Puts (Bullish - for selling premium)
     if not puts_df.empty:
-        # Add moneyness for filtering
-        puts_df_copy = puts_df.copy()
-        puts_df_copy['Moneyness'] = puts_df_copy.apply(
-            lambda row: get_moneyness(row['strike'], current_stock_price, "put"), axis=1
-        )
+        otm_puts = puts_df[~puts_df['inTheMoney']].sort_values(by='strike', ascending=False)
+        for _, row in otm_puts.head(3).iterrows(): # Top 3 OTM puts
+            analysis_results["Deep OTM Puts (Bullish)"].append({
+                "Type": "Put",
+                "Strike": row['strike'],
+                "Expiration": expiry_date, # Use the passed expiry_date
+                "Reason": "Consider selling for premium if expecting price to stay above this level (defined risk)."
+            })
+    
+    # High Volume/Open Interest Options
+    if not calls_df.empty:
+        high_vol_oi_calls = calls_df[(calls_df['volume'] > 100) | (calls_df['openInterest'] > 500)].sort_values(by=['volume', 'openInterest'], ascending=False)
+        for _, row in high_vol_oi_calls.head(3).iterrows():
+            analysis_results["High Volume/Open Interest Calls"].append({
+                "Type": "Call",
+                "Strike": row['strike'],
+                "Expiration": expiry_date, # Use the passed expiry_date
+                "Reason": "High liquidity, easier to enter/exit trades."
+            })
+    if not puts_df.empty:
+        high_vol_oi_puts = puts_df[(puts_df['volume'] > 100) | (puts_df['openInterest'] > 500)].sort_values(by=['volume', 'openInterest'], ascending=False)
+        for _, row in high_vol_oi_puts.head(3).iterrows():
+            analysis_results["High Volume/Open Interest Puts"].append({
+                "Type": "Put",
+                "Strike": row['strike'],
+                "Expiration": expiry_date, # Use the passed expiry_date
+                "Reason": "High liquidity, easier to enter/exit trades."
+            })
 
-        # Highest Volume (Puts)
-        if 'volume' in puts_df_copy.columns and not puts_df_copy['volume'].isnull().all():
-            highest_vol_put = puts_df_copy.loc[puts_df_copy['volume'].idxmax()]
-            analysis_results["Highest Volume Options"].append(format_option_summary(
-                highest_vol_put, "Put", f"Highest volume ({highest_vol_put['volume']:,}) indicates strong current interest.", expiry_date # Pass expiry_date
-            ))
-
-        # Highest Open Interest (Puts)
-        if 'openInterest' in puts_df_copy.columns and not puts_df_copy['openInterest'].isnull().all():
-            highest_oi_put = puts_df_copy.loc[puts_df_copy['openInterest'].idxmax()]
-            analysis_results["Highest Open Interest Options"].append(format_option_summary(
-                highest_oi_put, "Put", f"Highest open interest ({highest_oi_put['openInterest']:,}) suggests significant market positioning.", expiry_date # Pass expiry_date
-            ))
-
-        # Highest Implied Volatility (Puts)
-        if 'impliedVolatility' in puts_df_copy.columns and not puts_df_copy['impliedVolatility'].isnull().all():
-            highest_iv_put = puts_df_copy.loc[puts_df_copy['impliedVolatility'].idxmax()]
-            analysis_results["Highest Implied Volatility Options"].append(format_option_summary(
-                highest_iv_put, "Put", f"Highest IV ({highest_iv_put['impliedVolatility']:.2%}) indicates high expected price movement.", expiry_date # Pass expiry_date
-            ))
-        
-        # Highest Delta Puts (most negative delta, i.e., closest to -1.0)
-        if 'delta' in puts_df_copy.columns and not puts_df_copy['delta'].isnull().all():
-            # For puts, highest delta (in magnitude) is the most negative
-            highest_delta_put = puts_df_copy.loc[puts_df_copy['delta'].idxmin()] 
-            analysis_results["Highest Delta Puts"].append(format_option_summary(
-                highest_delta_put, "Put", f"Highest Delta ({highest_delta_put['delta']:.2f}) means price moves most with stock (inversely).", expiry_date # Pass expiry_date
-            ))
-
-        # Lowest Theta Puts (for buyers)
-        if 'theta' in puts_df_copy.columns and not puts_df_copy['theta'].isnull().all():
-            lowest_theta_put = puts_df_copy.loc[puts_df_copy['theta'].idxmax()]
-            analysis_results["Lowest Theta Puts"].append(format_option_summary(
-                lowest_theta_put, "Put", f"Lowest Theta ({lowest_theta_put['theta']:.3f}) means less time decay.", expiry_date # Pass expiry_date
-            ))
-
-        # Highest Gamma Puts
-        if 'gamma' in puts_df_copy.columns and not puts_df_copy['gamma'].isnull().all():
-            highest_gamma_put = puts_df_copy.loc[puts_df_copy['gamma'].idxmax()]
-            analysis_results["Highest Gamma Puts"].append(format_option_summary(
-                highest_gamma_put, "Put", f"Highest Gamma ({highest_gamma_put['gamma']:.3f}) means fastest changing Delta.", expiry_date # Pass expiry_date
-            ))
-
-        # Highest Vega Puts
-        if 'vega' in puts_df_copy.columns and not puts_df_copy['vega'].isnull().all():
-            highest_vega_put = puts_df_copy.loc[puts_df_copy['vega'].idxmax()]
-            analysis_results["Highest Vega Puts"].append(format_option_summary(
-                highest_vega_put, "Put", f"Highest Vega ({highest_vega_put['vega']:.3f}) means most sensitive to IV changes.", expiry_date # Pass expiry_date
-            ))
-
-        # ITM Put Suggestions
-        itm_puts = puts_df_copy[puts_df_copy['Moneyness'] == 'ITM'].sort_values(by='strike', ascending=True)
-        if not itm_puts.empty:
-            best_itm_put = itm_puts.iloc[0]
-            analysis_results["ITM Put Suggestions"].append(format_option_summary(
-                best_itm_put, "Put", "Deep ITM puts offer high delta, behaving more like stock (inversely).", expiry_date # Pass expiry_date
-            ))
-        
-        # ATM Put Suggestions
-        atm_puts = puts_df_copy[puts_df_copy['Moneyness'] == 'ATM']
+    # Near-Term ATM Options
+    if not calls_df.empty:
+        atm_calls = calls_df.iloc[[(calls_df['strike'] - current_stock_price).abs().idxmin()]]
+        if not atm_calls.empty:
+            for _, row in atm_calls.iterrows():
+                analysis_results["Near-Term ATM Options"].append({
+                    "Type": "Call",
+                    "Strike": row['strike'],
+                    "Expiration": expiry_date, # Use the passed expiry_date
+                    "Reason": "Balanced risk/reward, good for moderate directional moves."
+                })
+    if not puts_df.empty:
+        atm_puts = puts_df.iloc[[(puts_df['strike'] - current_stock_price).abs().idxmin()]]
         if not atm_puts.empty:
-            best_atm_put = atm_puts.iloc[0]
-            analysis_results["ATM Put Suggestions"].append(format_option_summary(
-                best_atm_put, "Put", "ATM puts balance cost and directional exposure.", expiry_date # Pass expiry_date
-            ))
-
-        # OTM Put Suggestions
-        otm_puts = puts_df_copy[puts_df_copy['Moneyness'] == 'OTM'].sort_values(by='strike', ascending=False)
-        if not otm_puts.empty:
-            best_otm_put = otm_puts.iloc[0]
-            analysis_results["OTM Put Suggestions"].append(format_option_summary(
-                best_otm_put, "Put", "OTM puts are cheaper and offer high leverage, but lower probability.", expiry_date # Pass expiry_date
-            ))
+            for _, row in atm_puts.iterrows():
+                analysis_results["Near-Term ATM Options"].append({
+                    "Type": "Put",
+                    "Strike": row['strike'],
+                    "Expiration": expiry_date, # Use the passed expiry_date
+                    "Reason": "Balanced risk/reward, good for moderate directional moves."
+                })
 
     return analysis_results
 
