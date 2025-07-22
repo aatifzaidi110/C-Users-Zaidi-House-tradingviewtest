@@ -1,4 +1,4 @@
-# app.py - Version 1.22
+# app.py - Version 1.23
 # app.py
 import sys
 import os
@@ -157,7 +157,7 @@ if st.session_state.analysis_started:
 
             hist_data, info_data = get_data(ticker_to_analyze, selected_params_main['period'], selected_params_main['interval'])
             if hist_data is None or info_data is None:
-                st.error(f"Could not fetch data for {ticker_to_analyze} on a {selected_params_main['interval']} interval. Please check the ticker symbol or try again later.")
+                st.error(f"Could not fetch data for {ticker_to_analyze} on a {selected_params_main['interval']} interval. Please check the ticker symbol or try again later.", icon="❌")
             else:
                 # Calculate indicators once for the main display
                 is_intraday_data = selected_params_main['interval'] in ['5m', '60m']
@@ -223,4 +223,3 @@ if st.session_state.analysis_started:
         st.info("Please enter a stock ticker in the sidebar and click 'Analyze Ticker' to begin analysis.")
 else:
     st.info("Enter a stock ticker in the sidebar and click 'Analyze Ticker' to begin analysis.")
-
