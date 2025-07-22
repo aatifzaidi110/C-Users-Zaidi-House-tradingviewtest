@@ -1,4 +1,4 @@
-# glossary_components.py - Version 1.1
+# glossary_components.py - Version 1.2
 
 import streamlit as st
 
@@ -67,7 +67,8 @@ INDICATOR_DESCRIPTIONS = {
 }
 
 # === Options Greeks Descriptions ===
-OPTIONS_GREEKS_DESCRIPTIONS = {
+# Re-categorized for better organization
+OPTIONS_CORE_CONCEPTS = {
     "Strike": {
         "description": "The predetermined price at which the underlying asset can be bought (for a call) or sold (for a put) when the option is exercised.",
         "ideal": "Depends on strategy (e.g., lower for long calls, higher for long puts).",
@@ -76,7 +77,7 @@ OPTIONS_GREEKS_DESCRIPTIONS = {
     "Moneyness (ITM, ATM, OTM)": {
         "description": "Describes an option's relationship between its strike price and the underlying asset's current price.",
         "ideal": "ITM (In-The-Money) for higher probability, ATM (At-The-Money) for balanced risk/reward, OTM (Out-of-The-Money) for higher leverage/lower cost.",
-        "example": "If a stock is at $100, a $90 Call is ITM, a $100 Call is ATM, and a $110 Call is OTM."
+        "example": "If a stock is at ${current_price:.2f}, a ${current_price * 0.9:.2f} Call is ITM, a ${current_price:.2f} Call is ATM, and a ${current_price * 1.1:.2f} Call is OTM."
     },
     "Expiration": {
         "description": "The date on which an option contract ceases to exist. After this date, the option can no longer be exercised.",
@@ -108,11 +109,9 @@ OPTIONS_GREEKS_DESCRIPTIONS = {
         "ideal": "Lower (if buying), higher (if selling and looking for entry).",
         "example": "If the ask is $1.60, you can buy the option for $1.60 per share."
     },
-    "Implied Volatility (IV)": {
-        "description": "The market's forecast of the likely movement in the underlying stock's price. Higher IV generally means higher option premiums.",
-        "ideal": "Lower when buying options (cheaper premiums), higher when selling options (more premium collected).",
-        "example": "An IV of 30% suggests the market expects a 30% price swing over the next year. A sudden jump in IV can make options more expensive."
-    },
+}
+
+OPTIONS_GREEKS = {
     "Delta": {
         "description": "Measures how much an option's price is expected to move for every $1 change in the underlying stock's price. Also represents the approximate probability of an option expiring in-the-money.",
         "ideal": "0.50-0.80 for ITM calls (more directional), 0.20-0.40 for OTM calls (leverage).",
@@ -138,6 +137,14 @@ OPTIONS_GREEKS_DESCRIPTIONS = {
         "ideal": "Less significant for most short-term strategies.",
         "example": "A positive Rho for calls means their value increases with rising interest rates."
     },
+}
+
+OPTIONS_LIQUIDITY_VOLATILITY = {
+    "Implied Volatility (IV)": {
+        "description": "The market's forecast of the likely movement in the underlying stock's price. Higher IV generally means higher option premiums.",
+        "ideal": "Lower when buying options (cheaper premiums), higher when selling options (more premium collected).",
+        "example": "An IV of 30% suggests the market expects a 30% price swing over the next year. A sudden jump in IV can make options more expensive."
+    },
     "Open Interest": {
         "description": "The total number of outstanding option contracts that have not yet been closed or exercised. A high number indicates good liquidity and market interest.",
         "ideal": "> 100s, preferably > 500 for good liquidity.",
@@ -148,7 +155,9 @@ OPTIONS_GREEKS_DESCRIPTIONS = {
         "ideal": "Higher (>100) for good liquidity and ease of entry/exit.",
         "example": "A Volume of 200 means 200 contracts have been traded today."
     },
-    # New Options Chain Analysis Categories
+}
+
+OPTIONS_CHAIN_SUGGESTIONS = {
     "Highest Volume Options": {
         "description": "Options contracts with the highest number of trades executed today. High volume indicates strong current market interest and liquidity for that specific contract.",
         "ideal": "Look for high volume to ensure you can easily enter and exit positions without significant slippage.",
@@ -187,17 +196,17 @@ OPTIONS_GREEKS_DESCRIPTIONS = {
     "ITM Call Suggestions": {
         "description": "In-The-Money (ITM) call options are those where the strike price is below the current stock price. They have intrinsic value and generally higher Delta.",
         "ideal": "For aggressive bullish positions, as they have a higher probability of expiring profitably and behave more like the stock.",
-        "example": "If NVDA is at $200, an ITM call suggestion might be the $190 strike."
+        "example": "If NVDA is at ${current_price:.2f}, an ITM call suggestion might be the ${current_price * 0.95:.2f} strike."
     },
     "ATM Call Suggestions": {
         "description": "At-The-Money (ATM) call options are those where the strike price is very close to the current stock price. They have a balanced risk/reward profile.",
         "ideal": "For moderate bullish positions, offering a good balance between cost, leverage, and probability of success.",
-        "example": "If NVDA is at $200, an ATM call suggestion might be the $200 strike."
+        "example": "If NVDA is at ${current_price:.2f}, an ATM call suggestion might be the ${current_price:.2f} strike."
     },
     "OTM Call Suggestions": {
         "description": "Out-of-The-Money (OTM) call options are those where the strike price is above the current stock price. They have no intrinsic value and are cheaper but have lower probability of expiring profitably.",
         "ideal": "For highly speculative bullish positions, offering high leverage for a relatively low cost, but with higher risk.",
-        "example": "If NVDA is at $200, an OTM call suggestion might be the $210 strike."
+        "example": "If NVDA is at ${current_price:.2f}, an OTM call suggestion might be the ${current_price * 1.05:.2f} strike."
     },
     "Highest Delta Puts": {
         "description": "Put options with the highest (most negative) Delta value (closest to -1.0). These options behave most like shorting the underlying stock, meaning their price changes significantly with small movements in the stock price in the opposite direction.",
@@ -222,17 +231,17 @@ OPTIONS_GREEKS_DESCRIPTIONS = {
     "ITM Put Suggestions": {
         "description": "In-The-Money (ITM) put options are those where the strike price is above the current stock price. They have intrinsic value and generally higher (more negative) Delta.",
         "ideal": "For aggressive bearish positions, as they have a higher probability of expiring profitably and behave more like shorting the stock.",
-        "example": "If NVDA is at $200, an ITM put suggestion might be the $210 strike."
+        "example": "If NVDA is at ${current_price:.2f}, an ITM put suggestion might be the ${current_price * 1.05:.2f} strike."
     },
     "ATM Put Suggestions": {
         "description": "At-The-Money (ATM) put options are those where the strike price is very close to the current stock price. They have a balanced risk/reward profile.",
         "ideal": "For moderate bearish positions, offering a good balance between cost, leverage, and probability of success.",
-        "example": "If NVDA is at $200, an ATM put suggestion might be the $200 strike."
+        "example": "If NVDA is at ${current_price:.2f}, an ATM put suggestion might be the ${current_price:.2f} strike."
     },
     "OTM Put Suggestions": {
         "description": "Out-of-The-Money (OTM) put options are those where the strike price is below the current stock price. They have no intrinsic value and are cheaper but have lower probability of expiring profitably.",
         "ideal": "For highly speculative bearish positions, offering high leverage for a relatively low cost, but with higher risk.",
-        "example": "If NVDA is at $200, an OTM put suggestion might be the $190 strike."
+        "example": "If NVDA is at ${current_price:.2f}, an OTM put suggestion might be the ${current_price * 0.95:.2f} strike."
     }
 }
 
@@ -245,22 +254,68 @@ def display_glossary_tab(current_stock_price=None):
 
     st.markdown("---")
 
-    st.markdown("### Technical Indicators")
-    for key, data in INDICATOR_DESCRIPTIONS.items():
-        with st.expander(f"**{key}**"):
-            st.markdown(f"**Description:** {data['description']}")
-            st.markdown(f"**Ideal (Bullish):** {data['ideal']}")
-            if 'example' in data:
-                st.markdown(f"**Example:** {data['example']}")
-    
+    # --- Search Bar ---
+    search_query = st.text_input("🔍 Search Glossary (e.g., 'EMA', 'Delta', 'Volume')", "").lower()
     st.markdown("---")
 
+    # --- Technical Indicators Section ---
+    st.markdown("### Technical Indicators")
+    found_tech_indicators = False
+    for key, data in INDICATOR_DESCRIPTIONS.items():
+        if search_query in key.lower() or search_query in data['description'].lower():
+            found_tech_indicators = True
+            with st.expander(f"**{key}**"):
+                st.markdown(f"**Description:** {data['description']}")
+                st.markdown(f"**Ideal (Bullish):** {data['ideal']}")
+                if 'example' in data:
+                    st.markdown(f"**Example:** {data['example']}")
+    if not found_tech_indicators and search_query:
+        st.info("No technical indicators found matching your search query.")
+    elif not found_tech_indicators and not search_query:
+        st.info("No technical indicators defined.") # Should not happen with current data
+
+    st.markdown("---")
+
+    # --- Options Concepts & Greeks Section ---
     st.markdown("### Options Concepts & Greeks")
     st.info("The 'Greeks' (Delta, Theta, Gamma, Vega, Rho) are measures of an option's sensitivity to various factors. Understanding them is crucial for managing options risk.")
-    for key, data in OPTIONS_GREEKS_DESCRIPTIONS.items():
-        with st.expander(f"**{key}**"):
-            st.markdown(f"**Description:** {data['description']}")
-            st.markdown(f"**Ideal for Buyers/Sellers:** {data['ideal']}")
-            if 'example' in data:
-                st.markdown(f"**Example:** {data['example']}")
 
+    found_options_concepts = False
+
+    # Helper function to display glossary items
+    def display_glossary_items(items_dict, title, current_stock_price, search_query):
+        nonlocal found_options_concepts # Declare intent to modify outer scope variable
+        
+        filtered_items = {
+            key: data for key, data in items_dict.items()
+            if search_query in key.lower() or search_query in data['description'].lower()
+        }
+        
+        if filtered_items:
+            found_options_concepts = True
+            st.markdown(f"#### {title}")
+            for key, data in filtered_items.items():
+                with st.expander(f"**{key}**"):
+                    st.markdown(f"**Description:** {data['description']}")
+                    st.markdown(f"**Ideal for Buyers/Sellers:** {data['ideal']}")
+                    if 'example' in data:
+                        # Format dynamic examples if current_stock_price is available
+                        if current_stock_price is not None:
+                            try:
+                                formatted_example = data['example'].format(current_price=current_stock_price)
+                                st.markdown(f"**Example:** {formatted_example}")
+                            except KeyError: # Fallback if format string doesn't match
+                                st.markdown(f"**Example:** {data['example']}")
+                        else:
+                            st.markdown(f"**Example:** {data['example']}")
+
+    # Display sub-sections for Options
+    display_glossary_items(OPTIONS_CORE_CONCEPTS, "Core Concepts", current_stock_price, search_query)
+    display_glossary_items(OPTIONS_GREEKS, "The Greeks (Sensitivity Measures)", current_stock_price, search_query)
+    display_glossary_items(OPTIONS_LIQUIDITY_VOLATILITY, "Liquidity & Volatility", current_stock_price, search_query)
+    display_glossary_items(OPTIONS_CHAIN_SUGGESTIONS, "Options Chain Analysis & Suggestions", current_stock_price, search_query)
+
+    if not found_options_concepts and search_query:
+        st.info("No options concepts or Greeks found matching your search query.")
+    elif not found_options_concepts and not search_query:
+        st.info("No options concepts or Greeks defined.") # Should not happen with current data
