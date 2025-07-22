@@ -1,4 +1,4 @@
-# display_components.py - Version 1.43 (Minor update to force refresh)
+# display_components.py - Version 1.45
 
 import streamlit as st
 import pandas as pd
@@ -34,6 +34,32 @@ def format_indicator_display(signal_key, current_value, selected, signals_dict):
         value_str = "Current: N/A"
 
     return f"{status_icon} **{display_name}** ({value_str})"
+
+# === Common Header for Tabs ===
+def _display_common_header(ticker, current_price, prev_close, overall_confidence):
+    """
+    Displays common header information (ticker, current price, overall sentiment)
+    at the top of various tabs.
+    """
+    st.markdown(f"#### {ticker} Overview")
+    
+    price_delta = current_price - prev_close
+    
+    sentiment_status = "Neutral"
+    sentiment_icon = "⚪"
+    if overall_confidence >= 65:
+        sentiment_status = "Bullish"
+        sentiment_icon = "⬆️"
+    elif overall_confidence <= 35:
+        sentiment_status = "Bearish"
+        sentiment_icon = "⬇️"
+        
+    col1, col2 = st.columns([1, 1])
+    with col1:
+        st.metric(label="Current Price", value=f"${current_price:.2f}", delta=f"${price_delta:.2f}")
+    with col2:
+        st.markdown(f"**Overall Sentiment:** {sentiment_icon} {sentiment_status}")
+    st.markdown("---")
 
 
 # === Option Payoff Chart Functions ===
@@ -124,11 +150,12 @@ def plot_generic_payoff_chart(stock_prices, payoffs, legs, strategy_name, ticker
 
 # Removed the plot_automated_strategy_payoff function as it's no longer used.
 
-def display_option_calculator_tab(ticker, current_stock_price, expirations):
+def display_option_calculator_tab(ticker, current_stock_price, expirations, prev_close, overall_confidence): # Added prev_close, overall_confidence
     """
     Displays a comprehensive options calculator tab, allowing users to define and visualize
     custom options strategies, including stock legs.
     """
+    _display_common_header(ticker, current_stock_price, prev_close, overall_confidence) # Display common header
     st.subheader(f"🧮 Option Strategy Calculator for {ticker}")
     st.info("Build and analyze complex options strategies, including stock components.")
 
@@ -495,6 +522,9 @@ def display_trade_plan_options_tab(ticker, df, overall_confidence):
     """Displays the suggested trade plan and options strategy."""
     last = df.iloc[-1]
     current_stock_price = last['Close'] # Get current stock price for moneyness calculation
+    prev_close = df['Close'].iloc[-2] if len(df) >= 2 else current_stock_price # Get previous close for delta
+
+    _display_common_header(ticker, current_stock_price, prev_close, overall_confidence) # Display common header
 
     st.subheader("📋 Suggested Stock Trade Plan (Bullish Swing)")
     entry_zone_start = last['EMA21'] * 0.99 if 'EMA21' in last and not pd.isna(last['EMA21']) else last['Close'] * 0.99
@@ -698,8 +728,10 @@ def display_trade_plan_options_tab(ticker, df, overall_confidence):
     # display_interactive_payoff_calculator(current_stock_price, ticker)
 
 
-def display_backtest_tab(ticker, selection):
+def display_backtest_tab(ticker, selection, current_price, prev_close, overall_confidence): # Added current_price, prev_close, overall_confidence
     """Displays the historical backtest results."""
+    _display_common_header(ticker, current_price, prev_close, overall_confidence) # Display common header
+
     st.subheader(f"🧪 Historical Backtest for {ticker}")
     st.info(f"Simulating trades based on your **currently selected indicators**. Entry is triggered if ALL selected signals are positive.")
     
@@ -721,8 +753,10 @@ def display_backtest_tab(ticker, selection):
     else:
         st.warning("Could not fetch daily data for backtesting or data is empty. Ensure the ticker is valid and enough historical data is available for the selected period (e.g., 2 years).")
 
-def display_news_info_tab(ticker, info, finviz_data):
+def display_news_info_tab(ticker, info, finviz_data, current_price, prev_close, overall_confidence): # Added current_price, prev_close, overall_confidence
     """Displays news and company information."""
+    _display_common_header(ticker, current_price, prev_close, overall_confidence) # Display common header
+
     st.subheader(f"📰 News & Information for {ticker}")
     col1, col2 = st.columns(2)
     with col1:
@@ -745,8 +779,10 @@ def display_news_info_tab(ticker, info, finviz_data):
     else:
         st.info("No recent headlines found or automated scoring is disabled.")
 
-def display_trade_log_tab(LOG_FILE, ticker, timeframe, overall_confidence):
+def display_trade_log_tab(LOG_FILE, ticker, timeframe, overall_confidence, current_price, prev_close): # Added current_price, prev_close
     """Displays and manages the trade log."""
+    _display_common_header(ticker, current_price, prev_close, overall_confidence) # Display common header
+
     st.subheader("📝 Log Your Trade Analysis")
     user_notes = st.text_area("Add your personal notes or trade thesis here:", key=f"trade_notes_{ticker}")
     
