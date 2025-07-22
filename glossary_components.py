@@ -1,4 +1,4 @@
-# glossary_components.py - Version 1.0
+# glossary_components.py - Version 1.1
 
 import streamlit as st
 
@@ -147,8 +147,96 @@ OPTIONS_GREEKS_DESCRIPTIONS = {
         "description": "The number of option contracts traded for that specific strike and expiration today. High volume indicates high trading activity.",
         "ideal": "Higher (>100) for good liquidity and ease of entry/exit.",
         "example": "A Volume of 200 means 200 contracts have been traded today."
+    },
+    # New Options Chain Analysis Categories
+    "Highest Volume Options": {
+        "description": "Options contracts with the highest number of trades executed today. High volume indicates strong current market interest and liquidity for that specific contract.",
+        "ideal": "Look for high volume to ensure you can easily enter and exit positions without significant slippage.",
+        "example": "A call option with 5,000 contracts traded today has very high volume, suggesting active trading."
+    },
+    "Highest Open Interest Options": {
+        "description": "Options contracts with the largest number of outstanding contracts that have not yet been closed or exercised. High open interest suggests significant market positioning and potential for larger institutional involvement.",
+        "ideal": "High open interest indicates good liquidity and that many traders believe this strike/expiration is important.",
+        "example": "A put option with 10,000 open interest means 10,000 contracts are currently held by traders, indicating strong conviction."
+    },
+    "Highest Implied Volatility Options": {
+        "description": "Options contracts with the highest implied volatility (IV). High IV means the market expects large price swings in the underlying stock, leading to higher option premiums. Often seen before earnings or major news.",
+        "ideal": "Consider selling high IV options if you expect volatility to decrease (e.g., after an event). Consider buying low IV options if you expect volatility to increase.",
+        "example": "An option with 150% IV is significantly more expensive than one with 30% IV, reflecting higher expected price movement."
+    },
+    "Highest Delta Calls": {
+        "description": "Call options with the highest Delta value (closest to 1.0). These options behave most like the underlying stock, meaning their price changes significantly with small movements in the stock price.",
+        "ideal": "For strong bullish conviction, as they offer high leverage and move almost dollar-for-dollar with the stock (if deep ITM).",
+        "example": "A call with a Delta of 0.90 will gain approximately $0.90 for every $1 increase in the stock price."
+    },
+    "Lowest Theta Calls": {
+        "description": "Call options with the lowest (least negative) Theta value. Theta represents time decay, so options with lower Theta lose less value each day as they approach expiration.",
+        "ideal": "For long option positions (buying calls or puts) to minimize the impact of time decay.",
+        "example": "A call with Theta of -0.01 loses $1 per contract per day, while one with -0.05 loses $5 per contract per day."
+    },
+    "Highest Gamma Calls": {
+        "description": "Call options with the highest Gamma value. Gamma measures the rate of change of Delta. High Gamma means Delta will accelerate rapidly as the stock price moves, leading to amplified gains or losses.",
+        "ideal": "For highly directional trades where you expect a strong, fast move in the underlying stock.",
+        "example": "If a call has a Delta of 0.50 and Gamma of 0.10, a $1 stock move could increase its Delta to 0.60."
+    },
+    "Highest Vega Calls": {
+        "description": "Call options with the highest Vega value. Vega measures an option's sensitivity to changes in implied volatility. High Vega means the option's price will change significantly with shifts in IV.",
+        "ideal": "If you anticipate a significant increase in implied volatility, buying high Vega options can be profitable.",
+        "example": "A call with Vega of 0.15 will gain $0.15 for every 1% increase in implied volatility."
+    },
+    "ITM Call Suggestions": {
+        "description": "In-The-Money (ITM) call options are those where the strike price is below the current stock price. They have intrinsic value and generally higher Delta.",
+        "ideal": "For aggressive bullish positions, as they have a higher probability of expiring profitably and behave more like the stock.",
+        "example": "If NVDA is at $200, an ITM call suggestion might be the $190 strike."
+    },
+    "ATM Call Suggestions": {
+        "description": "At-The-Money (ATM) call options are those where the strike price is very close to the current stock price. They have a balanced risk/reward profile.",
+        "ideal": "For moderate bullish positions, offering a good balance between cost, leverage, and probability of success.",
+        "example": "If NVDA is at $200, an ATM call suggestion might be the $200 strike."
+    },
+    "OTM Call Suggestions": {
+        "description": "Out-of-The-Money (OTM) call options are those where the strike price is above the current stock price. They have no intrinsic value and are cheaper but have lower probability of expiring profitably.",
+        "ideal": "For highly speculative bullish positions, offering high leverage for a relatively low cost, but with higher risk.",
+        "example": "If NVDA is at $200, an OTM call suggestion might be the $210 strike."
+    },
+    "Highest Delta Puts": {
+        "description": "Put options with the highest (most negative) Delta value (closest to -1.0). These options behave most like shorting the underlying stock, meaning their price changes significantly with small movements in the stock price in the opposite direction.",
+        "ideal": "For strong bearish conviction, as they offer high leverage and move almost dollar-for-dollar (inversely) with the stock (if deep ITM).",
+        "example": "A put with a Delta of -0.80 will gain approximately $0.80 for every $1 decrease in the stock price."
+    },
+    "Lowest Theta Puts": {
+        "description": "Put options with the lowest (least negative) Theta value. Theta represents time decay, so options with lower Theta lose less value each day as they approach expiration.",
+        "ideal": "For long option positions (buying calls or puts) to minimize the impact of time decay.",
+        "example": "A put with Theta of -0.01 loses $1 per contract per day, while one with -0.05 loses $5 per contract per day."
+    },
+    "Highest Gamma Puts": {
+        "description": "Put options with the highest Gamma value. Gamma measures the rate of change of Delta. High Gamma means Delta will accelerate rapidly as the stock price moves, leading to amplified gains or losses.",
+        "ideal": "For highly directional trades where you expect a strong, fast move in the underlying stock.",
+        "example": "If a put has a Delta of -0.50 and Gamma of 0.10, a $1 stock move down could increase its Delta to -0.60."
+    },
+    "Highest Vega Puts": {
+        "description": "Put options with the highest Vega value. Vega measures an option's sensitivity to changes in implied volatility. High Vega means the option's price will change significantly with shifts in IV.",
+        "ideal": "If you anticipate a significant increase in implied volatility, buying high Vega options can be profitable.",
+        "example": "A put with Vega of 0.15 will gain $0.15 for every 1% increase in implied volatility."
+    },
+    "ITM Put Suggestions": {
+        "description": "In-The-Money (ITM) put options are those where the strike price is above the current stock price. They have intrinsic value and generally higher (more negative) Delta.",
+        "ideal": "For aggressive bearish positions, as they have a higher probability of expiring profitably and behave more like shorting the stock.",
+        "example": "If NVDA is at $200, an ITM put suggestion might be the $210 strike."
+    },
+    "ATM Put Suggestions": {
+        "description": "At-The-Money (ATM) put options are those where the strike price is very close to the current stock price. They have a balanced risk/reward profile.",
+        "ideal": "For moderate bearish positions, offering a good balance between cost, leverage, and probability of success.",
+        "example": "If NVDA is at $200, an ATM put suggestion might be the $200 strike."
+    },
+    "OTM Put Suggestions": {
+        "description": "Out-of-The-Money (OTM) put options are those where the strike price is below the current stock price. They have no intrinsic value and are cheaper but have lower probability of expiring profitably.",
+        "ideal": "For highly speculative bearish positions, offering high leverage for a relatively low cost, but with higher risk.",
+        "example": "If NVDA is at $200, an OTM put suggestion might be the $190 strike."
     }
 }
+
+
 def display_glossary_tab(current_stock_price=None):
     """Displays a comprehensive glossary of technical indicators and options Greeks."""
     st.subheader("📚 Glossary: Technical Indicators & Options Concepts")
@@ -164,7 +252,7 @@ def display_glossary_tab(current_stock_price=None):
             st.markdown(f"**Ideal (Bullish):** {data['ideal']}")
             if 'example' in data:
                 st.markdown(f"**Example:** {data['example']}")
-
+    
     st.markdown("---")
 
     st.markdown("### Options Concepts & Greeks")
@@ -175,3 +263,4 @@ def display_glossary_tab(current_stock_price=None):
             st.markdown(f"**Ideal for Buyers/Sellers:** {data['ideal']}")
             if 'example' in data:
                 st.markdown(f"**Example:** {data['example']}")
+
