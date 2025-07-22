@@ -1,4 +1,4 @@
-# utils.py - Version 2.4
+# utils.py - Version 1.9
 
 import streamlit as st
 import yfinance as yf
@@ -17,7 +17,7 @@ except LookupError: # Catch LookupError if the resource is not found
     nltk.download('vader_lexicon')
 
 # === Data Fetching Functions ===
-@st.cache_data(ttl=900)
+@st.cache_data(ttl=3600) # Increased TTL to 1 hour
 def get_finviz_data(ticker):
     """Fetches analyst recommendations and news sentiment from Finviz."""
     url = f"https://finviz.com/quote.ashx?t={ticker}"
@@ -35,30 +35,40 @@ def get_finviz_data(ticker):
             avg_compound = sum(compound_scores) / len(compound_scores) if compound_scores else 0
             return {"recom": analyst_recom, "headlines": headlines, "sentiment_compound": avg_compound}
     except Exception as e:
-        st.error(f"Error fetching Finviz data: {e}", icon="�")
-        return {"recom": "N/A", "headlines": [], "sentiment_compound": 0, "error": str(e)} # Added 'error' key
+        st.error(f"Error fetching Finviz data: {e}", icon="🚫")
+        return {"recom": "N/A", "headlines": [], "sentiment_compound": 0}
 
-# Added 'error' key to the return value of get_finviz_data to provide more context when fetching fails.
-
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=300) # Increased TTL to 5 minutes
 def get_data(symbol, period, interval):
     """Fetches historical stock data and basic info from Yahoo Finance."""
     with st.spinner(f"Fetching {period} of {interval} data for {symbol}..."):
         stock = yf.Ticker(symbol)
-        hist = stock.history(period=period, interval=interval, auto_adjust=True)
-        return (hist, stock.info) if not hist.empty else (None, None)
+        try:
+            hist = stock.history(period=period, interval=interval, auto_adjust=True)
+            if hist.empty:
+                st.warning(f"No historical data returned for {symbol} with period={period}, interval={interval}.", icon="⚠️")
+                return None, None
+            return hist, stock.info
+        except Exception as e:
+            st.error(f"YFinance error fetching data for {symbol}: {e}", icon="🚫")
+            return None, None
 
 @st.cache_data(ttl=300)
 def get_options_chain(ticker, expiry_date):
     """Fetches call and put options data for a given ticker and expiry."""
     with st.spinner(f"Fetching options chain for {ticker} ({expiry_date})..."):
         stock_obj = yf.Ticker(ticker)
-        options = stock_obj.option_chain(expiry_date)
-        return options.calls, options.puts
+        try:
+            options = stock_obj.option_chain(expiry_date)
+            return options.calls, options.puts
+        except Exception as e:
+            st.warning(f"Could not fetch options chain for {ticker} on {expiry_date}: {e}", icon="⚠️")
+            return pd.DataFrame(), pd.DataFrame() # Return empty DataFrames on error
 
 # === Indicator Calculation Functions ===
 def calculate_indicators(df, is_intraday=False):
     """Calculates various technical indicators for a given DataFrame."""
+    initial_len = len(df)
     required_cols = ['Open', 'High', 'Low', 'Close', 'Volume']
     if not all(col in df.columns for col in required_cols):
         st.error(f"Missing one or more required columns for indicator calculation: {required_cols}", icon="🚫")
@@ -66,164 +76,150 @@ def calculate_indicators(df, is_intraday=False):
 
     df_cleaned = df.dropna(subset=['High', 'Low', 'Close', 'Volume']).copy()
     if df_cleaned.empty:
-        st.warning("DataFrame is empty after dropping NaN values, cannot calculate indicators.", icon="⚠️")
+        st.warning("DataFrame is empty after dropping NaN values from OHLCV, cannot calculate indicators.", icon="⚠️")
         return df_cleaned
+    
+    if len(df_cleaned) < initial_len:
+        st.info(f"Dropped {initial_len - len(df_cleaned)} rows due to NaN values in OHLCV data before indicator calculation.", icon="ℹ️")
 
     # Use .loc for safe assignment to avoid SettingWithCopyWarning
-    try:
-        df_cleaned.loc[:, "EMA21"] = ta.trend.ema_indicator(df_cleaned["Close"], 21)
-        df_cleaned.loc[:, "EMA50"] = ta.trend.ema_indicator(df_cleaned["Close"], 50)
-        df_cleaned.loc[:, "EMA200"] = ta.trend.ema_indicator(df_cleaned["Close"], 200)
-    except Exception as e:
-        st.warning(f"Could not calculate EMA indicators: {e}", icon="⚠️")
+    try: df_cleaned.loc[:, "EMA21"]=ta.trend.ema_indicator(df_cleaned["Close"],21); df_cleaned.loc[:, "EMA50"]=ta.trend.ema_indicator(df_cleaned["Close"],50); df_cleaned.loc[:, "EMA200"]=ta.trend.ema_indicator(df_cleaned["Close"],200)
+    except Exception as e: st.warning(f"Could not calculate EMA indicators: {e}", icon="⚠️"); df_cleaned.loc[:, "EMA21"] = pd.NA; df_cleaned.loc[:, "EMA50"] = pd.NA; df_cleaned.loc[:, "EMA200"] = pd.NA
 
-    # --- Corrected Ichimoku Cloud Calculation (using direct functions) ---
-    try:
-        # For ta 0.11.0, Ichimoku components are often calculated using direct functions
-        # which take high, low, close, and window parameters.
-        df_cleaned.loc[:, 'ichimoku_conversion_line'] = ta.trend.ichimoku_conversion_line(
-            high=df_cleaned['High'],
-            low=df_cleaned['Low'],
-            close=df_cleaned['Close'],
-            window1=9,
-            window2=26,
-            fillna=True
-        )
-        df_cleaned.loc[:, 'ichimoku_base_line'] = ta.trend.ichimoku_base_line(
-            high=df_cleaned['High'],
-            low=df_cleaned['Low'],
-            close=df_cleaned['Close'],
-            window1=9, # conversion_line uses window1
-            window2=26, # base_line uses window2
-            fillna=True
-        )
-        df_cleaned.loc[:, 'ichimoku_a'] = ta.trend.ichimoku_a(
-            high=df_cleaned['High'],
-            low=df_cleaned['Low'],
-            window1=9, # window1 for tenkan
-            window2=26, # window2 for kijun
-            fillna=True
-        )
-        df_cleaned.loc[:, 'ichimoku_b'] = ta.trend.ichimoku_b(
-            high=df_cleaned['High'],
-            low=df_cleaned['Low'],
-            window2=26, # window2 for senkou span B
-            window3=52, # window3 for senkou span B
-            fillna=True
-        )
-    except Exception as e:
-        st.warning(f"Could not calculate Ichimoku Cloud: {e}", icon="⚠️")
-        # Ensure columns are added even if calculation fails to prevent KeyError later
-        df_cleaned.loc[:, 'ichimoku_a'] = pd.NA
-        df_cleaned.loc[:, 'ichimoku_b'] = pd.NA
-        df_cleaned.loc[:, 'ichimoku_conversion_line'] = pd.NA
-        df_cleaned.loc[:, 'ichimoku_base_line'] = pd.NA
-    # --- End Corrected Ichimoku Cloud Calculation ---
+    # Ichimoku Cloud Calculation (DISABLED) - Ensure columns are added with NA
+    df_cleaned.loc[:, 'ichimoku_a'] = pd.NA
+    df_cleaned.loc[:, 'ichimoku_b'] = pd.NA
+    df_cleaned.loc[:, 'ichimoku_conversion_line'] = pd.NA
+    df_cleaned.loc[:, 'ichimoku_base_line'] = pd.NA
 
     try: df_cleaned.loc[:, 'psar'] = ta.trend.PSARIndicator(df_cleaned['High'], df_cleaned['Low'], df_cleaned['Close']).psar()
-    except Exception as e: st.warning(f"Could not calculate Parabolic SAR: {e}", icon="⚠️")
+    except Exception as e: st.warning(f"Could not calculate Parabolic SAR: {e}", icon="⚠️"); df_cleaned.loc[:, 'psar'] = pd.NA
     try: df_cleaned.loc[:, 'adx'] = ta.trend.ADXIndicator(df_cleaned['High'], df_cleaned['Low'], df_cleaned['Close']).adx()
-    except Exception as e: st.warning(f"Could not calculate ADX: {e}", icon="⚠️")
+    except Exception as e: st.warning(f"Could not calculate ADX: {e}", icon="⚠️"); df_cleaned.loc[:, 'adx'] = pd.NA
     try: df_cleaned.loc[:, "RSI"]=ta.momentum.RSIIndicator(df_cleaned["Close"]).rsi()
-    except Exception as e: st.warning(f"Could not calculate RSI: {e}", icon="⚠️")
+    except Exception as e: st.warning(f"Could not calculate RSI: {e}", icon="⚠️"); df_cleaned.loc[:, "RSI"] = pd.NA
     try: stoch = ta.momentum.StochasticOscillator(df_cleaned['High'], df_cleaned['Low'], df_cleaned['Close']); df_cleaned.loc[:, 'stoch_k'] = stoch.stoch(); df_cleaned.loc[:, 'stoch_d'] = stoch.stoch_signal()
-    except Exception as e: st.warning(f"Could not calculate Stochastic Oscillator: {e}", icon="⚠️")
+    except Exception as e: st.warning(f"Could not calculate Stochastic Oscillator: {e}", icon="⚠️"); df_cleaned.loc[:, 'stoch_k'] = pd.NA; df_cleaned.loc[:, 'stoch_d'] = pd.NA
     
-    # --- Corrected CCI Calculation ---
     try:
-        # Explicitly use ta.momentum.CCIIndicator and then its cci() method
-        cci_indicator = ta.momentum.CCIIndicator(high=df_cleaned['High'], low=df_cleaned['Low'], close=df_cleaned['Close'])
-        df_cleaned.loc[:, 'cci'] = cci_indicator.cci()
-    except Exception as e: st.warning(f"Could not calculate CCI: {e}", icon="⚠️")
-    # --- End Corrected CCI Calculation ---
+        if hasattr(ta.momentum, 'cci') and not (df_cleaned['High'] == df_cleaned['Low']).all() and not (df_cleaned['High'] == df_cleaned['Close']).all():
+            df_cleaned.loc[:, 'cci'] = ta.momentum.cci(df_cleaned['High'], df_cleaned['Low'], df_cleaned['Close'])
+        else:
+            st.warning("CCI cannot be calculated due to invariant High/Low/Close prices or missing 'cci' attribute in ta.momentum.", icon="⚠️")
+            df_cleaned.loc[:, 'cci'] = pd.NA
+    except Exception as e: st.warning(f"Could not calculate CCI: {e}", icon="⚠️"); df_cleaned.loc[:, 'cci'] = pd.NA
 
     try: df_cleaned.loc[:, 'roc'] = ta.momentum.ROCIndicator(df_cleaned['Close']).roc()
-    except Exception as e: st.warning(f"Could not calculate ROC: {e}", icon="⚠️")
+    except Exception as e: st.warning(f"Could not calculate ROC: {e}", icon="⚠️"); df_cleaned.loc[:, 'roc'] = pd.NA
     try: df_cleaned.loc[:, 'obv'] = ta.volume.OnBalanceVolumeIndicator(df_cleaned['Close'], df_cleaned['Volume']).on_balance_volume()
-    except Exception as e: st.warning(f"Could not calculate OBV: {e}", icon="⚠️")
+    except Exception as e: st.warning(f"Could not calculate OBV: {e}", icon="⚠️"); df_cleaned.loc[:, 'obv'] = pd.NA
     
     if is_intraday:
         try: df_cleaned.loc[:, 'vwap'] = ta.volume.VolumeWeightedAveragePrice(df_cleaned['High'], df_cleaned['Low'], df_cleaned['Close'], df_cleaned['Volume']).volume_weighted_average_price()
-        except Exception as e: st.warning(f"Could not calculate VWAP: {e}", icon="⚠️")
-    else: # If not intraday, ensure 'vwap' column exists with NA to prevent KeyError in backtest
-        df_cleaned.loc[:, 'vwap'] = pd.NA
+        except Exception as e: st.warning(f"Could not calculate VWAP: {e}", icon="⚠️"); df_cleaned.loc[:, 'vwap'] = pd.NA
+    else:
+        df_cleaned.loc[:, 'vwap'] = pd.NA # Ensure 'vwap' column exists with NA if not intraday
     
     try: df_cleaned.loc[:, "ATR"]=ta.volatility.AverageTrueRange(df_cleaned["High"],df_cleaned["Low"],df_cleaned["Close"]).average_true_range()
-    except Exception as e: st.warning(f"Could not calculate ATR: {e}", icon="⚠️")
+    except Exception as e: st.warning(f"Could not calculate ATR: {e}", icon="⚠️"); df_cleaned.loc[:, "ATR"] = pd.NA
     
     try: bb=ta.volatility.BollingerBands(df_cleaned["Close"]); df_cleaned.loc[:, "BB_low"]=bb.bollinger_lband(); df_cleaned.loc[:, "BB_high"]=bb.bollinger_hband()
-    except Exception as e: st.warning(f"Could not calculate Bollinger Bands: {e}", icon="⚠️")
+    except Exception as e: st.warning(f"Could not calculate Bollinger Bands: {e}", icon="⚠️"); df_cleaned.loc[:, "BB_low"] = pd.NA; df_cleaned.loc[:, "BB_high"] = pd.NA
     
     try: df_cleaned.loc[:, "Vol_Avg_50"]=df_cleaned["Volume"].rolling(50).mean()
-    except Exception as e: st.warning(f"Could not calculate Volume Average: {e}", icon="⚠️")
+    except Exception as e: st.warning(f"Could not calculate Volume Average: {e}", icon="⚠️"); df_cleaned.loc[:, "Vol_Avg_50"] = pd.NA
     
     return df_cleaned
 
 def calculate_pivot_points(df):
     """Calculates classical pivot points for a DataFrame."""
     if df.empty or not all(col in df.columns for col in ['High', 'Low', 'Close']):
+        st.warning("Insufficient data for pivot point calculation: Missing OHLC columns or empty DataFrame.", icon="⚠️")
         return pd.DataFrame(index=df.index)
 
     df_pivots = pd.DataFrame(index=df.index)
-    df_pivots['Pivot'] = (df['High'] + df['Low'] + df['Close']) / 3
-    df_pivots['R1'] = (2 * df_pivots['Pivot']) - df['Low']
-    df_pivots['S1'] = (2 * df_pivots['Pivot']) - df['High']
-    df_pivots['R2'] = df_pivots['Pivot'] + (df['High'] - df['Low'])
-    df_pivots['S2'] = df_pivots['Pivot'] - (df['High'] - df['Low'])
-    return df_pivots.shift(1)
+    try:
+        df_pivots['Pivot'] = (df['High'] + df['Low'] + df['Close']) / 3
+        df_pivots['R1'] = (2 * df_pivots['Pivot']) - df['Low']
+        df_pivots['S1'] = (2 * df_pivots['Pivot']) - df['High']
+        df_pivots['R2'] = df_pivots['Pivot'] + (df['High'] - df['Low'])
+        df_pivots['S2'] = df_pivots['Pivot'] - (df['High'] - df['Low'])
+        return df_pivots.shift(1)
+    except Exception as e:
+        st.warning(f"Error calculating pivot points: {e}", icon="⚠️")
+        return pd.DataFrame(index=df.index)
+
 
 # === Signal Generation ===
 def generate_signals_for_row(row_data, selection, full_df=None, is_intraday=False):
     """Generates bullish/bearish signals for a single row of data based on selected indicators."""
     signals = {}
     
+    # Ensure relevant columns exist and are not NaN before checking conditions
     if selection.get("OBV") and 'obv' in row_data and not pd.isna(row_data['obv']) and full_df is not None and len(full_df) >= 10:
         try:
             current_index_loc = full_df.index.get_loc(row_data.name)
-            if current_index_loc >= 10:
+            if current_index_loc >= 10: # Need at least 10 prior data points for rolling mean
                 prev_data_for_rolling = full_df.iloc[current_index_loc - 10 : current_index_loc]
                 if not prev_data_for_rolling.empty and 'obv' in prev_data_for_rolling.columns:
                     obv_rolling_mean = prev_data_for_rolling['obv'].rolling(10).mean().iloc[-1]
                     if not pd.isna(obv_rolling_mean):
                         signals["OBV Rising"] = row_data['obv'] > obv_rolling_mean
                     else:
-                        signals["OBV Rising"] = False
+                        signals["OBV Rising"] = False # Rolling mean is NaN
                 else:
-                    signals["OBV Rising"] = False
+                    signals["OBV Rising"] = False # Not enough previous data or obv column missing
             else:
-                signals["OBV Rising"] = False
+                signals["OBV Rising"] = False # Not enough data for rolling mean
         except KeyError:
-            signals["OBV Rising"] = False
+            signals["OBV Rising"] = False # Indexing error
     else:
-        signals["OBV Rising"] = False
+        signals["OBV Rising"] = False # OBV not selected or data missing
 
-    if selection.get("EMA Trend") and 'EMA50' in row_data and not pd.isna(row_data["EMA50"]):
+    if selection.get("EMA Trend") and 'EMA50' in row_data and 'EMA200' in row_data and 'EMA21' in row_data and not pd.isna(row_data["EMA50"]):
         signals["Uptrend (21>50>200 EMA)"] = row_data["EMA50"] > row_data["EMA200"] and row_data["EMA21"] > row_data["EMA50"]
-    if selection.get("Ichimoku Cloud") and 'ichimoku_a' in row_data and not pd.isna(row_data["ichimoku_a"]):
-        signals["Bullish Ichimoku"] = row_data['Close'] > row_data['ichimoku_a'] and row_data['Close'] > row_data['ichimoku_b']
+    else: signals["Uptrend (21>50>200 EMA)"] = False
+    
     if selection.get("Parabolic SAR") and 'psar' in row_data and not pd.isna(row_data["psar"]):
         signals["Bullish PSAR"] = row_data['Close'] > row_data['psar']
+    else: signals["Bullish PSAR"] = False
+
     if selection.get("ADX") and 'adx' in row_data and not pd.isna(row_data["adx"]):
         signals["Strong Trend (ADX > 25)"] = row_data['adx'] > 25
+    else: signals["Strong Trend (ADX > 25)"] = False
+
     if selection.get("RSI Momentum") and 'RSI' in row_data and not pd.isna(row_data["RSI"]):
         signals["Bullish Momentum (RSI > 50)"] = row_data["RSI"] > 50
-    if selection.get("Stochastic") and 'stoch_k' in row_data and not pd.isna(row_data["stoch_k"]):
+    else: signals["Bullish Momentum (RSI > 50)"] = False
+
+    if selection.get("Stochastic") and 'stoch_k' in row_data and 'stoch_d' in row_data and not pd.isna(row_data["stoch_k"]) and not pd.isna(row_data["stoch_d"]):
         signals["Bullish Stoch Cross"] = row_data['stoch_k'] > row_data['stoch_d']
+    else: signals["Bullish Stoch Cross"] = False
+
     if selection.get("CCI") and 'cci' in row_data and not pd.isna(row_data["cci"]):
         signals["Bullish CCI (>0)"] = row_data['cci'] > 0
+    else: signals["Bullish CCI (>0)"] = False
+
     if selection.get("ROC") and 'roc' in row_data and not pd.isna(row_data["roc"]):
         signals["Positive ROC (>0)"] = row_data['roc'] > 0
-    if selection.get("Volume Spike") and 'Vol_Avg_50' in row_data and not pd.isna(row_data["Vol_Avg_50"]):
+    else: signals["Positive ROC (>0)"] = False
+
+    if selection.get("Volume Spike") and 'Volume' in row_data and 'Vol_Avg_50' in row_data and not pd.isna(row_data["Volume"]) and not pd.isna(row_data["Vol_Avg_50"]):
         signals["Volume Spike (>1.5x Avg)"] = row_data["Volume"] > row_data["Vol_Avg_50"] * 1.5
+    else: signals["Volume Spike (>1.5x Avg)"] = False
+
     if selection.get("VWAP") and is_intraday and 'vwap' in row_data and not pd.isna(row_data["vwap"]):
         signals["Price > VWAP"] = row_data['Close'] > row_data['vwap']
+    else: signals["Price > VWAP"] = False
+
     return signals
 
 # === Backtesting Logic ===
-def backtest_strategy(df_historical_calculated, selection, atr_multiplier=1.5, reward_risk_ratio=2.0):
+def backtest_strategy(df_historical_calculated, selection, atr_multiplier=1.5, reward_risk_ratio=2.0, signal_threshold_percentage=0.7):
     """
     Simulates trades based on selected indicators and a simple entry/exit strategy.
     Assumes df_historical_calculated has all indicators pre-calculated and NaNs handled.
+    signal_threshold_percentage: % of selected bullish signals that must be active for entry.
     """
     trades = []
     in_trade = False
@@ -234,39 +230,25 @@ def backtest_strategy(df_historical_calculated, selection, atr_multiplier=1.5, r
     min_data_points_for_backtest = 200 # Safe minimum for EMA200 and other lookbacks
 
     if len(df_historical_calculated) < min_data_points_for_backtest + 1:
-        st.info(f"Not enough complete historical data for robust backtesting after indicator calculation. (Need at least {min_data_points_for_backtest+1} data points after NaN removal). Found: {len(df_historical_calculated)}")
+        st.info(f"Not enough complete historical data for robust backtesting after indicator calculation. (Need at least {min_data_points_for_backtest+1} data points after NaN removal). Found: {len(df_historical_calculated)}. Please select a longer period for backtesting (e.g., 2 years daily).", icon="⚠️")
         return [], 0, 0
 
     # Dynamically build required_cols_for_signals based on selection and intraday status
-    required_cols_for_signals = []
-    for key, selected in selection.items():
-        if selected:
-            if key == "EMA Trend": required_cols_for_signals.extend(["EMA21", "EMA50", "EMA200"])
-            elif key == "Ichimoku Cloud": required_cols_for_signals.extend(["ichimoku_a", "ichimoku_b", "ichimoku_conversion_line", "ichimoku_base_line"])
-            elif key == "Parabolic SAR": required_cols_for_signals.append("psar")
-            elif key == "ADX": required_cols_for_signals.append("adx")
-            elif key == "RSI Momentum": required_cols_for_signals.append("RSI")
-            elif key == "Stochastic": required_cols_for_signals.extend(["stoch_k", "stoch_d"])
-            elif key == "CCI": required_cols_for_signals.append("cci")
-            elif key == "ROC": required_cols_for_signals.append("roc")
-            elif key == "Volume Spike": required_cols_for_signals.extend(["Volume", "Vol_Avg_50"])
-            elif key == "OBV": required_cols_for_signals.append("obv")
-            # VWAP is handled by is_intraday in calculate_indicators, and backtest is always daily
-            # So, we only include it if it's explicitly selected AND the data is intraday.
-            # For daily backtest, VWAP column will be pd.NA, so we don't need it as a *required* column for signals
-            # unless we specifically want to filter out rows where it's NA.
-            # Given backtest is daily, VWAP will be NA, so we should not include it here.
-            # The signal_indicator_keys filtering below already handles this.
-            # No need to add "VWAP" to required_cols_for_signals for daily backtest.
-
-    # Ensure ATR is always included as it's critical for stop/profit
-    if "ATR" not in required_cols_for_signals:
-        required_cols_for_signals.append("ATR")
+    # This list should include all columns that `generate_signals_for_row` might access
+    required_cols_for_signals = ['Close', 'Low', 'High', 'Open', 'Volume', 'ATR'] # Always needed
     
-    # Add 'Close', 'Low', 'High', 'Open' as they are fundamental for trade logic
-    for col in ['Close', 'Low', 'High', 'Open']:
-        if col not in required_cols_for_signals:
-            required_cols_for_signals.append(col)
+    # Add indicator-specific columns if selected
+    if selection.get("EMA Trend"): required_cols_for_signals.extend(["EMA21", "EMA50", "EMA200"])
+    if selection.get("Parabolic SAR"): required_cols_for_signals.append("psar")
+    if selection.get("ADX"): required_cols_for_signals.append("adx")
+    if selection.get("RSI Momentum"): required_cols_for_signals.append("RSI")
+    if selection.get("Stochastic"): required_cols_for_signals.extend(["stoch_k", "stoch_d"])
+    if selection.get("CCI"): required_cols_for_signals.append("cci")
+    if selection.get("ROC"): required_cols_for_signals.append("roc")
+    if selection.get("Volume Spike"): required_cols_for_signals.append("Vol_Avg_50") # Volume itself is in base required_cols
+    if selection.get("OBV"): required_cols_for_signals.append("obv")
+    # VWAP is for intraday, backtest is daily, so it won't be used in daily backtest signals
+    # If it were an intraday backtest, we'd include 'vwap' here.
 
     # Filter out duplicates and ensure all columns exist in the DataFrame
     required_cols_for_signals = list(set(required_cols_for_signals))
@@ -274,25 +256,39 @@ def backtest_strategy(df_historical_calculated, selection, atr_multiplier=1.5, r
     # Check if all required columns actually exist in the DataFrame
     missing_cols = [col for col in required_cols_for_signals if col not in df_historical_calculated.columns]
     if missing_cols:
-        st.warning(f"Backtest cannot proceed: Missing required columns in historical data: {missing_cols}. This might be due to indicator calculation failures or a non-intraday backtest trying to use intraday-only indicators like VWAP.", icon="⚠️")
+        st.warning(f"Backtest cannot proceed: Missing required columns in historical data: {missing_cols}. This might be due to indicator calculation failures or selection of indicators not applicable to daily data.", icon="⚠️")
         return [], 0, 0
 
-    first_valid_idx = df_historical_calculated[required_cols_for_signals].first_valid_index()
+    # Drop rows with NaNs only for the required columns for backtesting
+    initial_clean_len = len(df_historical_calculated)
+    df_historical_calculated_clean = df_historical_calculated.dropna(subset=required_cols_for_signals).copy()
+    
+    if len(df_historical_calculated_clean) < initial_clean_len:
+        st.info(f"Dropped {initial_clean_len - len(df_historical_calculated_clean)} rows due to NaN values in required indicator columns for backtesting.", icon="ℹ️")
+
+    first_valid_idx = df_historical_calculated_clean[required_cols_for_signals].first_valid_index()
     if first_valid_idx is None:
-        st.warning("No valid data points found after indicator calculation for backtesting (all required columns are NaN at the start).", icon="⚠️")
+        st.warning("No valid data points found after indicator calculation and cleaning for backtesting (all required columns are NaN at the start). This often happens if indicators require a lot of history or data is very sparse.", icon="⚠️")
         return [], 0, 0
 
-    start_i = df_historical_calculated.index.get_loc(first_valid_idx)
-    if start_i == 0: start_i = 1
+    start_i = df_historical_calculated_clean.index.get_loc(first_valid_idx)
+    if start_i == 0: start_i = 1 # Ensure we can look at prev_day_data
 
-    for i in range(start_i, len(df_historical_calculated)):
-        current_day_data = df_historical_calculated.iloc[i]
-        prev_day_data = df_historical_calculated.iloc[i-1]
+    # Ensure there's enough data *after* cleaning for the loop
+    if len(df_historical_calculated_clean) <= start_i:
+        st.warning(f"Not enough data points after cleaning ({len(df_historical_calculated_clean)} available) to start backtesting from index {start_i}.", icon="⚠️")
+        return [], 0, 0
 
-        if pd.isna(prev_day_data.get('ATR')) or prev_day_data['ATR'] == 0:
+    for i in range(start_i, len(df_historical_calculated_clean)):
+        current_day_data = df_historical_calculated_clean.iloc[i]
+        prev_day_data = df_historical_calculated_clean.iloc[i-1]
+
+        # Ensure ATR and Close are valid for trade logic
+        if pd.isna(prev_day_data.get('ATR')) or prev_day_data['ATR'] <= 0 or pd.isna(current_day_data['Close']):
             continue
 
         if in_trade:
+            # Exit conditions
             if current_day_data['Low'] <= stop_loss:
                 pnl = stop_loss - entry_price
                 trades.append({"Date": current_day_data.name.strftime('%Y-%m-%d'), "Type": "Exit (Loss)", "Price": round(stop_loss, 2), "Entry Price": round(entry_price, 2), "PnL": round(pnl, 2)})
@@ -304,35 +300,40 @@ def backtest_strategy(df_historical_calculated, selection, atr_multiplier=1.5, r
 
         if not in_trade:
             # Pass is_intraday=False for backtest as it's currently always daily
-            signals = generate_signals_for_row(prev_day_data, selection, df_historical_calculated.iloc[:i], is_intraday=False)
+            # Use the slice up to current_index_loc to ensure OBV rolling mean is calculated on past data
+            # is_intraday is explicitly set to False here because backtesting is always on daily data
+            signals = generate_signals_for_row(prev_day_data, selection, df_historical_calculated_clean.iloc[:i], is_intraday=False)
 
             selected_and_fired_count = 0
             selected_indicator_count = 0
-            # Filter for actual signal indicators, not display-only or VWAP if not intraday
-            signal_indicator_keys = [k for k in selection.keys() if k not in ["Bollinger Bands", "Pivot Points"]]
-            if not is_intraday: # Backtest is always daily, so exclude VWAP from signal keys here
-                signal_indicator_keys = [k for k in signal_indicator_keys if k != "VWAP"]
-
+            
+            # Filter for actual signal indicators, excluding display-only and VWAP (as backtest is daily)
+            signal_indicator_keys = [k for k in selection.keys() if k not in ["Bollinger Bands", "Pivot Points", "VWAP"]]
+            
+            # Count how many selected indicators are actually generating signals
             for indicator_key in signal_indicator_keys:
                 if selection.get(indicator_key):
                     selected_indicator_count += 1
-                    actual_signal_name = ""
-                    if indicator_key == "EMA Trend": actual_signal_name = "Uptrend (21>50>200 EMA)"
-                    elif indicator_key == "Ichimoku Cloud": actual_signal_name = "Bullish Ichimoku"
-                    elif indicator_key == "Parabolic SAR": actual_signal_name = "Bullish PSAR"
-                    elif indicator_key == "ADX": actual_signal_name = "Strong Trend (ADX > 25)"
-                    elif indicator_key == "RSI Momentum": actual_signal_name = "Bullish Momentum (RSI > 50)"
-                    elif indicator_key == "Stochastic": actual_signal_name = "Bullish Stoch Cross"
-                    elif indicator_key == "CCI": actual_signal_name = "Bullish CCI (>0)"
-                    elif indicator_key == "ROC": actual_signal_name = "Positive ROC (>0)"
-                    elif indicator_key == "Volume Spike": actual_signal_name = "Volume Spike (>1.5x Avg)"
-                    elif indicator_key == "OBV": actual_signal_name = "OBV Rising"
-                    elif indicator_key == "VWAP": actual_signal_name = "Price > VWAP" # This will only be true if is_intraday was true in generate_signals_for_row
-
+                    # Map the selection key to the actual signal name generated by generate_signals_for_row
+                    actual_signal_name_map = {
+                        "EMA Trend": "Uptrend (21>50>200 EMA)",
+                        "Parabolic SAR": "Bullish PSAR",
+                        "ADX": "Strong Trend (ADX > 25)",
+                        "RSI Momentum": "Bullish Momentum (RSI > 50)",
+                        "Stochastic": "Bullish Stoch Cross",
+                        "CCI": "Bullish CCI (>0)",
+                        "ROC": "Positive ROC (>0)",
+                        "Volume Spike": "Volume Spike (>1.5x Avg)",
+                        "OBV": "OBV Rising",
+                        # "VWAP": "Price > VWAP" # Excluded for daily backtest
+                    }
+                    actual_signal_name = actual_signal_name_map.get(indicator_key)
                     if actual_signal_name and signals.get(actual_signal_name, False):
                         selected_and_fired_count += 1
             
-            if selected_indicator_count > 0 and selected_and_fired_count == selected_indicator_count:
+            # --- Modified Entry Condition ---
+            # Only attempt entry if there's at least one selected indicator and the threshold is met
+            if selected_indicator_count > 0 and (selected_and_fired_count / selected_indicator_count) >= signal_threshold_percentage:
                 entry_price = current_day_data['Open']
                 if not pd.isna(prev_day_data['ATR']) and prev_day_data['ATR'] > 0:
                     stop_loss = entry_price - (prev_day_data['ATR'] * atr_multiplier)
@@ -341,9 +342,9 @@ def backtest_strategy(df_historical_calculated, selection, atr_multiplier=1.5, r
                     in_trade = True
 
     if in_trade:
-        final_exit_price = df_historical_calculated.iloc[-1]['Close']
+        final_exit_price = df_historical_calculated_clean.iloc[-1]['Close']
         pnl = final_exit_price - entry_price
-        trades.append({"Date": df_historical_calculated.index[-1].strftime('%Y-%m-%d'), "Type": "Exit (End of Backtest)", "Price": round(final_exit_price, 2), "Entry Price": round(entry_price, 2), "PnL": round(pnl, 2)})
+        trades.append({"Date": df_historical_calculated_clean.index[-1].strftime('%Y-%m-%d'), "Type": "Exit (End of Backtest)", "Price": round(final_exit_price, 2), "Entry Price": round(entry_price, 2), "PnL": round(pnl, 2)})
 
     wins = len([t for t in trades if t['Type'] == 'Exit (Win)'])
     losses = len([t for t in trades if t['Type'] == 'Exit (Loss)'])
@@ -354,111 +355,222 @@ EXPERT_RATING_MAP = {"Strong Buy": 100, "Buy": 85, "Hold": 50, "N/A": 50, "Sell"
 
 def convert_compound_to_100_scale(compound_score): return int((compound_score + 1) * 50)
 
-def convert_finviz_recom_to_score(recom_str):
-    """Converts Finviz numerical recommendation string to a score (0-100)."""
-    try:
-        recom_val = float(recom_str)
-        if recom_val <= 1.5: return 100 # Strong Buy
-        elif recom_val <= 2.5: return 85 # Buy
-        elif recom_val <= 3.5: return 50 # Hold
-        elif recom_val <= 4.5: return 15 # Sell
-        else: return 0 # Strong Sell
-    except ValueError:
-        return 50 # Default to Hold if not a valid number
-
-def get_moneyness(strike, current_stock_price, option_type):
+def get_moneyness(strike, current_price, option_type="call"):
     """Determines if an option is In-The-Money (ITM), At-The-Money (ATM), or Out-of-The-Money (OTM)."""
     if option_type == "call":
-        if strike < current_stock_price:
+        if strike < current_price:
             return "ITM"
-        elif strike == current_stock_price:
-            return "ATM"
-        else:
+        elif strike > current_price:
             return "OTM"
+        else:
+            return "ATM"
     elif option_type == "put":
-        if strike > current_stock_price:
+        if strike > current_price:
             return "ITM"
-        elif strike == current_stock_price:
-            return "ATM"
-        else:
+        elif strike < current_price:
             return "OTM"
+        else:
+            return "ATM"
     return "N/A"
 
-def analyze_options_chain(calls_df, puts_df, current_stock_price, expiry_date): # Added expiry_date parameter
+def analyze_options_chain(calls_df, puts_df, current_stock_price):
     """
-    Analyzes the options chain to provide highlights and suggestions.
+    Analyzes the options chain to highlight key options based on various metrics
+    and provides suggestions for ITM, ATM, OTM.
     """
     analysis_results = {
-        "Deep ITM Calls (Bullish)": [],
-        "Deep OTM Puts (Bullish)": [],
-        "High Volume/Open Interest Calls": [],
-        "High Volume/Open Interest Puts": [],
-        "Near-Term ATM Options": []
+        "Highest Volume Options": [],
+        "Highest Open Interest Options": [],
+        "Highest Implied Volatility Options": [],
+        "Highest Delta Calls": [],
+        "Lowest Theta Calls": [],
+        "Highest Gamma Calls": [],
+        "Highest Vega Calls": [],
+        "ITM Call Suggestions": [],
+        "ATM Call Suggestions": [],
+        "OTM Call Suggestions": [],
+        # Added Put specific analysis categories
+        "Highest Delta Puts": [],
+        "Lowest Theta Puts": [],
+        "Highest Gamma Puts": [],
+        "Highest Vega Puts": [],
+        "ITM Put Suggestions": [],
+        "ATM Put Suggestions": [],
+        "OTM Put Suggestions": []
     }
 
-    # Deep ITM Calls (Bullish)
-    if not calls_df.empty:
-        itm_calls = calls_df[calls_df['inTheMoney']].sort_values(by='strike', ascending=False)
-        for _, row in itm_calls.head(3).iterrows(): # Top 3 ITM calls
-            analysis_results["Deep ITM Calls (Bullish)"].append({
-                "Type": "Call",
-                "Strike": row['strike'],
-                "Expiration": expiry_date, # Use the passed expiry_date
-                "Reason": "High delta, behaves like stock, good for strong bullish conviction."
-            })
+    # Helper to format option summary
+    def format_option_summary(option_row, opt_type, reason):
+        return {
+            "Type": f"{opt_type} Option",
+            "Strike": option_row.get('strike', pd.NA),
+            "Expiration": option_row.get('expiration', pd.NA), # Assuming 'expiration' column exists or can be added
+            "Value": option_row.get('lastPrice', pd.NA),
+            "Reason": reason
+        }
 
-    # Deep OTM Puts (Bullish - for selling premium)
-    if not puts_df.empty:
-        otm_puts = puts_df[~puts_df['inTheMoney']].sort_values(by='strike', ascending=False)
-        for _, row in otm_puts.head(3).iterrows(): # Top 3 OTM puts
-            analysis_results["Deep OTM Puts (Bullish)"].append({
-                "Type": "Put",
-                "Strike": row['strike'],
-                "Expiration": expiry_date, # Use the passed expiry_date
-                "Reason": "Consider selling for premium if expecting price to stay above this level (defined risk)."
-            })
-    
-    # High Volume/Open Interest Options
+    # Analyze Calls
     if not calls_df.empty:
-        high_vol_oi_calls = calls_df[(calls_df['volume'] > 100) | (calls_df['openInterest'] > 500)].sort_values(by=['volume', 'openInterest'], ascending=False)
-        for _, row in high_vol_oi_calls.head(3).iterrows():
-            analysis_results["High Volume/Open Interest Calls"].append({
-                "Type": "Call",
-                "Strike": row['strike'],
-                "Expiration": expiry_date, # Use the passed expiry_date
-                "Reason": "High liquidity, easier to enter/exit trades."
-            })
-    if not puts_df.empty:
-        high_vol_oi_puts = puts_df[(puts_df['volume'] > 100) | (puts_df['openInterest'] > 500)].sort_values(by=['volume', 'openInterest'], ascending=False)
-        for _, row in high_vol_oi_puts.head(3).iterrows():
-            analysis_results["High Volume/Open Interest Puts"].append({
-                "Type": "Put",
-                "Strike": row['strike'],
-                "Expiration": expiry_date, # Use the passed expiry_date
-                "Reason": "High liquidity, easier to enter/exit trades."
-            })
+        # Add moneyness for filtering
+        calls_df_copy = calls_df.copy()
+        calls_df_copy['Moneyness'] = calls_df_copy.apply(
+            lambda row: get_moneyness(row['strike'], current_stock_price, "call"), axis=1
+        )
+        
+        # Highest Volume
+        if 'volume' in calls_df_copy.columns and not calls_df_copy['volume'].isnull().all():
+            highest_vol_call = calls_df_copy.loc[calls_df_copy['volume'].idxmax()]
+            analysis_results["Highest Volume Options"].append(format_option_summary(
+                highest_vol_call, "Call", f"Highest volume ({highest_vol_call['volume']:,}) indicates strong current interest."
+            ))
 
-    # Near-Term ATM Options
-    if not calls_df.empty:
-        atm_calls = calls_df.iloc[[(calls_df['strike'] - current_stock_price).abs().idxmin()]]
+        # Highest Open Interest
+        if 'openInterest' in calls_df_copy.columns and not calls_df_copy['openInterest'].isnull().all():
+            highest_oi_call = calls_df_copy.loc[calls_df_copy['openInterest'].idxmax()]
+            analysis_results["Highest Open Interest Options"].append(format_option_summary(
+                highest_oi_call, "Call", f"Highest open interest ({highest_oi_call['openInterest']:,}) suggests significant market positioning."
+            ))
+
+        # Highest Implied Volatility
+        if 'impliedVolatility' in calls_df_copy.columns and not calls_df_copy['impliedVolatility'].isnull().all():
+            highest_iv_call = calls_df_copy.loc[calls_df_copy['impliedVolatility'].idxmax()]
+            analysis_results["Highest Implied Volatility Options"].append(format_option_summary(
+                highest_iv_call, "Call", f"Highest IV ({highest_iv_call['impliedVolatility']:.2%}) indicates high expected price movement."
+            ))
+        
+        # Highest Delta Calls
+        if 'delta' in calls_df_copy.columns and not calls_df_copy['delta'].isnull().all():
+            highest_delta_call = calls_df_copy.loc[calls_df_copy['delta'].idxmax()]
+            analysis_results["Highest Delta Calls"].append(format_option_summary(
+                highest_delta_call, "Call", f"Highest Delta ({highest_delta_call['delta']:.2f}) means price moves most with stock."
+            ))
+
+        # Lowest Theta Calls (for buyers)
+        if 'theta' in calls_df_copy.columns and not calls_df_copy['theta'].isnull().all():
+            lowest_theta_call = calls_df_copy.loc[calls_df_copy['theta'].idxmax()] # Theta is typically negative, so max is closest to zero
+            analysis_results["Lowest Theta Calls"].append(format_option_summary(
+                lowest_theta_call, "Call", f"Lowest Theta ({lowest_theta_call['theta']:.3f}) means less time decay."
+            ))
+        
+        # Highest Gamma Calls
+        if 'gamma' in calls_df_copy.columns and not calls_df_copy['gamma'].isnull().all():
+            highest_gamma_call = calls_df_copy.loc[calls_df_copy['gamma'].idxmax()]
+            analysis_results["Highest Gamma Calls"].append(format_option_summary(
+                highest_gamma_call, "Call", f"Highest Gamma ({highest_gamma_call['gamma']:.3f}) means fastest changing Delta."
+            ))
+
+        # Highest Vega Calls
+        if 'vega' in calls_df_copy.columns and not calls_df_copy['vega'].isnull().all():
+            highest_vega_call = calls_df_copy.loc[calls_df_copy['vega'].idxmax()]
+            analysis_results["Highest Vega Calls"].append(format_option_summary(
+                highest_vega_call, "Call", f"Highest Vega ({highest_vega_call['vega']:.3f}) means most sensitive to IV changes."
+            ))
+
+        # ITM Call Suggestions
+        itm_calls = calls_df_copy[calls_df_copy['Moneyness'] == 'ITM'].sort_values(by='strike', ascending=False)
+        if not itm_calls.empty:
+            best_itm = itm_calls.iloc[0]
+            analysis_results["ITM Call Suggestions"].append(format_option_summary(
+                best_itm, "Call", "Deep ITM calls offer high delta, behaving more like stock."
+            ))
+        
+        # ATM Call Suggestions
+        atm_calls = calls_df_copy[calls_df_copy['Moneyness'] == 'ATM']
         if not atm_calls.empty:
-            for _, row in atm_calls.iterrows():
-                analysis_results["Near-Term ATM Options"].append({
-                    "Type": "Call",
-                    "Strike": row['strike'],
-                    "Expiration": expiry_date, # Use the passed expiry_date
-                    "Reason": "Balanced risk/reward, good for moderate directional moves."
-                })
+            best_atm = atm_calls.iloc[0]
+            analysis_results["ATM Call Suggestions"].append(format_option_summary(
+                best_atm, "Call", "ATM calls balance cost and directional exposure."
+            ))
+
+        # OTM Call Suggestions
+        otm_calls = calls_df_copy[calls_df_copy['Moneyness'] == 'OTM'].sort_values(by='strike', ascending=True)
+        if not otm_calls.empty:
+            best_otm = otm_calls.iloc[0]
+            analysis_results["OTM Call Suggestions"].append(format_option_summary(
+                best_otm, "Call", "OTM calls are cheaper and offer high leverage, but lower probability."
+            ))
+
+    # Analyze Puts (similar logic, but for puts)
     if not puts_df.empty:
-        atm_puts = puts_df.iloc[[(puts_df['strike'] - current_stock_price).abs().idxmin()]]
+        # Add moneyness for filtering
+        puts_df_copy = puts_df.copy()
+        puts_df_copy['Moneyness'] = puts_df_copy.apply(
+            lambda row: get_moneyness(row['strike'], current_stock_price, "put"), axis=1
+        )
+
+        # Highest Volume (Puts)
+        if 'volume' in puts_df_copy.columns and not puts_df_copy['volume'].isnull().all(): # Corrected from calls_df_copy to puts_df_copy
+            highest_vol_put = puts_df_copy.loc[puts_df_copy['volume'].idxmax()]
+            analysis_results["Highest Volume Options"].append(format_option_summary(
+                highest_vol_put, "Put", f"Highest volume ({highest_vol_put['volume']:,}) indicates strong current interest."
+            ))
+
+        # Highest Open Interest (Puts)
+        if 'openInterest' in puts_df_copy.columns and not puts_df_copy['openInterest'].isnull().all(): # Corrected from calls_df_copy to puts_df_copy
+            highest_oi_put = puts_df_copy.loc[puts_df_copy['openInterest'].idxmax()]
+            analysis_results["Highest Open Interest Options"].append(format_option_summary(
+                highest_oi_put, "Put", f"Highest open interest ({highest_oi_put['openInterest']:,}) suggests significant market positioning."
+            ))
+
+        # Highest Implied Volatility (Puts)
+        if 'impliedVolatility' in puts_df_copy.columns and not puts_df_copy['impliedVolatility'].isnull().all(): # Corrected from calls_df_copy to puts_df_copy
+            highest_iv_put = puts_df_copy.loc[puts_df_copy['impliedVolatility'].idxmax()]
+            analysis_results["Highest Implied Volatility Options"].append(format_option_summary(
+                highest_iv_put, "Put", f"Highest IV ({highest_iv_put['impliedVolatility']:.2%}) indicates high expected price movement."
+            ))
+        
+        # Highest Delta Puts (most negative delta, i.e., closest to -1.0)
+        if 'delta' in puts_df_copy.columns and not puts_df_copy['delta'].isnull().all():
+            # For puts, highest delta (in magnitude) is the most negative
+            highest_delta_put = puts_df_copy.loc[puts_df_copy['delta'].idxmin()] 
+            analysis_results["Highest Delta Puts"].append(format_option_summary(
+                highest_delta_put, "Put", f"Highest Delta ({highest_delta_put['delta']:.2f}) means price moves most with stock (inversely)."
+            ))
+
+        # Lowest Theta Puts (for buyers)
+        if 'theta' in puts_df_copy.columns and not puts_df_copy['theta'].isnull().all():
+            lowest_theta_put = puts_df_copy.loc[puts_df_copy['theta'].idxmax()]
+            analysis_results["Lowest Theta Puts"].append(format_option_summary(
+                lowest_theta_put, "Put", f"Lowest Theta ({lowest_theta_put['theta']:.3f}) means less time decay."
+            ))
+
+        # Highest Gamma Puts
+        if 'gamma' in puts_df_copy.columns and not puts_df_copy['gamma'].isnull().all():
+            highest_gamma_put = puts_df_copy.loc[puts_df_copy['gamma'].idxmax()]
+            analysis_results["Highest Gamma Puts"].append(format_option_summary(
+                highest_gamma_put, "Put", f"Highest Gamma ({highest_gamma_put['gamma']:.3f}) means fastest changing Delta."
+            ))
+
+        # Highest Vega Puts
+        if 'vega' in puts_df_copy.columns and not puts_df_copy['vega'].isnull().all():
+            highest_vega_put = puts_df_copy.loc[puts_df_copy['vega'].idxmax()]
+            analysis_results["Highest Vega Puts"].append(format_option_summary(
+                highest_vega_put, "Put", f"Highest Vega ({highest_vega_put['vega']:.3f}) means most sensitive to IV changes."
+            ))
+
+        # ITM Put Suggestions
+        itm_puts = puts_df_copy[puts_df_copy['Moneyness'] == 'ITM'].sort_values(by='strike', ascending=True)
+        if not itm_puts.empty:
+            best_itm_put = itm_puts.iloc[0]
+            analysis_results["ITM Put Suggestions"].append(format_option_summary(
+                best_itm_put, "Put", "Deep ITM puts offer high delta, behaving more like stock (inversely)."
+            ))
+        
+        # ATM Put Suggestions
+        atm_puts = puts_df_copy[puts_df_copy['Moneyness'] == 'ATM']
         if not atm_puts.empty:
-            for _, row in atm_puts.iterrows():
-                analysis_results["Near-Term ATM Options"].append({
-                    "Type": "Put",
-                    "Strike": row['strike'],
-                    "Expiration": expiry_date, # Use the passed expiry_date
-                    "Reason": "Balanced risk/reward, good for moderate directional moves."
-                })
+            best_atm_put = atm_puts.iloc[0]
+            analysis_results["ATM Put Suggestions"].append(format_option_summary(
+                best_atm_put, "Put", "ATM puts balance cost and directional exposure."
+            ))
+
+        # OTM Put Suggestions
+        otm_puts = puts_df_copy[puts_df_copy['Moneyness'] == 'OTM'].sort_values(by='strike', ascending=False)
+        if not otm_puts.empty:
+            best_otm_put = otm_puts.iloc[0]
+            analysis_results["OTM Put Suggestions"].append(format_option_summary(
+                best_otm_put, "Put", "OTM puts are cheaper and offer high leverage, but lower probability."
+            ))
 
     return analysis_results
 
@@ -569,7 +681,7 @@ def generate_option_trade_plan(ticker, confidence, stock_price, expirations):
 
     elif 60 <= confidence < 75:
         strategy = "Buy ATM Call"
-        reason = f"Moderate confidence ({confidence:.0f}% bullish) favors an At-the-Money call to balance cost and potential upside."
+        reason = f"Moderate confidence ({confidence:.0f}% bullish) favors an At-the-Money (ATM) call to balance cost and potential upside."
         if 'strike' in calls.columns:
             target_options = calls.iloc[[(calls['strike'] - stock_price).abs().idxmin()]]
         else:
