@@ -1,4 +1,4 @@
-# app.py - Version 1.18
+# app.py - Version 1.22
 # app.py
 import sys
 import os
@@ -18,6 +18,12 @@ print("=================")
 # Add current directory to path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
+# === Constants and Configuration ===
+# Moved LOG_FILE definition to the top to ensure it's always defined
+LOG_FILE = "trade_log.csv" 
+# Debugging: Confirm LOG_FILE is defined right after its declaration (Minor update for refresh)
+print(f"DEBUG: LOG_FILE defined as: {LOG_FILE}")
+
 # Import functions from modules
 from utils import (
     get_finviz_data, get_data, get_options_chain,
@@ -25,11 +31,15 @@ from utils import (
     generate_signals_for_row, backtest_strategy,
     generate_option_trade_plan, convert_compound_to_100_scale, EXPERT_RATING_MAP
 )
-from display_components import (
-    display_main_analysis_tab, display_trade_plan_options_tab,
-    display_backtest_tab, display_news_info_tab, display_trade_log_tab,
-    display_interactive_payoff_calculator, display_glossary
-)
+try:
+    from display_components import (
+        display_main_analysis_tab, display_trade_plan_options_tab,
+        display_backtest_tab, display_news_info_tab, display_trade_log_tab,
+        display_option_calculator_tab # Import the new options calculator tab
+    )
+except ImportError as e:
+    print("Import error details:", str(e))
+    raise
 
 # === Page Setup ===
 st.set_page_config(page_title="Aatif's AI Trading Hub", layout="wide")
@@ -83,17 +93,17 @@ auto_sentiment_score_placeholder = st.sidebar.empty()
 auto_expert_score_placeholder = st.sidebar.empty()
 
 # === Buttons ===
-col_buttons1, col_buttons2 = st.columns(2)
+col_buttons1, col_buttons2 = st.columns([0.2, 0.8])
 
 with col_buttons1:
     # When "Analyze Ticker" is clicked, set analysis_started to True and rerun
-    if st.button("▶️ Analyze Ticker", help="Click to analyze the entered ticker and display results.", use_container_width=True):
+    if st.button("▶️ Analyze Ticker", help="Click to analyze the entered ticker and display results."):
         st.session_state.analysis_started = True
         st.rerun()
 
 with col_buttons2:
     # When "Clear Cache & Refresh Data" is clicked, clear cache, reset analysis_started, and rerun
-    if st.button("🔄 Clear Cache & Refresh Data", help="Click to clear all cached data and re-run analysis from scratch.", use_container_width=True):
+    if st.button("🔄 Clear Cache & Refresh Data", help="Click to clear all cached data and re-run analysis from scratch."):
         st.cache_data.clear() # Clear all cached data
         st.session_state.analysis_started = False # Reset analysis state
         st.rerun()
@@ -175,9 +185,13 @@ if st.session_state.analysis_started:
                 
                 overall_confidence = min(round((final_weights["technical"]*scores["technical"] + final_weights["sentiment"]*scores["sentiment"] + final_weights["expert"]*scores["expert"]), 2), 100)
 
+                # Get expirations for the new option calculator tab
+                stock_obj_for_options = yf.Ticker(ticker_to_analyze)
+                expirations = stock_obj_for_options.options
+
                 # Display tabs
-                tab_list = ["📊 Main Analysis", "📈 Trade Plan & Options", "🧪 Backtest", "📰 News & Info", "📝 Trade Log", "📚 Glossary"]
-                main_tab, trade_tab, backtest_tab, news_tab, log_tab, glossary_tab = st.tabs(tab_list)
+                tab_list = ["📊 Main Analysis", "📈 Trade Plan & Options", "🧪 Backtest", "📰 News & Info", "📝 Trade Log", "🧮 Option Calculator"]
+                main_tab, trade_tab, backtest_tab, news_tab, log_tab, option_calc_tab = st.tabs(tab_list)
 
                 with main_tab:
                     # Pass df_pivots to main analysis tab for display
@@ -196,13 +210,17 @@ if st.session_state.analysis_started:
                 with log_tab:
                     display_trade_log_tab(LOG_FILE, ticker_to_analyze, timeframe, overall_confidence)
 
-                with glossary_tab:
-                    display_glossary()
+                with option_calc_tab:
+                    # Pass the current stock price and expirations to the new calculator
+                    current_stock_price = df_calculated.iloc[-1]['Close']
+                    display_option_calculator_tab(ticker_to_analyze, current_stock_price, expirations)
+
 
         except Exception as e:
-            st.error(f"An unexpected error occurred during data processing for {ticker_to_analyze}: {e}", icon="🚫")
+            st.error(f"An unexpected error occurred during data processing for {ticker_to_analyze}: {e}", icon="�")
             st.exception(e)
     else:
         st.info("Please enter a stock ticker in the sidebar and click 'Analyze Ticker' to begin analysis.")
 else:
     st.info("Enter a stock ticker in the sidebar and click 'Analyze Ticker' to begin analysis.")
+�
