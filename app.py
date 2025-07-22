@@ -1,4 +1,4 @@
-# app.py - Version 1.23
+# app.py - Version 1.24
 # app.py
 import sys
 import os
@@ -37,6 +37,7 @@ try:
         display_backtest_tab, display_news_info_tab, display_trade_log_tab,
         display_option_calculator_tab # Import the new options calculator tab
     )
+    from glossary_components import display_glossary_tab # Import the glossary display function
 except ImportError as e:
     print("Import error details:", str(e))
     raise
@@ -190,8 +191,8 @@ if st.session_state.analysis_started:
                 expirations = stock_obj_for_options.options
 
                 # Display tabs
-                tab_list = ["📊 Main Analysis", "📈 Trade Plan & Options", "🧪 Backtest", "📰 News & Info", "📝 Trade Log", "🧮 Option Calculator"]
-                main_tab, trade_tab, backtest_tab, news_tab, log_tab, option_calc_tab = st.tabs(tab_list)
+                tab_list = ["📊 Main Analysis", "📈 Trade Plan & Options", "🧪 Backtest", "📰 News & Info", "📝 Trade Log", "🧮 Option Calculator", "📚 Glossary"]
+                main_tab, trade_tab, backtest_tab, news_tab, log_tab, option_calc_tab, glossary_tab = st.tabs(tab_list)
 
                 with main_tab:
                     # Pass df_pivots to main analysis tab for display
@@ -214,6 +215,9 @@ if st.session_state.analysis_started:
                     # Pass the current stock price and expirations to the new calculator
                     current_stock_price = df_calculated.iloc[-1]['Close']
                     display_option_calculator_tab(ticker_to_analyze, current_stock_price, expirations)
+
+                with glossary_tab:
+                    display_glossary_tab() # Call the glossary display function
 
 
         except Exception as e:
