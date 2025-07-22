@@ -1,4 +1,4 @@
-# app.py - Version 1.25
+# app.py - Version 1.26
 import sys
 import os
 import streamlit as st
@@ -82,8 +82,8 @@ with st.sidebar.expander("Display-Only Indicators"):
 st.sidebar.header("🧠 Qualitative Scores")
 use_automation = st.sidebar.toggle("Enable Automated Scoring", value=True, help="ON: AI scores are used. OFF: Use manual sliders and only the Technical Score will count.")
 
-include_finviz_sentiment = st.sidebar.checkbox("Include Finviz Sentiment", value=True, disabled=not use_automation)
-include_finviz_expert = st.sidebar.checkbox("Include Finviz Expert Rating", value=True, disabled=not use_automation)
+include_finviz_sentiment = st.sidebar.checkbox("Include Finviz Sentiment", value=True) # Removed disabled=not use_automation
+include_finviz_expert = st.sidebar.checkbox("Include Finviz Expert Rating", value=True) # Removed disabled=not use_automation
 
 
 if not use_automation:
@@ -110,24 +110,30 @@ if st.button("🚀 Analyze Ticker"):
 
         sentiment_score_current = sentiment_score_manual
         expert_score_current = expert_score_manual
-        finviz_data = {"headlines": ["Automated scoring is disabled."], "recom": "N/A", "sentiment_compound": 0}
+        finviz_data = {"headlines": ["No Finviz data requested or available."], "recom": "N/A", "sentiment_compound": 0} # Default message
 
-        if use_automation and (include_finviz_sentiment or include_finviz_expert):
-            finviz_data = get_finviz_data(ticker)
-            if finviz_data.get('error'): # Check for error message from get_finviz_data
-                st.warning(f"Could not fetch live Finviz data for sentiment and expert rating due to: {finviz_data['error']}. Using default/manual scores.", icon="⚠️")
-                # Keep sentiment_score_current and expert_score_current as their initial values (manual or 50)
+        # Fetch Finviz data if any of the Finviz-related checkboxes are enabled
+        if include_finviz_sentiment or include_finviz_expert:
+            fetched_finviz_data = get_finviz_data(ticker)
+            if fetched_finviz_data.get('error'):
+                st.warning(f"Could not fetch live Finviz data for {ticker} due to: {fetched_finviz_data['error']}. News headlines and automated scores may be incomplete.", icon="⚠️")
+                finviz_data = {"headlines": [f"Finviz data unavailable: {fetched_finviz_data['error']}"], "recom": "N/A", "sentiment_compound": 0}
             else:
-                if include_finviz_sentiment:
-                    sentiment_score_current = convert_compound_to_100_scale(finviz_data['sentiment_compound'])
-                else:
-                    sentiment_score_current = 0
-                
-                if include_finviz_expert:
-                    # Use the new conversion function for expert score
-                    expert_score_current = convert_finviz_recom_to_score(finviz_data['recom'])
-                else:
-                    expert_score_current = 0
+                finviz_data = fetched_finviz_data # Use the fetched data
+
+                if use_automation: # Apply automated scoring only if automation is enabled
+                    if include_finviz_sentiment:
+                        sentiment_score_current = convert_compound_to_100_scale(finviz_data['sentiment_compound'])
+                    else:
+                        sentiment_score_current = 0 # If not included, set to 0 for calculation
+                    
+                    if include_finviz_expert:
+                        expert_score_current = convert_finviz_recom_to_score(finviz_data['recom'])
+                    else:
+                        expert_score_current = 0 # If not included, set to 0 for calculation
+                # Else (use_automation is False), sentiment_score_current and expert_score_current remain manual values
+        else:
+            st.info("Finviz data fetching is disabled. Enable 'Include Finviz Sentiment' or 'Include Finviz Expert Rating' in the sidebar to fetch news and automated scores.", icon="ℹ️")
         
         # Debugging print statements
         print(f"DEBUG: use_automation: {use_automation}")
