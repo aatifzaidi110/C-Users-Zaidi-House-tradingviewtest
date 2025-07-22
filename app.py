@@ -217,7 +217,7 @@ if st.session_state.analysis_started:
 
 
         except Exception as e:
-            st.error(f"An unexpected error occurred during data processing for {ticker_to_analyze}: {e}", icon="�")
+            st.error(f"An unexpected error occurred during data processing for {ticker_to_analyze}: {e}", icon="❌")
             st.exception(e)
     else:
         st.info("Please enter a stock ticker in the sidebar and click 'Analyze Ticker' to begin analysis.")
