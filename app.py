@@ -223,4 +223,4 @@ if st.session_state.analysis_started:
         st.info("Please enter a stock ticker in the sidebar and click 'Analyze Ticker' to begin analysis.")
 else:
     st.info("Enter a stock ticker in the sidebar and click 'Analyze Ticker' to begin analysis.")
-�
+
