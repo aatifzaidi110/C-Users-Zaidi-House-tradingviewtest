@@ -1,29 +1,34 @@
-# display_components.py - Version 1.45
+# display_components.py - Version 1.46
 
 import streamlit as st
 import pandas as pd
 import mplfinance as mpf
 import matplotlib.pyplot as plt
-import yfinance as yf # Ensure yfinance is imported here
-import os # For chart saving/removing, though direct plot is preferred
-import numpy as np # For numerical operations in payoff chart
+import yfinance as yf
+import os
+import numpy as np
 from datetime import datetime
 
 # Import functions from utils.py
-from utils import backtest_strategy, calculate_indicators, generate_signals_for_row, generate_option_trade_plan, get_options_chain, get_data, get_finviz_data, calculate_pivot_points, EXPERT_RATING_MAP, get_moneyness, analyze_options_chain # Import get_moneyness and analyze_options_chain
+from utils import (
+    backtest_strategy, calculate_indicators, generate_signals_for_row,
+    generate_option_trade_plan, get_options_chain, get_data, get_finviz_data,
+    calculate_pivot_points, EXPERT_RATING_MAP, get_moneyness, analyze_options_chain,
+    generate_directional_trade_plan # NEW: Import the directional trade plan generator
+)
 
 # === Helper for Indicator Display ===
-def format_indicator_display(signal_key, current_value, selected, signals_dict):
+def format_indicator_display(signal_name_base, current_value, bullish_fired, bearish_fired, is_selected):
     """
-    Formats and displays a single technical indicator's concise information.
+    Formats and displays a single technical indicator's concise information,
+    showing both bullish and bearish status.
     """
-    if not selected:
-        return ""
-    
-    is_fired = signals_dict.get(signal_key, False)
-    status_icon = '🟢' if is_fired else '🔴'
-    display_name = signal_key.split('(')[0].strip()
+    if not is_selected:
+        return "" # Don't display if not selected
 
+    bullish_icon = '🟢' if bullish_fired else '⚪'
+    bearish_icon = '🔴' if bearish_fired else '⚪'
+    
     value_str = ""
     if current_value is not None and not pd.isna(current_value):
         if isinstance(current_value, (int, float)) and not isinstance(current_value, bool):
@@ -33,10 +38,15 @@ def format_indicator_display(signal_key, current_value, selected, signals_dict):
     else:
         value_str = "Current: N/A"
 
-    return f"{status_icon} **{display_name}** ({value_str})"
+    # For ADX, it's non-directional, so we'll just show its value and overall trend strength
+    if "ADX" in signal_name_base: # Check for "ADX" in the base name
+        return f"{bullish_icon} {bearish_icon} **{signal_name_base}** ({value_str})"
+    else:
+        return f"{bullish_icon} **{signal_name_base} Bullish** | {bearish_icon} **{signal_name_base} Bearish** ({value_str})"
+
 
 # === Common Header for Tabs ===
-def _display_common_header(ticker, current_price, prev_close, overall_confidence):
+def _display_common_header(ticker, current_price, prev_close, overall_confidence, trade_direction): # Added trade_direction
     """
     Displays common header information (ticker, current price, overall sentiment)
     at the top of various tabs.
@@ -45,13 +55,11 @@ def _display_common_header(ticker, current_price, prev_close, overall_confidence
     
     price_delta = current_price - prev_close
     
-    sentiment_status = "Neutral"
+    sentiment_status = trade_direction # Use the determined trade_direction
     sentiment_icon = "⚪"
-    if overall_confidence >= 65:
-        sentiment_status = "Bullish"
+    if trade_direction == "Bullish":
         sentiment_icon = "⬆️"
-    elif overall_confidence <= 35:
-        sentiment_status = "Bearish"
+    elif trade_direction == "Bearish":
         sentiment_icon = "⬇️"
         
     col1, col2 = st.columns([1, 1])
@@ -69,7 +77,7 @@ def calculate_payoff_from_legs(stock_prices, legs):
     Calculates the total payoff for a given set of option legs across a range of stock prices.
     Each leg is expected to be a dictionary: {'type': 'call'/'put', 'strike': float, 'premium': float, 'action': 'buy'/'sell'}
     """
-    total_payoff = np.zeros_like(stock_prices, dtype=float) # Ensure float type
+    total_payoff = np.zeros_like(stock_prices, dtype=float)
 
     for leg in legs:
         option_type = leg['type']
@@ -82,7 +90,6 @@ def calculate_payoff_from_legs(stock_prices, legs):
         elif option_type == 'put':
             payoff_per_share = np.maximum(0, strike - stock_prices)
         else:
-            # This case should ideally be prevented by input validation
             continue
 
         if action == 'buy':
@@ -97,42 +104,33 @@ def plot_generic_payoff_chart(stock_prices, payoffs, legs, strategy_name, ticker
     based on calculated payoffs and individual legs.
     """
     fig, ax = plt.subplots(figsize=(10, 6))
-    ax.axhline(0, color='gray', linestyle='--', linewidth=0.8, label='Breakeven Line') # Breakeven line
+    ax.axhline(0, color='gray', linestyle='--', linewidth=0.8, label='Breakeven Line')
 
     ax.plot(stock_prices, payoffs, label=f'{strategy_name} Payoff', color='blue')
 
-    # Mark strikes
     for leg in legs:
         color = 'green' if leg['action'] == 'buy' else 'red'
         linestyle = ':'
         ax.axvline(leg['strike'], color=color, linestyle=linestyle, label=f"{leg['action'].capitalize()} {leg['type'].capitalize()} Strike: ${leg['strike']:.2f}")
 
-    # Mark current stock price
     ax.axvline(current_stock_price, color='orange', linestyle='-', linewidth=1.5, label=f'Current Price: ${current_stock_price:.2f}')
 
-    # Find breakeven points (where payoff crosses zero)
     breakeven_points = []
-    # Check for sign changes in payoff
     for i in range(1, len(payoffs)):
         if (payoffs[i-1] < 0 and payoffs[i] >= 0) or (payoffs[i-1] > 0 and payoffs[i] <= 0):
-            # Linear interpolation for a more precise breakeven point
             x1, y1 = stock_prices[i-1], payoffs[i-1]
             x2, y2 = stock_prices[i], payoffs[i]
-            if (y2 - y1) != 0: # Avoid division by zero
+            if (y2 - y1) != 0:
                 breakeven = x1 - y1 * (x2 - x1) / (y2 - y1)
                 breakeven_points.append(breakeven)
     
-    # Filter unique breakeven points and plot them
     unique_breakeven_points = sorted(list(set(round(bp, 2) for bp in breakeven_points)))
     for bp in unique_breakeven_points:
         ax.axvline(bp, color='purple', linestyle='--', label=f'Breakeven: ${bp:.2f}')
 
-    # Calculate and mark max profit/loss from the payoff array
     max_payoff = np.max(payoffs)
     min_payoff = np.min(payoffs)
     
-    # Add text annotations for max profit/loss
-    # Adjust position slightly to avoid overlap with plot line
     if max_payoff > 0:
         ax.text(stock_prices[-1], max_payoff * 0.9, f'Max Profit: ${max_payoff:.2f}', verticalalignment='bottom', horizontalalignment='right', color='green', fontsize=9)
     if min_payoff < 0:
@@ -148,14 +146,12 @@ def plot_generic_payoff_chart(stock_prices, payoffs, legs, strategy_name, ticker
     return fig
 
 
-# Removed the plot_automated_strategy_payoff function as it's no longer used.
-
-def display_option_calculator_tab(ticker, current_stock_price, expirations, prev_close, overall_confidence): # Added prev_close, overall_confidence
+def display_option_calculator_tab(ticker, current_stock_price, expirations, prev_close, overall_confidence, trade_direction): # Added trade_direction
     """
     Displays a comprehensive options calculator tab, allowing users to define and visualize
     custom options strategies, including stock legs.
     """
-    _display_common_header(ticker, current_stock_price, prev_close, overall_confidence) # Display common header
+    _display_common_header(ticker, current_stock_price, prev_close, overall_confidence, trade_direction) # Display common header
     st.subheader(f"🧮 Option Strategy Calculator for {ticker}")
     st.info("Build and analyze complex options strategies, including stock components.")
 
@@ -253,7 +249,7 @@ def display_option_calculator_tab(ticker, current_stock_price, expirations, prev
             if stock_action == "Buy":
                 stock_payoff = (stock_prices_range - stock_purchase_price) * num_shares
             elif stock_action == "Sell":
-                stock_payoff = (stock_purchase_price - stock_prices_range) * num_shares
+                stock_payoff = (stock_purchase_price - stock_prices_range) * num_shares # Corrected variable name
 
             # Calculate payoff from option legs
             option_payoff = calculate_payoff_from_legs(stock_prices_range, legs_to_calculate)
@@ -319,11 +315,13 @@ def display_option_calculator_tab(ticker, current_stock_price, expirations, prev
 
 
 # === Dashboard Tab Display Functions ===
-def display_main_analysis_tab(ticker, df, info, params, selection, overall_confidence, scores, final_weights, sentiment_score, expert_score, df_pivots, show_finviz_link):
+def display_main_analysis_tab(ticker, df, info, params, selection, overall_confidence, scores, final_weights, sentiment_score, expert_score, df_pivots):
     """Displays the main technical analysis and confidence score tab."""
     is_intraday = params['interval'] in ['5m', '60m']
     last = df.iloc[-1]
-    signals = generate_signals_for_row(last, selection, df, is_intraday)
+    
+    # Generate both bullish and bearish signals for the last row
+    bullish_signals, bearish_signals = generate_signals_for_row(last, selection, df, is_intraday)
 
     col1, col2 = st.columns([1, 2])
     with col1:
@@ -338,10 +336,10 @@ def display_main_analysis_tab(ticker, df, info, params, selection, overall_confi
         # Determine bullish/bearish based on overall confidence
         sentiment_status = "Neutral"
         sentiment_icon = "⚪"
-        if overall_confidence >= 65:
+        if overall_confidence >= 65: # Threshold for bullish display
             sentiment_status = "Bullish"
             sentiment_icon = "⬆️"
-        elif overall_confidence <= 35:
+        elif overall_confidence <= 35: # Threshold for bearish display
             sentiment_status = "Bearish"
             sentiment_icon = "⬇️"
         
@@ -379,8 +377,8 @@ def display_main_analysis_tab(ticker, df, info, params, selection, overall_confi
                     f"- **Sentiment Score:** {sentiment_text} (Weight: `{final_weights['sentiment']*100:.0f}%`)\n"
                     f"- **Expert Rating:** {expert_text} (Weight: `{final_weights['expert']*100:.0f}%`)")
         
-        if show_finviz_link:
-            st.markdown(f"**Source for Sentiment & Expert Scores:** [Finviz.com]({f'https://finviz.com/quote.ashx?t={ticker}'})")
+        # Always show Finviz link if automation is enabled
+        st.markdown(f"**Source for Sentiment & Expert Scores:** [Finviz.com]({f'https://finviz.com/quote.ashx?t={ticker}'})")
 
         st.markdown("---")
 
@@ -395,36 +393,40 @@ def display_main_analysis_tab(ticker, df, info, params, selection, overall_confi
 
         st.subheader("✅ Technical Analysis Readout")
         with st.expander("📈 Trend Indicators", expanded=True):
+            # Updated calls to format_indicator_display to show both bullish/bearish status
             if selection.get("EMA Trend"):
-                st.markdown(format_indicator_display("Uptrend (21>50>200 EMA)", None, selection.get("EMA Trend"), signals))
+                st.markdown(format_indicator_display("EMA Trend", None, bullish_signals.get("Uptrend (21>50>200 EMA)", False), bearish_signals.get("Downtrend (21<50<200 EMA)", False), selection.get("EMA Trend")))
             
+            if selection.get("Ichimoku Cloud"):
+                st.markdown(format_indicator_display("Ichimoku Cloud", None, bullish_signals.get("Bullish Ichimoku", False), bearish_signals.get("Bearish Ichimoku", False), selection.get("Ichimoku Cloud")))
+
             if selection.get("Parabolic SAR"):
-                st.markdown(format_indicator_display("Bullish PSAR", last.get('psar'), selection.get("Parabolic SAR"), signals))
+                st.markdown(format_indicator_display("Parabolic SAR", last.get('psar'), bullish_signals.get("Bullish PSAR", False), bearish_signals.get("Bearish PSAR", False), selection.get("Parabolic SAR")))
 
             if selection.get("ADX"):
-                st.markdown(format_indicator_display("Strong Trend (ADX > 25)", last.get("adx"), selection.get("ADX"), signals))
+                st.markdown(format_indicator_display("ADX", last.get("adx"), bullish_signals.get("Strong Trend (ADX > 25)", False), bearish_signals.get("Strong Trend (ADX > 25)", False), selection.get("ADX")))
         
         with st.expander("💨 Momentum & Volume Indicators", expanded=True):
             if selection.get("RSI Momentum"):
-                st.markdown(format_indicator_display("Bullish Momentum (RSI > 50)", last.get("RSI"), selection.get("RSI Momentum"), signals))
+                st.markdown(format_indicator_display("RSI Momentum", last.get("RSI"), bullish_signals.get("Bullish Momentum (RSI > 50)", False), bearish_signals.get("Bearish Momentum (RSI < 50)", False), selection.get("RSI Momentum")))
 
             if selection.get("Stochastic"):
-                st.markdown(format_indicator_display("Bullish Stoch Cross", last.get("stoch_k"), selection.get("Stochastic"), signals))
+                st.markdown(format_indicator_display("Stochastic Oscillator", last.get("stoch_k"), bullish_signals.get("Bullish Stoch Cross", False), bearish_signals.get("Bearish Stoch Cross", False), selection.get("Stochastic")))
 
             if selection.get("CCI"):
-                st.markdown(format_indicator_display("Bullish CCI (>0)", last.get("cci"), selection.get("CCI"), signals))
+                st.markdown(format_indicator_display("CCI", last.get("cci"), bullish_signals.get("Bullish CCI (>0)", False), bearish_signals.get("Bearish CCI (<0)", False), selection.get("CCI")))
 
             if selection.get("ROC"):
-                st.markdown(format_indicator_display("Positive ROC (>0)", last.get("roc"), selection.get("ROC"), signals))
+                st.markdown(format_indicator_display("ROC", last.get("roc"), bullish_signals.get("Positive ROC (>0)", False), bearish_signals.get("Negative ROC (<0)", False), selection.get("ROC")))
 
             if selection.get("Volume Spike"):
-                st.markdown(format_indicator_display("Volume Spike (>1.5x Avg)", last.get("Volume"), selection.get("Volume Spike"), signals))
+                st.markdown(format_indicator_display("Volume Spike", last.get("Volume"), bullish_signals.get("Volume Spike (Up Move)", False), bearish_signals.get("Volume Spike (Down Move)", False), selection.get("Volume Spike")))
 
             if selection.get("OBV"):
-                st.markdown(format_indicator_display("OBV Rising", last.get("obv"), selection.get("OBV"), signals))
+                st.markdown(format_indicator_display("OBV", last.get("obv"), bullish_signals.get("OBV Rising", False), bearish_signals.get("OBV Falling", False), selection.get("OBV")))
             
             if is_intraday and selection.get("VWAP"):
-                st.markdown(format_indicator_display("Price > VWAP", last.get("vwap"), selection.get("VWAP"), signals))
+                st.markdown(format_indicator_display("VWAP", last.get("vwap"), bullish_signals.get("Price > VWAP", False), bearish_signals.get("Price < VWAP", False), selection.get("VWAP")))
         
         with st.expander("📊 Display-Only Indicators Status"):
             # Bollinger Bands Status
@@ -492,7 +494,6 @@ def display_main_analysis_tab(ticker, df, info, params, selection, overall_confi
                 r2_values = pd.Series(last_pivot['R2'], index=chart_index)
                 s2_values = pd.Series(last_pivot['S2'], index=chart_index)
 
-                # Removed 'legend' kwarg from make_addplot calls
                 ap.append(mpf.make_addplot(pivot_values, color='purple', linestyle='--', panel=0, width=0.7, secondary_y=False))
                 ap.append(mpf.make_addplot(r1_values, color='red', linestyle=':', panel=0, width=0.7, secondary_y=False))
                 ap.append(mpf.make_addplot(s1_values, color='green', linestyle=':', panel=0, width=0.7, secondary_y=False))
@@ -509,7 +510,7 @@ def display_main_analysis_tab(ticker, df, info, params, selection, overall_confi
                 style='yahoo',
                 mav=mav_tuple,
                 volume=True,
-                addplot=ap, # ap is now guaranteed to be a list
+                addplot=ap,
                 title=f"{ticker} - {params['interval']} chart",
                 returnfig=True
             )
@@ -518,25 +519,46 @@ def display_main_analysis_tab(ticker, df, info, params, selection, overall_confi
         else:
             st.info("Not enough data to generate chart.")
 
-def display_trade_plan_options_tab(ticker, df, overall_confidence):
+def display_trade_plan_options_tab(ticker, df, overall_confidence, timeframe, trade_direction): # Added timeframe, trade_direction
     """Displays the suggested trade plan and options strategy."""
     last = df.iloc[-1]
-    current_stock_price = last['Close'] # Get current stock price for moneyness calculation
-    prev_close = df['Close'].iloc[-2] if len(df) >= 2 else current_stock_price # Get previous close for delta
-
-    _display_common_header(ticker, current_stock_price, prev_close, overall_confidence) # Display common header
-
-    st.subheader("📋 Suggested Stock Trade Plan (Bullish Swing)")
-    entry_zone_start = last['EMA21'] * 0.99 if 'EMA21' in last and not pd.isna(last['EMA21']) else last['Close'] * 0.99
-    entry_zone_end = last['EMA21'] * 1.01 if 'EMA21' in last and not pd.isna(last['EMA21']) else last['Close'] * 1.01
+    current_stock_price = last['Close']
+    prev_close = df['Close'].iloc[-2] if len(df) >= 2 else current_stock_price
     
-    stop_loss_val = last['Low'] - last['ATR'] if 'Low' in last and 'ATR' in last and not pd.isna(last['ATR']) and last['ATR'] > 0 else last['Close'] * 0.95
-    profit_target_val = last['Close'] + (2 * (last['Close'] - stop_loss_val)) if 'Close' in last and stop_loss_val and not pd.isna(stop_loss_val) else last['Close'] * 1.1
+    # This mapping should ideally come from app.py's TIMEFRAME_MAP for consistency
+    interval_map_for_trade_plan = {
+        "Scalp Trading": "5m",
+        "Day Trading": "60m",
+        "Swing Trading": "1d",
+        "Position Trading": "1wk"
+    }
+    period_interval = interval_map_for_trade_plan.get(timeframe, "1d") # Default to 1d if not found
+
+    _display_common_header(ticker, current_stock_price, prev_close, overall_confidence, trade_direction) # Display common header
+
+    # Dynamic subheader based on determined trade direction
+    if trade_direction != "Neutral":
+        st.subheader(f"📋 Suggested Stock Trade Plan ({trade_direction} {timeframe})")
+    else:
+        st.subheader("📋 Stock Trade Plan")
+
+    # Generate the trade plan using the new directional function
+    trade_plan_result = generate_directional_trade_plan(
+        current_stock_price,
+        last.get('ATR'), # Ensure ATR is available
+        trade_direction,
+        timeframe,
+        period_interval # Pass the interval
+    )
+
+    if trade_plan_result['status'] == 'success':
+        st.info(f"**Based on {overall_confidence:.0f}% Overall Confidence ({trade_plan_result['direction']}):**\n\n"
+                f"**Entry Zone:** Between **${trade_plan_result['entry_zone_start']:.2f}** and **${trade_plan_result['entry_zone_end']:.2f}**.\n"
+                f"**Stop-Loss:** A close {'below' if trade_plan_result['direction'] == 'Bullish' else 'above'} **${trade_plan_result['stop_loss']:.2f}**.\n"
+                f"**Profit Target:** Around **${trade_plan_result['profit_target']:.2f}** ({trade_plan_result['reward_risk_ratio']:.1f}:1 Reward/Risk).")
+    else:
+        st.warning(trade_plan_result['message'])
     
-    st.info(f"**Based on {overall_confidence:.0f}% Overall Confidence:**\n\n"
-            f"**Entry Zone:** Between **${entry_zone_start:.2f}** and **${entry_zone_end:.2f}**.\n"
-            f"**Stop-Loss:** A close below **${stop_loss_val:.2f}**.\n"
-            f"**Profit Target:** Around **${profit_target_val:.2f}** (2:1 Reward/Risk).")
     st.markdown("---")
     
     st.subheader("🎭 Automated Options Strategy")
@@ -545,7 +567,8 @@ def display_trade_plan_options_tab(ticker, df, overall_confidence):
     if not expirations:
         st.warning("No options data available for this ticker.")
     else:
-        trade_plan = generate_option_trade_plan(ticker, overall_confidence, current_stock_price, expirations)
+        # Pass trade_direction to generate_option_trade_plan
+        trade_plan = generate_option_trade_plan(ticker, overall_confidence, current_stock_price, expirations, trade_direction)
         
         # --- Start of new detailed options display ---
         if trade_plan['status'] == 'success':
@@ -563,7 +586,6 @@ def display_trade_plan_options_tab(ticker, df, overall_confidence):
                 st.markdown("---")
                 st.subheader("🔬 Recommended Option Deep-Dive (Spread Legs)")
                 
-                # Check if 'Buy' leg exists before accessing
                 if 'Buy' in trade_plan['Contracts']:
                     st.write("**Buy Leg:**")
                     rec_option_buy = trade_plan['Contracts']['Buy']
@@ -589,7 +611,6 @@ def display_trade_plan_options_tab(ticker, df, overall_confidence):
                 else:
                     st.warning("Buy leg details not available for the Bull Call Spread.")
 
-                # Check if 'Sell' leg exists before accessing
                 if 'Sell' in trade_plan['Contracts']:
                     st.write("**Sell Leg:**")
                     rec_option_sell = trade_plan['Contracts']['Sell']
@@ -615,10 +636,11 @@ def display_trade_plan_options_tab(ticker, df, overall_confidence):
                 else:
                     st.warning("Sell leg details not available for the Bull Call Spread.")
 
-            elif trade_plan['Strategy'] in ["Buy ITM Call", "Buy ATM Call"]: # Corrected: use elif here
+            elif trade_plan['Strategy'] in ["Buy ITM Call", "Buy ATM Call", "Buy ITM Put", "Buy ATM Put"]: # Added put strategies
                 rec_option = trade_plan['Contract']
                 entry_premium = rec_option.get('ask', rec_option.get('lastPrice', 0))
-                moneyness = get_moneyness(rec_option.get('strike'), current_stock_price, "call")
+                option_type_for_moneyness = "call" if trade_plan['Strategy'] in ["Buy ITM Call", "Buy ATM Call"] else "put"
+                moneyness = get_moneyness(rec_option.get('strike'), current_stock_price, option_type_for_moneyness)
                 
                 option_metrics = [
                     {"Metric": "Strike", "Value": f"${rec_option.get('strike', 0):.2f}", "Description": "The price at which the option can be exercised.", "Ideal for Buyers": "Lower for calls, higher for puts"},
@@ -634,16 +656,75 @@ def display_trade_plan_options_tab(ticker, df, overall_confidence):
                     {"Metric": "Theta", "Value": f"{rec_option.get('theta', None):.3f}" if rec_option.get('theta') is not None and not pd.isna(rec_option.get('theta')) else "N/A", "Description": "Time decay. Daily value lost from the premium.", "Ideal for Buyers": "As low as possible"},
                     {"Metric": "Gamma", "Value": f"{rec_option.get('gamma', None):.3f}" if rec_option.get('gamma') is not None and not pd.isna(rec_option.get('gamma')) else "N/A", "Description": "Rate of change of Delta. High Gamma = faster delta changes.", "Ideal for Buyers": "Higher for directional plays"},
                     {"Metric": "Vega", "Value": f"{rec_option.get('vega', None):.3f}" if rec_option.get('vega') is not None and not pd.isna(rec_option.get('vega')) else "N/A", "Description": "Option's price change per 1% change in interest rates.", "Ideal for Buyers": "Less significant for short-term"},
-                        {"Metric": "Rho", "Value": f"{rec_option.get('rho', None):.3f}" if rec_option.get('rho') is not None and not pd.isna(rec_option.get('rho')) else "N/A", "Description": "Option's price change per 1% change in interest rates.", "Ideal for Buyers": "Less significant for short-term"},
-                        {"Metric": "Open Interest", "Value": f"{rec_option.get('openInterest', None):,}" if rec_option.get('openInterest') is not None and not pd.isna(rec_option.get('openInterest')) else "N/A", "Description": "Total open contracts. High OI indicates good liquidity.", "Ideal for Buyers": "> 100s"},
-                        {"Metric": "Volume (Today)", "Value": f"{rec_option.get('volume', None):,}" if rec_option.get('volume') is not None and not pd.isna(rec_option.get('volume')) else "N/A", "Description": "Number of contracts traded today.", "Ideal for Buyers": "Higher (>100)"},
-                    ]
+                    {"Metric": "Rho", "Value": f"{rec_option.get('rho', None):.3f}" if rec_option.get('rho') is not None and not pd.isna(rec_option.get('rho')) else "N/A", "Description": "Option's price change per 1% change in interest rates.", "Ideal for Buyers": "Less significant for short-term"},
+                    {"Metric": "Open Interest", "Value": f"{rec_option.get('openInterest', None):,}" if rec_option.get('openInterest') is not None and not pd.isna(rec_option.get('openInterest')) else "N/A", "Description": "Total open contracts. High OI indicates good liquidity.", "Ideal for Buyers": "> 100s"},
+                    {"Metric": "Volume (Today)", "Value": f"{rec_option.get('volume', None):,}" if rec_option.get('volume') is not None and not pd.isna(rec_option.get('volume')) else "N/A", "Description": "Number of contracts traded today.", "Ideal for Buyers": "Higher (>100)"},
+                ]
                 st.table(pd.DataFrame(option_metrics).set_index("Metric"))
 
-            # --- Add the Options Profit Calculator link here ---
-            st.markdown("---")
-            st.markdown("🔗 **External Tool:** [Options Profit Calculator](https://www.optionsprofitcalculator.com/)")
-            # --- End of added link ---
+            elif trade_plan['Strategy'] == "Bear Put Spread": # New: Bear Put Spread
+                col1, col2, col3, col4, col5 = st.columns(5)
+                col1.metric("Buy Strike", trade_plan['Buy Strike'])
+                col2.metric("Sell Strike", trade_plan['Sell Strike'])
+                col3.metric("Expiration", trade_plan['Expiration'])
+                col4.metric("Net Debit", trade_plan['Net Debit']) # Bear Put Spread is also a debit spread
+                col5.metric("Max Profit / Max Risk", f"{trade_plan['Max Profit']} / {trade_plan['Max Risk']}")
+                st.write(f"**Reward / Risk:** `{trade_plan['Reward / Risk']}`")
+                st.markdown("---")
+                st.subheader("🔬 Recommended Option Deep-Dive (Spread Legs)")
+                
+                if 'Buy' in trade_plan['Contracts']:
+                    st.write("**Buy Leg:**")
+                    rec_option_buy = trade_plan['Contracts']['Buy']
+                    moneyness_buy = get_moneyness(rec_option_buy.get('strike'), current_stock_price, "put")
+
+                    option_metrics_buy = [
+                        {"Metric": "Strike", "Value": f"${rec_option_buy.get('strike', 0):.2f}", "Description": "The price at which the option can be exercised.", "Ideal for Buyers": "Lower for calls, higher for puts"},
+                        {"Metric": "Moneyness", "Value": moneyness_buy, "Description": "In-The-Money (ITM), At-The-Money (ATM), or Out-of-The-Money (OTM).", "Ideal for Buyers": "Depends on strategy"},
+                        {"Metric": "Expiration", "Value": trade_plan['Expiration'], "Description": "Date the option expires.", "Ideal for Buyers": "Longer term (45-365 days)"},
+                        {"Metric": f"Value ({ticker})", "Value": f"${rec_option_buy.get('lastPrice', None):.2f}" if rec_option_buy.get('lastPrice') is not None and not pd.isna(rec_option_buy.get('lastPrice')) else "N/A", "Description": "The last traded price of the option.", "Ideal for Buyers": "Lower to enter"},
+                        {"Metric": "Bid", "Value": f"${rec_option_buy.get('bid', None):.2f}" if rec_option_buy.get('bid') is not None and not pd.isna(rec_option_buy.get('bid')) else "N/A", "Description": "Highest price a buyer is willing to pay.", "Ideal for Buyers": "Lower to enter"},
+                        {"Metric": "Ask", "Value": f"${rec_option_buy.get('ask', None):.2f}" if rec_option_buy.get('ask') is not None and not pd.isna(rec_option_buy.get('ask')) else "N/A", "Description": "Lowest price a seller is willing to accept.", "Ideal for Buyers": "Lower to enter"},
+                        {"Metric": "Implied Volatility (IV)", "Value": f"{rec_option_buy.get('impliedVolatility', None):.2%}" if rec_option_buy.get('impliedVolatility') is not None and not pd.isna(rec_option_buy.get('impliedVolatility')) else "N/A", "Description": "Market's forecast of volatility. High IV = expensive premium.", "Ideal for Buyers": "Lower is better"},
+                        {"Metric": "Delta", "Value": f"{rec_option_buy.get('delta', None):.2f}" if rec_option_buy.get('delta') is not None and not pd.isna(rec_option_buy.get('delta')) else "N/A", "Description": "Option's price change per $1 stock change.", "Ideal for Buyers": "0.60 to 0.80 (for ITM calls)"},
+                        {"Metric": "Theta", "Value": f"{rec_option_buy.get('theta', None):.3f}" if rec_option_buy.get('theta') is not None and not pd.isna(rec_option_buy.get('theta')) else "N/A", "Description": "Time decay. Daily value lost from the premium.", "Ideal for Buyers": "As low as possible"},
+                        {"Metric": "Gamma", "Value": f"{rec_option_buy.get('gamma', None):.3f}" if rec_option_buy.get('gamma') is not None and not pd.isna(rec_option_buy.get('gamma')) else "N/A", "Description": "Rate of change of Delta. High Gamma = faster delta changes.", "Ideal for Buyers": "Higher for directional plays"},
+                        {"Metric": "Vega", "Value": f"{rec_option_buy.get('vega', None):.3f}" if rec_option_buy.get('vega') is not None and not pd.isna(rec_option_buy.get('vega')) else "N/A", "Description": "Option's price change per 1% change in interest rates.", "Ideal for Buyers": "Less significant for short-term"},
+                        {"Metric": "Rho", "Value": f"{rec_option_buy.get('rho', None):.3f}" if rec_option_buy.get('rho') is not None and not pd.isna(rec_option_buy.get('rho')) else "N/A", "Description": "Option's price change per 1% change in interest rates.", "Ideal for Buyers": "Less significant for short-term"},
+                        {"Metric": "Open Interest", "Value": f"{rec_option_buy.get('openInterest', None):,}" if rec_option_buy.get('openInterest') is not None and not pd.isna(rec_option_buy.get('openInterest')) else "N/A", "Description": "Total open contracts. High OI indicates good liquidity.", "Ideal for Buyers": "> 100s"},
+                        {"Metric": "Volume (Today)", "Value": f"{rec_option_buy.get('volume', None):,}" if rec_option_buy.get('volume') is not None and not pd.isna(rec_option_buy.get('volume')) else "N/A", "Description": "Number of contracts traded today.", "Ideal for Buyers": "Higher (>100)"},
+                    ]
+                    st.table(pd.DataFrame(option_metrics_buy).set_index("Metric"))
+                else:
+                    st.warning("Buy leg details not available for the Bear Put Spread.")
+
+                if 'Sell' in trade_plan['Contracts']:
+                    st.write("**Sell Leg:**")
+                    rec_option_sell = trade_plan['Contracts']['Sell']
+                    moneyness_sell = get_moneyness(rec_option_sell.get('strike'), current_stock_price, "put")
+
+                    option_metrics_sell = [
+                        {"Metric": "Strike", "Value": f"${rec_option_sell.get('strike', 0):.2f}", "Description": "The price at which the option can be exercised.", "Ideal for Sellers": "Higher for calls, lower for puts"},
+                        {"Metric": "Moneyness", "Value": moneyness_sell, "Description": "In-The-Money (ITM), At-The-Money (ATM), or Out-of-The-Money (OTM).", "Ideal for Sellers": "Depends on strategy"},
+                        {"Metric": "Expiration", "Value": trade_plan['Expiration'], "Description": "Date the option expires.", "Ideal for Sellers": "Shorter term (to maximize time decay)"},
+                        {"Metric": f"Value ({ticker})", "Value": f"${rec_option_sell.get('lastPrice', None):.2f}" if rec_option_sell.get('lastPrice') is not None and not pd.isna(rec_option_sell.get('lastPrice')) else "N/A", "Description": "The last traded price of the option.", "Ideal for Sellers": "Higher to enter"},
+                        {"Metric": "Bid", "Value": f"${rec_option_sell.get('bid', None):.2f}" if rec_option_sell.get('bid') is not None and not pd.isna(rec_option_sell.get('bid')) else "N/A", "Description": "Highest price a buyer is willing to pay.", "Ideal for Sellers": "Higher to enter"},
+                        {"Metric": "Ask", "Value": f"${rec_option_sell.get('ask', None):.2f}" if rec_option_sell.get('ask') is not None and not pd.isna(rec_option_sell.get('ask')) else "N/A", "Description": "Lowest price a seller is willing to accept.", "Ideal for Sellers": "Higher to enter"},
+                        {"Metric": "Implied Volatility (IV)", "Value": f"{rec_option_sell.get('impliedVolatility', None):.2%}" if rec_option_sell.get('impliedVolatility') is not None and not pd.isna(rec_option_sell.get('impliedVolatility')) else "N/A", "Description": "Market's forecast of volatility. High IV = expensive premium.", "Ideal for Sellers": "Higher is better"},
+                        {"Metric": "Delta", "Value": f"{rec_option_sell.get('delta', None):.2f}" if rec_option_sell.get('delta') is not None and not pd.isna(rec_option_sell.get('delta')) else "N/A", "Description": "Option's price change per $1 stock change.", "Ideal for Sellers": "Lower (0.20-0.40) for defined risk spreads"},
+                        {"Metric": "Theta", "Value": f"{rec_option_sell.get('theta', None):.3f}" if rec_option_sell.get('theta') is not None and not pd.isna(rec_option_sell.get('theta')) else "N/A", "Description": "Time decay. Daily value lost from the premium.", "Ideal for Sellers": "Higher (more decay)"},
+                        {"Metric": "Gamma", "Value": f"{rec_option_sell.get('gamma', None):.3f}" if rec_option_sell.get('gamma') is not None and not pd.isna(rec_option_sell.get('gamma')) else "N/A", "Description": "Rate of change of Delta. High Gamma = faster delta changes.", "Ideal for Sellers": "Lower for stability"},
+                        {"Metric": "Vega", "Value": f"{rec_option_sell.get('vega', None):.3f}" if rec_option_sell.get('vega') is not None and not pd.isna(rec_option_sell.get('vega')) else "N/A", "Description": "Option's price change per 1% change in interest rates.", "Ideal for Sellers": "Less significant for short-term"},
+                        {"Metric": "Rho", "Value": f"{rec_option_sell.get('rho', None):.3f}" if rec_option_sell.get('rho') is not None and not pd.isna(rec_option_sell.get('rho')) else "N/A", "Description": "Option's price change per 1% change in interest rates.", "Ideal for Sellers": "Less significant for short-term"},
+                        {"Metric": "Open Interest", "Value": f"{rec_option_sell.get('openInterest', None):,}" if rec_option_sell.get('openInterest') is not None and not pd.isna(rec_option_sell.get('openInterest')) else "N/A", "Description": "Total open contracts. High OI indicates good liquidity.", "Ideal for Sellers": "> 100s"},
+                        {"Metric": "Volume (Today)", "Value": f"{rec_option_sell.get('volume', None):,}" if rec_option_sell.get('volume') is not None and not pd.isna(rec_option_sell.get('volume')) else "N/A", "Description": "Number of contracts traded today.", "Ideal for Sellers": "Higher (>100)"},
+                    ]
+                    st.table(pd.DataFrame(option_metrics_sell).set_index("Metric"))
+                else:
+                    st.warning("Sell leg details not available for the Bear Put Spread.")
+
+            else: # If status is success but not a recognized strategy, something is off
+                st.error("An options strategy was recommended, but its details could not be fully displayed.")
         
         else: # This 'else' correctly belongs to the 'if trade_plan['status'] == 'success':
             st.warning(trade_plan['message'])
@@ -655,9 +736,7 @@ def display_trade_plan_options_tab(ticker, df, overall_confidence):
         if exp_date_str:
             calls, puts = get_options_chain(ticker, exp_date_str)
 
-            # --- New Options Chain Analysis ---
             st.markdown("##### Options Chain Highlights & Suggestions")
-            # Pass exp_date_str to analyze_options_chain
             chain_analysis_results = analyze_options_chain(calls, puts, current_stock_price, exp_date_str) 
             
             if chain_analysis_results:
@@ -695,7 +774,7 @@ def display_trade_plan_options_tab(ticker, df, overall_confidence):
                 'impliedVolatility': 'The market\'s expectation of how much the underlying stock\'s price will move in the future. Higher implied volatility generally means higher option premiums (prices), as there\'s a greater chance of the option moving in-the-money.',
                 'delta': 'Measures how much an option\'s price is expected to move for every $1 change in the underlying stock\'s price. Also represents the approximate probability of an option expiring in-the-money.',
                 'theta': 'Measures the rate at which an option\'s price decays over time (time decay). Theta is typically negative, meaning the option loses value as it gets closer to expiration, all else being equal.',
-                'gamma': 'Measures the rate of change of an option\'s delta. High gamma = faster delta changes.',
+                'gamma': 'Measures the rate of change of Delta. High gamma = faster delta changes.',
                 'vega': 'Measures how much an option\'s price is expected to change for every 1% change in implied volatility. Options with higher vega are more sensitive to changes in IV.',
                 'rho': 'Measures how much an option\'s price is expected to change for every 1% change in interest rates. This is typically less significant for short-term options.'
             }
@@ -724,22 +803,23 @@ def display_trade_plan_options_tab(ticker, df, overall_confidence):
                 st.info("No relevant columns found in the options chain to display.")
     
     st.markdown("---")
-    # Removed the call to the old interactive payoff calculator here.
-    # display_interactive_payoff_calculator(current_stock_price, ticker)
+    st.info("Note: This calculator assumes expiration and does not account for time decay or implied volatility changes before expiration.")
 
 
-def display_backtest_tab(ticker, selection, current_price, prev_close, overall_confidence): # Added current_price, prev_close, overall_confidence
+def display_backtest_tab(ticker, selection, current_price, prev_close, overall_confidence, backtest_direction): # Added backtest_direction
     """Displays the historical backtest results."""
-    _display_common_header(ticker, current_price, prev_close, overall_confidence) # Display common header
+    _display_common_header(ticker, current_price, prev_close, overall_confidence, backtest_direction) # Pass backtest_direction as sentiment_status for header
 
     st.subheader(f"🧪 Historical Backtest for {ticker}")
-    st.info(f"Simulating trades based on your **currently selected indicators**. Entry is triggered if ALL selected signals are positive.")
+    st.info(f"Simulating **{backtest_direction.capitalize()}** trades based on your **currently selected indicators**. Entry is triggered if a sufficient percentage of selected signals are positive for the chosen direction.")
     
     daily_hist, _ = get_data(ticker, "2y", "1d")
     if daily_hist is not None and not daily_hist.empty:
         daily_df_calculated = calculate_indicators(daily_hist.copy(), is_intraday=False)
 
-        trades, wins, losses = backtest_strategy(daily_df_calculated, selection)
+        # Pass the selected backtest_direction to backtest_strategy
+        trades, wins, losses = backtest_strategy(daily_df_calculated, selection, trade_direction=backtest_direction)
+        
         total_trades = wins + losses
         win_rate = (wins / total_trades) * 100 if total_trades > 0 else 0
         
@@ -753,10 +833,9 @@ def display_backtest_tab(ticker, selection, current_price, prev_close, overall_c
     else:
         st.warning("Could not fetch daily data for backtesting or data is empty. Ensure the ticker is valid and enough historical data is available for the selected period (e.g., 2 years).")
 
-def display_news_info_tab(ticker, info, finviz_data, current_price, prev_close, overall_confidence): # Added current_price, prev_close, overall_confidence
+def display_news_info_tab(ticker, info, finviz_data, current_price, prev_close, overall_confidence, trade_direction): # Added trade_direction
     """Displays news and company information."""
-    _display_common_header(ticker, current_price, prev_close, overall_confidence) # Display common header
-
+    _display_common_header(ticker, current_price, prev_close, overall_confidence, trade_direction) # Pass trade_direction
     st.subheader(f"📰 News & Information for {ticker}")
     col1, col2 = st.columns(2)
     with col1:
@@ -779,11 +858,58 @@ def display_news_info_tab(ticker, info, finviz_data, current_price, prev_close, 
     else:
         st.info("No recent headlines found or automated scoring is disabled.")
 
-def display_trade_log_tab(LOG_FILE, ticker, timeframe, overall_confidence, current_price, prev_close): # Added current_price, prev_close
+def display_trade_log_tab(LOG_FILE, ticker, timeframe, overall_confidence, current_price, prev_close, trade_direction): # Added trade_direction
     """Displays and manages the trade log."""
-    _display_common_header(ticker, current_price, prev_close, overall_confidence) # Display common header
-
+    _display_common_header(ticker, current_price, prev_close, overall_confidence, trade_direction) # Pass trade_direction
     st.subheader("📝 Log Your Trade Analysis")
     user_notes = st.text_area("Add your personal notes or trade thesis here:", key=f"trade_notes_{ticker}")
     
     st.info("Trade log functionality is pending implementation.")
+
+# New function for ticker comparison chart
+def display_ticker_comparison_chart(comparison_data):
+    """
+    Displays a bar chart comparing tickers by Confidence Score and Current Price.
+    """
+    if not comparison_data:
+        st.info("No data available for ticker comparison.")
+        return
+
+    df_comparison = pd.DataFrame(comparison_data)
+    df_comparison = df_comparison.sort_values(by="Confidence Score", ascending=False)
+
+    fig, ax1 = plt.subplots(figsize=(12, 6))
+
+    # Bar chart for Confidence Score
+    bars = ax1.bar(df_comparison["Ticker"], df_comparison["Confidence Score"], color='skyblue', alpha=0.7, label="Confidence Score (%)")
+    ax1.set_xlabel("Ticker")
+    ax1.set_ylabel("Confidence Score (%)", color='skyblue')
+    ax1.tick_params(axis='y', labelcolor='skyblue')
+    ax1.set_ylim(0, 100) # Confidence is 0-100
+
+    # Add text labels on top of bars
+    for bar in bars:
+        yval = bar.get_height()
+        ax1.text(bar.get_x() + bar.get_width()/2, yval + 2, round(yval, 0), ha='center', va='bottom', fontsize=9, color='black')
+
+    # Line chart for Current Price (Secondary Y-axis)
+    ax2 = ax1.twinx()
+    ax2.plot(df_comparison["Ticker"], df_comparison["Current Price"], color='orange', marker='o', linestyle='-', linewidth=2, label="Current Price ($)")
+    ax2.set_ylabel("Current Price ($)", color='orange')
+    ax2.tick_params(axis='y', labelcolor='orange')
+
+    # Add text labels for current price
+    for i, price in enumerate(df_comparison["Current Price"]):
+        ax2.text(i, price, f"${price:.2f}", ha='center', va='bottom', fontsize=9, color='orange')
+
+    # Combine legends
+    lines, labels = ax1.get_legend_handles_labels()
+    lines2, labels2 = ax2.get_legend_handles_labels()
+    ax2.legend(lines + lines2, labels + labels2, loc='upper left')
+
+    plt.title("Ticker Comparison: Confidence Score vs. Current Price")
+    plt.xticks(rotation=45, ha='right')
+    fig.tight_layout()
+    st.pyplot(fig, clear_figure=True)
+    plt.close(fig) # Close the figure to free memory
+
