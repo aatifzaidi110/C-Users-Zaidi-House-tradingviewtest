@@ -236,5 +236,3 @@ else:
         st.header("📊 Ticker Comparison Overview")
         display_ticker_comparison_chart(comparison_data)
         st.markdown("---") # Add a separator after the comparison chart
-
-�
