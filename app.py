@@ -1,4 +1,4 @@
-# app.py - Version 1.27
+# app.py - Version 1.28
 import sys
 import os
 import streamlit as st
@@ -216,17 +216,19 @@ else:
                     display_backtest_tab(ticker, indicator_selection, current_price, hist_data['Close'].iloc[-2], overall_confidence, backtest_direction.split(' ')[0].lower())
                 
                 with news_tab:
-                    display_news_info_tab(ticker, info_data, finviz_data, current_price, hist_data['Close'].iloc[-2], overall_confidence)
+                    # Pass trade_direction to display_news_info_tab
+                    display_news_info_tab(ticker, info_data, finviz_data, current_price, hist_data['Close'].iloc[-2], overall_confidence, trade_direction)
                 
                 with log_tab:
-                    display_trade_log_tab(LOG_FILE, ticker, timeframe, overall_confidence, current_price, hist_data['Close'].iloc[-2])
+                    # Pass trade_direction to display_trade_log_tab
+                    display_trade_log_tab(LOG_FILE, ticker, timeframe, overall_confidence, current_price, hist_data['Close'].iloc[-2], trade_direction)
             
             if i < len(tickers) - 1: # Add a separator between tickers
                 st.markdown("---")
                 st.markdown("---")
 
         except Exception as e:
-            st.error(f"An unexpected error occurred during data processing for {ticker}: {e}", icon="🚫")
+            st.error(f"An unexpected error occurred during data processing for {ticker}: {e}", icon="�")
             st.exception(e)
     
     # Display the comparison chart at the very top after all tickers are processed
@@ -235,3 +237,4 @@ else:
         display_ticker_comparison_chart(comparison_data)
         st.markdown("---") # Add a separator after the comparison chart
 
+�
