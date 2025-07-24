@@ -272,94 +272,102 @@ def generate_directional_trade_plan(confidence_score, current_price, latest_row,
     """
     Generates a detailed directional trade plan (e.g., for stocks, not options)
     based on confidence score and current market conditions.
+    
+    Args:
+        confidence_score (dict): A dictionary with 'score' (float) and 'band' (str, e.g., "Bullish", "Bearish").
+        current_price (float): The current stock price.
+        latest_row (pd.Series): The latest row of the DataFrame containing indicator values (e.g., 'ATR').
+        period_interval (str): The interval of the data (e.g., '1d', '5m').
+        
+    Returns:
+        dict: A dictionary containing the trade plan details, including 'status' and 'message'.
     """
     score = confidence_score['score']
-    band = confidence_score['band']
+    trade_direction = confidence_score['band'] # Renamed 'band' to 'trade_direction' for clarity
     
+    # Get ATR from the latest_row. Provide a default if not found.
+    # ATR is crucial for calculating volatility-based entry/exit points.
+    atr_value = latest_row.get('ATR')
+    
+    # Define a default ATR if it's missing or NaN, to prevent errors in calculations
+    if atr_value is None or pd.isna(atr_value) or atr_value == 0:
+        # Fallback: Use a small percentage of current price as a rough volatility estimate
+        # Or, ideally, ensure ATR is calculated properly upstream.
+        atr_value = current_price * 0.01 # 1% of current price as a very rough default
+        if atr_value == 0: # Ensure it's not zero if current_price is zero
+            atr_value = 0.1 # Minimum default ATR
+
+    # Initialize the plan with a default error status
     plan = {
-        "Trade Type": "N/A",
-        "Direction": "Neutral",
-        "Entry Zone": "N/A",
-        "Stop Loss": "N/A",
-        "Take Profit 1": "N/A",
-        "Take Profit 2": "N/A",
-        "Key Rationale": f"Overall outlook: {band} ({score:.2f})."
+        "status": "error",
+        "message": "Could not generate a trade plan. Missing data or neutral outlook.",
+        "direction": "Neutral",
+        "entry_zone_start": None,
+        "entry_zone_end": None,
+        "stop_loss": None,
+        "profit_target": None,
+        "reward_risk_ratio": None,
+        "key_rationale": f"Overall outlook: {trade_direction} ({score:.0f}/100)."
     }
 
-    # Use ATR from latest_row for dynamic levels, if available
-    atr = latest_row.get('ATR')
-    if atr is None or pd.isna(atr) or atr == 0:
-        # Fallback if ATR is not directly available or valid (e.g., for very short periods or start of data)
-        # Consider a percentage of current price as a rough estimate for volatile assets
-        atr = current_price * 0.02 # Example: 2% of price as a default
-        if "5m" in period_interval or "15m" in period_interval:
-            atr = current_price * 0.005 # Smaller for intraday
-        elif "1d" in period_interval:
-             atr = current_price * 0.02 # Larger for daily
+    # Define multipliers for ATR for entry, stop-loss, and profit targets
+    # These are examples and should be tuned based on strategy and risk tolerance
+    entry_atr_multiplier = 0.5
+    stop_loss_atr_multiplier = 1.5
+    profit_target_atr_multiplier_1 = 2.0
+    profit_target_atr_multiplier_2 = 3.5 # For a second target, if desired
+
+    # Only generate a detailed plan if confidence is high enough and direction is clear
+    if trade_direction == "Bullish" and score >= 60: # Example threshold
+        plan["status"] = "success"
+        plan["direction"] = "Bullish"
+        plan["Trade Type"] = "Long"
         
-    
-    # Define thresholds for different confidence levels
-    HIGH_CONF_BULLISH = 40
-    MOD_CONF_BULLISH = 15
-    HIGH_CONF_BEARISH = -40
-    MOD_CONF_BEARISH = -15
-
-    if score > HIGH_CONF_BULLISH:
-        plan["Trade Type"] = "Long Trade (Buy Stock)"
-        plan["Direction"] = "Bullish"
-        plan["Entry Zone"] = f"Around {current_price:.2f} or on slight pullback to {current_price - (0.5 * atr):.2f}"
-        plan["Stop Loss"] = f"{current_price - (2 * atr):.2f}" # 2x ATR below entry
-        plan["Take Profit 1"] = f"{current_price + (2 * atr):.2f}" # 2x ATR above entry
-        plan["Take Profit 2"] = f"{current_price + (4 * atr):.2f}" # 4x ATR above entry
-        plan["Key Rationale"] += " Strong bullish technicals and positive sentiment support a long position. Target higher prices."
+        # Entry Zone: Slightly below current price, based on ATR
+        plan["entry_zone_start"] = current_price - (atr_value * entry_atr_multiplier)
+        plan["entry_zone_end"] = current_price + (atr_value * entry_atr_multiplier) # Small range around current price
         
-    elif score > MOD_CONF_BULLISH:
-        plan["Trade Type"] = "Conservative Long Trade"
-        plan["Direction"] = "Bullish"
-        plan["Entry Zone"] = f"On pullback to {current_price - (1 * atr):.2f}"
-        plan["Stop Loss"] = f"{current_price - (2.5 * atr):.2f}"
-        plan["Take Profit 1"] = f"{current_price + (1.5 * atr):.2f}"
-        plan["Take Profit 2"] = f"{current_price + (3 * atr):.2f}"
-        plan["Key Rationale"] += " Moderate bullish signals. Look for a retracement before entry to improve risk/reward."
+        # Stop Loss: Below entry, based on ATR
+        plan["stop_loss"] = current_price - (atr_value * stop_loss_atr_multiplier)
+        
+        # Profit Target: Above entry, based on ATR
+        plan["profit_target"] = current_price + (atr_value * profit_target_atr_multiplier_1)
+        
+        # Calculate Reward/Risk Ratio
+        risk = current_price - plan["stop_loss"]
+        reward = plan["profit_target"] - current_price
+        plan["reward_risk_ratio"] = reward / risk if risk > 0 else float('inf')
 
-    elif score < HIGH_CONF_BEARISH:
-        plan["Trade Type"] = "Short Trade (Sell Stock)"
-        plan["Direction"] = "Bearish"
-        plan["Entry Zone"] = f"Around {current_price:.2f} or on slight bounce to {current_price + (0.5 * atr):.2f}"
-        plan["Stop Loss"] = f"{current_price + (2 * atr):.2f}" # 2x ATR above entry
-        plan["Take Profit 1"] = f"{current_price - (2 * atr):.2f}" # 2x ATR below entry
-        plan["Take Profit 2"] = f"{current_price - (4 * atr):.2f}" # 4x ATR below entry
-        plan["Key Rationale"] += " Strong bearish technicals and negative sentiment support a short position. Target lower prices."
+        plan["key_rationale"] = f"Bullish outlook ({score:.0f}/100). Price expected to rise from current levels."
 
-    elif score < MOD_CONF_BEARISH:
-        plan["Trade Type"] = "Conservative Short Trade"
-        plan["Direction"] = "Bearish"
-        plan["Entry Zone"] = f"On bounce to {current_price + (1 * atr):.2f}"
-        plan["Stop Loss"] = f"{current_price + (2.5 * atr):.2f}"
-        plan["Take Profit 1"] = f"{current_price - (1.5 * atr):.2f}"
-        plan["Take Profit 2"] = f"{current_price - (3 * atr):.2f}"
-        plan["Key Rationale"] += " Moderate bearish signals. Look for a bounce before entry to improve risk/reward."
-    
-    # Format prices to 2 decimal places if they are numbers
-    for key in ["Entry Zone", "Stop Loss", "Take Profit 1", "Take Profit 2"]:
-        try:
-            # Check if the string contains a number, then format it
-            if isinstance(plan[key], str) and any(char.isdigit() for char in plan[key]):
-                parts = plan[key].split()
-                formatted_parts = []
-                for part in parts:
-                    try:
-                        formatted_parts.append(f"{float(part):.2f}")
-                    except ValueError:
-                        formatted_parts.append(part)
-                plan[key] = " ".join(formatted_parts)
-            elif isinstance(plan[key], (int, float)):
-                plan[key] = f"{plan[key]:.2f}"
-        except Exception:
-            pass # Keep as is if conversion fails
+    elif trade_direction == "Bearish" and score <= 40: # Example threshold
+        plan["status"] = "success"
+        plan["direction"] = "Bearish"
+        plan["Trade Type"] = "Short"
+        
+        # Entry Zone: Slightly above current price, based on ATR
+        plan["entry_zone_start"] = current_price + (atr_value * entry_atr_multiplier)
+        plan["entry_zone_end"] = current_price - (atr_value * entry_atr_multiplier) # Small range around current price
+        
+        # Stop Loss: Above entry, based on ATR
+        plan["stop_loss"] = current_price + (atr_value * stop_loss_atr_multiplier)
+        
+        # Profit Target: Below entry, based on ATR
+        plan["profit_target"] = current_price - (atr_value * profit_target_atr_multiplier_1)
+        
+        # Calculate Reward/Risk Ratio
+        risk = plan["stop_loss"] - current_price
+        reward = current_price - plan["profit_target"]
+        plan["reward_risk_ratio"] = reward / risk if risk > 0 else float('inf')
+
+        plan["key_rationale"] = f"Bearish outlook ({score:.0f}/100). Price expected to fall from current levels."
+        
+    # Ensure numerical values are rounded for display
+    for key in ["entry_zone_start", "entry_zone_end", "stop_loss", "profit_target", "reward_risk_ratio"]:
+        if plan[key] is not None and isinstance(plan[key], (float, int)):
+            plan[key] = round(plan[key], 2)
 
     return plan
-
 
 def get_moneyness(current_price, strike_price, option_type):
     """
