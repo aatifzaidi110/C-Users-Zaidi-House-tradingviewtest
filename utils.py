@@ -1,5 +1,4 @@
 # utils.py - Version 3.0
-# utils.py
 print("--- utils.py VERSION CHECK: Loading Version 3.0 with all functions ---")
 
 import streamlit as st
@@ -269,6 +268,98 @@ def calculate_confidence_score(signals, latest_row, finviz_data):
         }
     }
 
+def generate_directional_trade_plan(confidence_score, current_price, latest_row, period_interval):
+    """
+    Generates a detailed directional trade plan (e.g., for stocks, not options)
+    based on confidence score and current market conditions.
+    """
+    score = confidence_score['score']
+    band = confidence_score['band']
+    
+    plan = {
+        "Trade Type": "N/A",
+        "Direction": "Neutral",
+        "Entry Zone": "N/A",
+        "Stop Loss": "N/A",
+        "Take Profit 1": "N/A",
+        "Take Profit 2": "N/A",
+        "Key Rationale": f"Overall outlook: {band} ({score:.2f})."
+    }
+
+    # Use ATR from latest_row for dynamic levels, if available
+    atr = latest_row.get('ATR')
+    if atr is None or pd.isna(atr) or atr == 0:
+        # Fallback if ATR is not directly available or valid (e.g., for very short periods or start of data)
+        # Consider a percentage of current price as a rough estimate for volatile assets
+        atr = current_price * 0.02 # Example: 2% of price as a default
+        if "5m" in period_interval or "15m" in period_interval:
+            atr = current_price * 0.005 # Smaller for intraday
+        elif "1d" in period_interval:
+             atr = current_price * 0.02 # Larger for daily
+        
+    
+    # Define thresholds for different confidence levels
+    HIGH_CONF_BULLISH = 40
+    MOD_CONF_BULLISH = 15
+    HIGH_CONF_BEARISH = -40
+    MOD_CONF_BEARISH = -15
+
+    if score > HIGH_CONF_BULLISH:
+        plan["Trade Type"] = "Long Trade (Buy Stock)"
+        plan["Direction"] = "Bullish"
+        plan["Entry Zone"] = f"Around {current_price:.2f} or on slight pullback to {current_price - (0.5 * atr):.2f}"
+        plan["Stop Loss"] = f"{current_price - (2 * atr):.2f}" # 2x ATR below entry
+        plan["Take Profit 1"] = f"{current_price + (2 * atr):.2f}" # 2x ATR above entry
+        plan["Take Profit 2"] = f"{current_price + (4 * atr):.2f}" # 4x ATR above entry
+        plan["Key Rationale"] += " Strong bullish technicals and positive sentiment support a long position. Target higher prices."
+        
+    elif score > MOD_CONF_BULLISH:
+        plan["Trade Type"] = "Conservative Long Trade"
+        plan["Direction"] = "Bullish"
+        plan["Entry Zone"] = f"On pullback to {current_price - (1 * atr):.2f}"
+        plan["Stop Loss"] = f"{current_price - (2.5 * atr):.2f}"
+        plan["Take Profit 1"] = f"{current_price + (1.5 * atr):.2f}"
+        plan["Take Profit 2"] = f"{current_price + (3 * atr):.2f}"
+        plan["Key Rationale"] += " Moderate bullish signals. Look for a retracement before entry to improve risk/reward."
+
+    elif score < HIGH_CONF_BEARISH:
+        plan["Trade Type"] = "Short Trade (Sell Stock)"
+        plan["Direction"] = "Bearish"
+        plan["Entry Zone"] = f"Around {current_price:.2f} or on slight bounce to {current_price + (0.5 * atr):.2f}"
+        plan["Stop Loss"] = f"{current_price + (2 * atr):.2f}" # 2x ATR above entry
+        plan["Take Profit 1"] = f"{current_price - (2 * atr):.2f}" # 2x ATR below entry
+        plan["Take Profit 2"] = f"{current_price - (4 * atr):.2f}" # 4x ATR below entry
+        plan["Key Rationale"] += " Strong bearish technicals and negative sentiment support a short position. Target lower prices."
+
+    elif score < MOD_CONF_BEARISH:
+        plan["Trade Type"] = "Conservative Short Trade"
+        plan["Direction"] = "Bearish"
+        plan["Entry Zone"] = f"On bounce to {current_price + (1 * atr):.2f}"
+        plan["Stop Loss"] = f"{current_price + (2.5 * atr):.2f}"
+        plan["Take Profit 1"] = f"{current_price - (1.5 * atr):.2f}"
+        plan["Take Profit 2"] = f"{current_price - (3 * atr):.2f}"
+        plan["Key Rationale"] += " Moderate bearish signals. Look for a bounce before entry to improve risk/reward."
+    
+    # Format prices to 2 decimal places if they are numbers
+    for key in ["Entry Zone", "Stop Loss", "Take Profit 1", "Take Profit 2"]:
+        try:
+            # Check if the string contains a number, then format it
+            if isinstance(plan[key], str) and any(char.isdigit() for char in plan[key]):
+                parts = plan[key].split()
+                formatted_parts = []
+                for part in parts:
+                    try:
+                        formatted_parts.append(f"{float(part):.2f}")
+                    except ValueError:
+                        formatted_parts.append(part)
+                plan[key] = " ".join(formatted_parts)
+            elif isinstance(plan[key], (int, float)):
+                plan[key] = f"{plan[key]:.2f}"
+        except Exception:
+            pass # Keep as is if conversion fails
+
+    return plan
+
 
 def get_moneyness(current_price, strike_price, option_type):
     """
@@ -458,9 +549,9 @@ def backtest_strategy(df_historical, selection, atr_multiplier=1.5, reward_risk_
                             fired_signals_count += 1
                         elif trade_direction == "short" and bearish_signals.get(signal_key, False):
                             fired_signals_count += 1
-                        
+                            
                         # Special handling for VWAP if selected and applicable
-                        if signal_key == "VWAP" and row_data.get('VWAP') is not None: # VWAP is intraday, check if data exists
+                        if signal_key == "VWAP" and prev_day.get('VWAP') is not None: # VWAP is intraday, check if data exists
                              if trade_direction == "long" and bullish_signals.get("VWAP", False):
                                  fired_signals_count += 1
                              elif trade_direction == "short" and bearish_signals.get("VWAP", False):
