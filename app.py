@@ -21,7 +21,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from utils import (
     get_finviz_data, get_data, get_options_chain,
     calculate_indicators, calculate_pivot_points,
-    generate_signals_for_row, backtest_strategy,
+    generate_signals_for_row, backtest_strategy,get_moneyness, analyze_options_chain,
     suggest_options_strategy, # Changed from generate_option_trade_plan to suggest_options_strategy
     # convert_compound_to_100_scale, EXPERT_RATING_MAP, # These should be in utils, but not directly imported by main.py if used only internally by utils.
     # If they are used directly in app.py, they should be imported. Assuming they are not for this fix.
