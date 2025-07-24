@@ -564,12 +564,20 @@ def display_trade_plan_options_tab(ticker, df, overall_confidence, timeframe, tr
     else:
         st.subheader("📋 Stock Trade Plan")
 
+    # Prepare the confidence_score dictionary as expected by generate_directional_trade_plan
+    # 'overall_confidence' is a scalar (e.g., 85.0), and 'trade_direction' is a string (e.g., "Bullish")
+    confidence_for_plan = {
+        'score': overall_confidence,
+        'band': trade_direction # Using trade_direction as the 'band' for the trade plan
+    }
+
     # Generate the trade plan using the new directional function
+    # Pass the correctly structured confidence_for_plan dictionary as the first argument
     trade_plan_result = generate_directional_trade_plan(
-        current_stock_price,
-        last.get('ATR'),
-        trade_direction,
-        period_interval # Pass the specific interval
+        confidence_for_plan,    # First argument: the confidence_score dictionary
+        current_stock_price,    # Second argument: current_price
+        last,                   # Third argument: latest_row (the full 'last' Series)
+        period_interval         # Fourth argument: period_interval
     )
 
     if trade_plan_result['status'] == 'success':
