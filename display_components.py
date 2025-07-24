@@ -597,7 +597,7 @@ def display_trade_plan_options_tab(ticker, df, overall_confidence, timeframe, tr
         st.warning("No options data available for this ticker.")
     else:
         # Pass trade_direction to suggest_options_strategy (previously generate_option_trade_plan)
-        trade_plan = suggest_options_strategy(ticker, overall_confidence, current_stock_price, expirations, trade_direction) # CHANGED FUNCTION NAME
+        trade_plan = suggest_options_strategy(ticker, current_stock_price, expirations, trade_direction)
         
         # --- Start of new detailed options display ---
         if trade_plan['status'] == 'success':
