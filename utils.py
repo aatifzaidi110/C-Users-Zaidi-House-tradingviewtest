@@ -42,7 +42,7 @@ def get_finviz_data(ticker):
         return {"recom_str": "N/A", "headlines": [], "sentiment_compound": 0, "error": str(e)}
 
 @st.cache_data(ttl=60)
-def (symbol, period, interval):
+def get_data(symbol, period, interval):
     """Fetches historical stock data and basic info from Yahoo Finance."""
     with st.spinner(f"Fetching {period} of {interval} data for {symbol}..."):
         stock = yf.Ticker(symbol)
