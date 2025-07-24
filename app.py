@@ -1,4 +1,4 @@
-# app.py - Version 1.31
+# app.py - Version 1.32
 import sys
 import os
 import streamlit as st
@@ -214,22 +214,30 @@ if st.session_state.analysis_started and ticker_input:
                         horizontal=True
                     )
                     # Pass the selected backtest direction to the backtest_strategy function
-                    display_backtest_tab(ticker, indicator_selection, current_price, hist_data['Close'].iloc[-2], overall_confidence, backtest_direction.split(' ')[0].lower())
+                    # Ensure current_price and hist_data['Close'].iloc[-2] are passed correctly
+                    current_price = df_calculated.iloc[-1]['Close']
+                    prev_close = df_calculated.iloc[-2]['Close'] if len(df_calculated) > 1 else current_price
+                    display_backtest_tab(ticker, indicator_selection, current_price, prev_close, overall_confidence, backtest_direction.split(' ')[0].lower())
                 
                 with news_tab:
                     # Pass trade_direction to display_news_info_tab
-                    display_news_info_tab(ticker, info_data, finviz_data, current_price, hist_data['Close'].iloc[-2], overall_confidence, trade_direction)
+                    current_price = df_calculated.iloc[-1]['Close']
+                    prev_close = df_calculated.iloc[-2]['Close'] if len(df_calculated) > 1 else current_price
+                    display_news_info_tab(ticker, info_data, finviz_data, current_price, prev_close, overall_confidence, trade_direction)
                 
                 with log_tab:
                     # Pass trade_direction to display_trade_log_tab
-                    display_trade_log_tab(LOG_FILE, ticker, timeframe, overall_confidence, current_price, hist_data['Close'].iloc[-2], trade_direction)
+                    current_price = df_calculated.iloc[-1]['Close']
+                    prev_close = df_calculated.iloc[-2]['Close'] if len(df_calculated) > 1 else current_price
+                    display_trade_log_tab(LOG_FILE, ticker, timeframe, overall_confidence, current_price, prev_close, trade_direction)
                 
                 with option_calc_tab:
                     # Pass the current stock price and expirations to the new calculator
                     current_stock_price = df_calculated.iloc[-1]['Close']
                     stock_obj_for_options = yf.Ticker(ticker)
                     expirations = stock_obj_for_options.options
-                    display_option_calculator_tab(ticker, current_stock_price, expirations, hist_data['Close'].iloc[-2], overall_confidence, trade_direction)
+                    prev_close = df_calculated.iloc[-2]['Close'] if len(df_calculated) > 1 else current_stock_price
+                    display_option_calculator_tab(ticker, current_stock_price, expirations, prev_close, overall_confidence, trade_direction)
 
                 with glossary_tab:
                     # Assuming display_glossary_tab doesn't need these parameters
