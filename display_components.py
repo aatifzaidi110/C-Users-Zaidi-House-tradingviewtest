@@ -565,12 +565,11 @@ def display_trade_plan_options_tab(ticker, df, overall_confidence, timeframe, tr
         st.subheader("📋 Stock Trade Plan")
 
     # Generate the trade plan using the new directional function
-    trade_plan_result = generate_directional_trade_plan(
+  trade_plan_result = generate_directional_trade_plan(
         current_stock_price,
-        last.get('ATR'), # Ensure ATR is available
+        last.get('ATR'),
         trade_direction,
-        timeframe,
-        period_interval # Pass the interval
+        period_interval # Pass the specific interval
     )
 
     if trade_plan_result['status'] == 'success':
