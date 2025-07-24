@@ -303,7 +303,7 @@ def backtest_strategy(df_historical, selection, atr_multiplier=1.5, reward_risk_
                         "Type": f"Entry ({trade_direction.capitalize()})", "Price": round(entry_price, 2)
                     })
                     in_trade = True
-    
+        
     # --- Calculate Performance Metrics ---
     wins = [t['PnL'] for t in trades if 'PnL' in t and t['PnL'] > 0]
     losses = [t['PnL'] for t in trades if 'PnL' in t and t['PnL'] < 0]
@@ -321,3 +321,39 @@ def backtest_strategy(df_historical, selection, atr_multiplier=1.5, reward_risk_
     }
 
     return trades, performance
+
+
+def calculate_pivot_points(df):
+    """Calculates classical pivot points for a DataFrame."""
+    # Ensure we have the required columns
+    required_cols = ['High', 'Low', 'Close']
+    if not all(col in df.columns for col in required_cols):
+        st.warning("DataFrame is missing High, Low, or Close columns for pivot point calculation.")
+        return pd.DataFrame(index=df.index) # Return empty DF to prevent errors
+
+    # Use the previous period's data to calculate the current period's pivots
+    prev_high = df['High'].shift(1)
+    prev_low = df['Low'].shift(1)
+    prev_close = df['Close'].shift(1)
+
+    # Calculate Pivot Points
+    pivot = (prev_high + prev_low + prev_close) / 3
+    r1 = (2 * pivot) - prev_low
+    s1 = (2 * pivot) - prev_high
+    r2 = pivot + (prev_high - prev_low)
+    s2 = pivot - (prev_high - prev_low)
+    r3 = prev_high + 2 * (pivot - prev_low)
+    s3 = prev_low - 2 * (prev_high - pivot)
+
+    # Create a new DataFrame with the pivot levels
+    pivots_df = pd.DataFrame({
+        'Pivot': pivot,
+        'R1': r1,
+        'S1': s1,
+        'R2': r2,
+        'S2': s2,
+        'R3': r3,
+        'S3': s3
+    }, index=df.index)
+
+    return pivots_df
