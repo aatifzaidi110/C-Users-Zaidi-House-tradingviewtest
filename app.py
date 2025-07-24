@@ -270,7 +270,7 @@ if st.session_state.analysis_started and ticker_input:
                     # Ensure you're passing `suggest_options_strategy` to `display_trade_plan_options_tab` if it expects it.
                     # Or, `display_trade_plan_options_tab` should call `suggest_options_strategy` internally.
                     # If display_trade_plan_options_tab expects a function, it should be passed:
-                    display_trade_plan_options_tab(ticker, df_calculated, overall_confidence, timeframe, trade_direction, suggest_options_strategy)
+                    display_trade_plan_options_tab(ticker, df_calculated, overall_confidence, timeframe, trade_direction)
                 
                 with backtest_tab:
                     # Allow backtesting for both long and short
