@@ -769,17 +769,35 @@ def display_news_info_tab(ticker, info_data, finviz_data, current_price, prev_cl
         st.subheader("Key Financials & Metrics (from Yahoo Finance)")
         col1, col2 = st.columns(2)
         with col1:
-            st.write(f"**Market Cap:** {info_data.get('marketCap', 'N/A'):,}")
-            st.write(f"**Shares Outstanding:** {info_data.get('sharesOutstanding', 'N/A'):,}")
-            st.write(f"**Beta:** {info_data.get('beta', 'N/A'):.2f}" if isinstance(info_data.get('beta'), (int, float)) else f"**Beta:** {info_data.get('beta', 'N/A')}")
-            st.write(f"**PEG Ratio:** {info_data.get('pegRatio', 'N/A'):.2f}" if isinstance(info_data.get('pegRatio'), (int, float)) else f"**PEG Ratio:** {info_data.get('pegRatio', 'N/A')}")
-            st.write(f"**Dividend Yield:** {info_data.get('dividendYield', 'N/A')*100:.2f}%" if isinstance(info_data.get('dividendYield'), (int, float)) else f"**Dividend Yield:** {info_data.get('dividendYield', 'N/A')}")
+            market_cap = info_data.get('marketCap', 'N/A')
+            st.write(f"**Market Cap:** {market_cap:,}" if isinstance(market_cap, (int, float)) else f"**Market Cap:** {market_cap}")
+            
+            shares_outstanding = info_data.get('sharesOutstanding', 'N/A')
+            st.write(f"**Shares Outstanding:** {shares_outstanding:,}" if isinstance(shares_outstanding, (int, float)) else f"**Shares Outstanding:** {shares_outstanding}")
+            
+            beta = info_data.get('beta', 'N/A')
+            st.write(f"**Beta:** {beta:.2f}" if isinstance(beta, (int, float)) else f"**Beta:** {beta}")
+            
+            peg_ratio = info_data.get('pegRatio', 'N/A')
+            st.write(f"**PEG Ratio:** {peg_ratio:.2f}" if isinstance(peg_ratio, (int, float)) else f"**PEG Ratio:** {peg_ratio}")
+            
+            dividend_yield = info_data.get('dividendYield', 'N/A')
+            st.write(f"**Dividend Yield:** {dividend_yield*100:.2f}%" if isinstance(dividend_yield, (int, float)) else f"**Dividend Yield:** {dividend_yield}")
         with col2:
-            st.write(f"**P/E Ratio (TTM):** {info_data.get('trailingPE', 'N/A'):.2f}" if isinstance(info_data.get('trailingPE'), (int, float)) else f"**P/E Ratio (TTM):** {info_data.get('trailingPE', 'N/A')}")
-            st.write(f"**Forward P/E:** {info_data.get('forwardPE', 'N/A'):.2f}" if isinstance(info_data.get('forwardPE'), (int, float)) else f"**Forward P/E:** {info_data.get('forwardPE', 'N/A')}")
-            st.write(f"**EBITDA:** {info_data.get('ebitda', 'N/A'):,}")
-            st.write(f"**Revenue (TTM):** {info_data.get('revenueTTM', 'N/A'):,}")
-            st.write(f"**Gross Profits (TTM):** {info_data.get('grossProfits', 'N/A'):,}")
+            trailing_pe = info_data.get('trailingPE', 'N/A')
+            st.write(f"**P/E Ratio (TTM):** {trailing_pe:.2f}" if isinstance(trailing_pe, (int, float)) else f"**P/E Ratio (TTM):** {trailing_pe}")
+            
+            forward_pe = info_data.get('forwardPE', 'N/A')
+            st.write(f"**Forward P/E:** {forward_pe:.2f}" if isinstance(forward_pe, (int, float)) else f"**Forward P/E:** {forward_pe}")
+            
+            ebitda = info_data.get('ebitda', 'N/A')
+            st.write(f"**EBITDA:** {ebitda:,}" if isinstance(ebitda, (int, float)) else f"**EBITDA:** {ebitda}")
+            
+            revenue_ttm = info_data.get('revenueTTM', 'N/A')
+            st.write(f"**Revenue (TTM):** {revenue_ttm:,}" if isinstance(revenue_ttm, (int, float)) else f"**Revenue (TTM):** {revenue_ttm}")
+            
+            gross_profits = info_data.get('grossProfits', 'N/A')
+            st.write(f"**Gross Profits (TTM):** {gross_profits:,}" if isinstance(gross_profits, (int, float)) else f"**Gross Profits (TTM):** {gross_profits}")
 
 
     else:
