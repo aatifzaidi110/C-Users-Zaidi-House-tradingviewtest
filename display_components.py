@@ -16,7 +16,22 @@ from utils import (
     calculate_pivot_points, get_moneyness, analyze_options_chain,
     generate_directional_trade_plan # NEW: Import the directional trade plan generator - This is correct and crucial
 )
-# REMOVED: EXPERT_RATING_MAP - It's used internally by calculate_confidence_score in utils.py
+# REMOVED: EXPERT_RATING_MAP import from utils.py here, as it's now defined locally or handled differently for display.
+# If you still need the numerical mapping in utils for calculation, that's fine.
+
+# Mapping for Finviz recommendation numbers to qualitative descriptions
+# This map is specific to display_components.py as it's for user-facing descriptions.
+FINVIZ_RECOM_QUALITATIVE_MAP = {
+    "1.00": "Strong Buy",
+    "1.50": "Strong Buy / Buy",
+    "2.00": "Buy",
+    "2.50": "Buy / Hold",
+    "3.00": "Hold",
+    "3.50": "Hold / Sell",
+    "4.00": "Sell",
+    "4.50": "Sell / Strong Sell",
+    "5.00": "Strong Sell"
+}
 
 # === Helper for Indicator Display ===
 def format_indicator_display(signal_name_base, current_value, bullish_fired, bearish_fired, is_selected):
