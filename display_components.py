@@ -32,7 +32,15 @@ FINVIZ_RECOM_QUALITATIVE_MAP = {
     "4.50": "Sell / Strong Sell",
     "5.00": "Strong Sell"
 }
-
+# Define EXPERT_RATING_MAP locally within display_components.py
+# Assuming numerical expert scores range from 0-100, with 50 being 'Hold'.
+EXPERT_RATING_MAP = {
+    "Strong Buy": 100,
+    "Buy": 75,
+    "Hold": 50,
+    "Sell": 25,
+    "Strong Sell": 0
+}
 # === Helper for Indicator Display ===
 def format_indicator_display(signal_name_base, current_value, bullish_fired, bearish_fired, is_selected):
     """
