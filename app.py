@@ -1,4 +1,4 @@
-# app.py - Version 1.28
+# app.py - Version 1.29
 import sys
 import os
 import streamlit as st
@@ -28,8 +28,8 @@ from utils import (
 try:
     from display_components import (
         display_main_analysis_tab, display_trade_plan_options_tab,
-        display_backtest_tab, display_news_info_tab, display_trade_log_tab,
-        display_ticker_comparison_chart # Import the new comparison chart function
+        display_backtest_tab, display_news_info_tab, display_trade_log_tab
+        # Removed display_ticker_comparison_chart as it's no longer needed for single ticker
     )
 except ImportError as e:
     print("Import error details:", str(e))
@@ -39,20 +39,14 @@ except ImportError as e:
 st.set_page_config(page_title="Aatif's AI Trading Hub", layout="wide")
 st.title("🚀 Aatif's AI-Powered Trading Hub")
 
-# === Refresh Button ===
-if st.button("🔄 Refresh Data", help="Click to fetch the latest data for all tickers and re-run analysis."):
-    st.cache_data.clear() # Clear all cached data
-    st.rerun() # Rerun the app
-
 # === Constants and Configuration ===
 LOG_FILE = "trade_log.csv" # Define here or pass from a config module
 
 # === SIDEBAR: Controls & Selections ===
 st.sidebar.header("⚙️ Controls")
-# Changed to text_area for multiple tickers
-ticker_input = st.sidebar.text_area("Enter Ticker Symbol(s) (comma or newline separated)", value="NVDA").upper()
-# Split the input into a list of tickers, remove empty strings
-tickers = [t.strip() for t in ticker_input.replace(',', '\n').split('\n') if t.strip()]
+# Reverted to text_input for single ticker
+ticker_input = st.sidebar.text_input("Enter Ticker Symbol", value="NVDA").upper().strip()
+# No splitting needed, directly use ticker_input as the single ticker
 
 timeframe = st.sidebar.radio("Choose Trading Style:", ["Scalp Trading", "Day Trading", "Swing Trading", "Position Trading"], index=2)
 
@@ -60,7 +54,7 @@ st.sidebar.header("🔧 Technical Indicator Selection")
 with st.sidebar.expander("Trend Indicators", expanded=True):
     indicator_selection = {
         "EMA Trend": st.checkbox("EMA Trend (21, 50, 200)", value=True),
-        "Ichimoku Cloud": st.checkbox("Ichimoku Cloud", value=True), # Enabled Ichimoku
+        "Ichimoku Cloud": st.checkbox("Ichimoku Cloud", value=True),
         "Parabolic SAR": st.checkbox("Parabolic SAR", value=True),
         "ADX": st.checkbox("ADX", value=True),
     }
@@ -85,12 +79,27 @@ use_automation = st.sidebar.toggle("Enable Automated Scoring", value=True, help=
 auto_sentiment_score_placeholder = st.sidebar.empty()
 auto_expert_score_placeholder = st.sidebar.empty()
 
+# === Buttons (Moved for better visibility) ===
+# Moved buttons directly under ticker input in sidebar
+if st.sidebar.button("▶️ Analyze Ticker", help="Click to analyze the entered ticker and display results."):
+    st.session_state.analysis_started = True
+    st.rerun()
+
+if st.sidebar.button("🔄 Clear Cache & Refresh Data", help="Click to clear all cached data and re-run analysis from scratch."):
+    st.cache_data.clear() # Clear all cached data
+    st.session_state.analysis_started = False # Reset analysis state
+    st.rerun()
+
+# Initialize session state for analysis control
+if 'analysis_started' not in st.session_state:
+    st.session_state.analysis_started = False
+
 # === Dynamic Qualitative Score Calculation ===
 sentiment_score = 50
 expert_score = 50
 finviz_data = {"headlines": ["Automation is disabled."]} # Default for when automation is off
 
-# Main Script Execution - Loop through each ticker
+# Main Script Execution
 TIMEFRAME_MAP = {
     "Scalp Trading": {"period": "5d", "interval": "5m", "weights": {"technical": 0.9, "sentiment": 0.1, "expert": 0.0}},
     "Day Trading": {"period": "60d", "interval": "60m", "weights": {"technical": 0.7, "sentiment": 0.2, "expert": 0.1}},
@@ -99,40 +108,37 @@ TIMEFRAME_MAP = {
 }
 selected_params_main = TIMEFRAME_MAP[timeframe]
 
-comparison_data = [] # List to store data for the comparison chart
+# Only run analysis if the button has been clicked and a ticker is entered
+if st.session_state.analysis_started and ticker_input:
+    ticker = ticker_input # Use the single ticker from input
 
-if not tickers:
-    st.info("Please enter at least one stock ticker in the sidebar to begin analysis.")
-else:
-    for i, ticker in enumerate(tickers):
-        # Re-calculate sentiment and expert scores for each ticker if automation is on
-        if use_automation:
-            finviz_data = get_finviz_data(ticker) # This calls utils.get_finviz_data
-            auto_sentiment_score = convert_compound_to_100_scale(finviz_data['sentiment_compound'])
-            auto_expert_score = EXPERT_RATING_MAP.get(finviz_data['recom'], 50)
-            
-            sentiment_score_current = auto_sentiment_score
-            expert_score_current = auto_expert_score
+    # Re-calculate sentiment and expert scores if automation is on
+    if use_automation:
+        finviz_data = get_finviz_data(ticker) # This calls utils.get_finviz_data
+        auto_sentiment_score = convert_compound_to_100_scale(finviz_data['sentiment_compound'])
+        auto_expert_score = EXPERT_RATING_MAP.get(finviz_data['recom'], 50)
+        
+        sentiment_score_current = auto_sentiment_score
+        expert_score_current = auto_expert_score
+    else:
+        sentiment_score_current = sentiment_score # Use global manual slider value
+        expert_score_current = expert_score     # Use global manual slider value
+
+    try:
+        hist_data, info_data = get_data(ticker, selected_params_main['period'], selected_params_main['interval'])
+        if hist_data is None or info_data is None:
+            st.error(f"Could not fetch data for {ticker} on a {selected_params_main['interval']} interval. Please check the ticker symbol or try again later.")
         else:
-            sentiment_score_current = sentiment_score # Use global manual slider value
-            expert_score_current = expert_score     # Use global manual slider value
+            # Calculate indicators once for the main display
+            is_intraday_data = selected_params_main['interval'] in ['5m', '60m']
+            df_calculated = calculate_indicators(hist_data.copy(), is_intraday_data)
+            
+            # Calculate pivot points separately for display
+            df_pivots = calculate_pivot_points(hist_data.copy()) # Use original hist_data for pivots
 
-        try:
-            hist_data, info_data = get_data(ticker, selected_params_main['period'], selected_params_main['interval'])
-            if hist_data is None or info_data is None:
-                st.error(f"Could not fetch data for {ticker} on a {selected_params_main['interval']} interval. Please check the ticker symbol or try again later.")
+            if df_calculated.empty:
+                st.warning(f"No data available for {ticker} after indicator calculations and cleaning. Please check ticker or time period.", icon="⚠️")
             else:
-                # Calculate indicators once for the main display
-                is_intraday_data = selected_params_main['interval'] in ['5m', '60m']
-                df_calculated = calculate_indicators(hist_data.copy(), is_intraday_data)
-                
-                # Calculate pivot points separately for display
-                df_pivots = calculate_pivot_points(hist_data.copy()) # Use original hist_data for pivots
-
-                if df_calculated.empty:
-                    st.warning(f"No data available for {ticker} after indicator calculations and cleaning. Please check ticker or time period.", icon="⚠️")
-                    continue # Skip to next ticker
-
                 # Calculate scores for display
                 last_row_for_signals = df_calculated.iloc[-1]
                 
@@ -177,25 +183,17 @@ else:
                 
                 overall_confidence = min(round((final_weights["technical"]*scores["technical"] + final_weights["sentiment"]*scores["sentiment"] + final_weights["expert"]*scores["expert"]), 2), 100)
 
-                # Collect data for comparison chart
-                current_price = last_row_for_signals['Close']
-                comparison_data.append({
-                    "Ticker": ticker,
-                    "Current Price": current_price,
-                    "Confidence Score": overall_confidence,
-                    "Trade Direction": trade_direction # Add trade direction to comparison data
-                })
-
                 st.subheader(f"📈 Analysis for {ticker}") # Move subheader here to be above tabs for each ticker
                 # Display tabs
-                tab_list = ["📊 Main Analysis", "📈 Trade Plan & Options", "🧪 Backtest", "📰 News & Info", "📝 Trade Log"]
-                main_tab, trade_tab, backtest_tab, news_tab, log_tab = st.tabs(tab_list)
+                # Removed "📊 Ticker Comparison Overview" tab
+                tab_list = ["📊 Main Analysis", "📈 Trade Plan & Options", "🧪 Backtest", "📰 News & Info", "📝 Trade Log", "🧮 Option Calculator", "📚 Glossary"]
+                main_tab, trade_tab, backtest_tab, news_tab, log_tab, option_calc_tab, glossary_tab = st.tabs(tab_list)
 
                 with main_tab:
                     display_main_analysis_tab(
                         ticker, df_calculated, info_data, selected_params_main, 
                         indicator_selection, overall_confidence, scores, final_weights, 
-                        sentiment_score_current, expert_score_current, df_pivots
+                        sentiment_score_current, expert_score_current, df_pivots, trade_direction # Pass trade_direction
                     )
                 
                 with trade_tab:
@@ -222,17 +220,24 @@ else:
                 with log_tab:
                     # Pass trade_direction to display_trade_log_tab
                     display_trade_log_tab(LOG_FILE, ticker, timeframe, overall_confidence, current_price, hist_data['Close'].iloc[-2], trade_direction)
-            
-            if i < len(tickers) - 1: # Add a separator between tickers
-                st.markdown("---")
-                st.markdown("---")
+                
+                with option_calc_tab:
+                    # Pass the current stock price and expirations to the new calculator
+                    current_stock_price = df_calculated.iloc[-1]['Close']
+                    stock_obj_for_options = yf.Ticker(ticker)
+                    expirations = stock_obj_for_options.options
+                    display_option_calculator_tab(ticker, current_stock_price, expirations, hist_data['Close'].iloc[-2], overall_confidence, trade_direction)
 
-        except Exception as e:
-            st.error(f"An unexpected error occurred during data processing for {ticker}: {e}", icon="�")
-            st.exception(e)
-    
-    # Display the comparison chart at the very top after all tickers are processed
-    if comparison_data:
-        st.header("📊 Ticker Comparison Overview")
-        display_ticker_comparison_chart(comparison_data)
-        st.markdown("---") # Add a separator after the comparison chart
+                with glossary_tab:
+                    # Assuming display_glossary_tab doesn't need these parameters
+                    # If it does, they should be passed here.
+                    st.markdown("### 📚 Glossary")
+                    st.info("The glossary content will be displayed here.") # Placeholder for actual glossary content
+
+    except Exception as e:
+        st.error(f"An unexpected error occurred during data processing for {ticker}: {e}", icon="�")
+        st.exception(e)
+else:
+    st.info("Enter a stock ticker in the sidebar and click 'Analyze Ticker' to begin analysis.")
+
+�
