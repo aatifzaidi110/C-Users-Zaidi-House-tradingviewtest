@@ -26,6 +26,7 @@ from utils import (
     # convert_compound_to_100_scale, EXPERT_RATING_MAP, # These should be in utils, but not directly imported by main.py if used only internally by utils.
     # If they are used directly in app.py, they should be imported. Assuming they are not for this fix.
     # generate_directional_trade_plan # Import the new directional trade plan generator - Assuming this is not relevant to the current fix.
+    calculate_confidence_score # Ensure calculate_confidence_score is imported from utils
 )
 try:
     from display_components import (
@@ -226,8 +227,12 @@ if st.session_state.analysis_started and ticker_input:
                         bullish_fired_count += 1
                     if 'VWAP Bearish' in bearish_signals and bearish_signals['VWAP Bearish']:
                         bearish_fired_count += 1
-                    if 'VWAP' not in selected_signal_keys: # Ensure VWAP is counted if selected
-                         total_selected_directional_indicators += 1 # Only if it's truly a directional signal indicator
+                    # This line below was problematic as 'selected_signal_keys' was not defined
+                    # if 'VWAP' not in selected_signal_keys: # Ensure VWAP is counted if selected
+                    #    total_selected_directional_indicators += 1 # Only if it's truly a directional signal indicator
+                    # Corrected: Add 1 to total_selected_directional_indicators if VWAP is selected and is directional
+                    if is_intraday_data and indicator_selection.get("VWAP"): # Only count if applicable and selected
+                        total_selected_directional_indicators += 1 # VWAP contributes to directional analysis
 
                 trade_direction = "Neutral"
                 if total_selected_directional_indicators > 0:
@@ -306,6 +311,7 @@ if st.session_state.analysis_started and ticker_input:
                 with glossary_tab:
                     # Assuming display_glossary_tab doesn't need these parameters
                     # If it does, they should be passed here.
+                    # You would likely have a function like: display_glossary_tab()
                     st.markdown("### 📚 Glossary")
                     st.info("The glossary content will be displayed here.") # Placeholder for actual glossary content
 
