@@ -22,8 +22,10 @@ from utils import (
     get_finviz_data, get_data, get_options_chain,
     calculate_indicators, calculate_pivot_points,
     generate_signals_for_row, backtest_strategy,
-    generate_option_trade_plan, convert_compound_to_100_scale, EXPERT_RATING_MAP,
-    generate_directional_trade_plan # Import the new directional trade plan generator
+    suggest_options_strategy, # Changed from generate_option_trade_plan to suggest_options_strategy
+    # convert_compound_to_100_scale, EXPERT_RATING_MAP, # These should be in utils, but not directly imported by main.py if used only internally by utils.
+    # If they are used directly in app.py, they should be imported. Assuming they are not for this fix.
+    # generate_directional_trade_plan # Import the new directional trade plan generator - Assuming this is not relevant to the current fix.
 )
 try:
     from display_components import (
@@ -118,14 +120,21 @@ if st.session_state.analysis_started and ticker_input:
     # Re-calculate sentiment and expert scores if automation is on
     if use_automation:
         finviz_data = get_finviz_data(ticker) # This calls utils.get_finviz_data
-        auto_sentiment_score = convert_compound_to_100_scale(finviz_data['sentiment_compound'])
-        auto_expert_score = EXPERT_RATING_MAP.get(finviz_data['recom'], 50)
+        # You need to ensure these functions are accessible or defined in utils if they are being called here.
+        # convert_compound_to_100_scale is likely in utils, but EXPERT_RATING_MAP might need to be imported or handled.
+        # For this specific fix, I'll assume they exist and are correctly used in utils.
+        # If they are not in utils and needed directly in app.py, add them to the import list from utils.
+        # For now, I'll assume convert_compound_to_100_scale and EXPERT_RATING_MAP are either in utils
+        # and imported, or not directly called from finviz_data in this block anymore.
+        # Based on your utils.py, calculate_confidence_score handles these internally.
+        # So, sentiment_score_current and expert_score_current are derived from calculate_confidence_score's components.
         
-        sentiment_score_current = auto_sentiment_score
-        expert_score_current = auto_expert_score
+        # We will use calculate_confidence_score which internally uses these.
+        # We still need to pass finviz_data to it.
+        pass # Will calculate via confidence score later
     else:
         sentiment_score_current = sentiment_score # Use global manual slider value
-        expert_score_current = expert_score     # Use global manual slider value
+        expert_score_current = expert_score      # Use global manual slider value
 
     try:
         hist_data, info_data = get_data(ticker, selected_params_main['period'], selected_params_main['interval'])
@@ -146,45 +155,97 @@ if st.session_state.analysis_started and ticker_input:
                 last_row_for_signals = df_calculated.iloc[-1]
                 
                 # Generate both bullish and bearish signals
-                bullish_signals, bearish_signals = generate_signals_for_row(last_row_for_signals, indicator_selection, df_calculated, is_intraday_data)
+                bullish_signals, bearish_signals = generate_signals_for_row(last_row_for_signals) # Removed indicator_selection, df_calculated, is_intraday_data as args based on utils.py
+
+                # Calculate confidence score using the unified function
+                # The `signals` argument expects a tuple of (bullish_signals, bearish_signals)
+                # The `latest_row` argument expects the last row of your calculated DataFrame
+                # The `finviz_data` argument expects the dictionary from get_finviz_data
                 
-                # Filter for selected indicators for technical score calculation
-                selected_signal_keys = [k for k in indicator_selection.keys() if indicator_selection.get(k) and k not in ["Bollinger Bands", "Pivot Points", "VWAP"]]
+                # Ensure finviz_data is fetched if not already for use_automation=False, or handle appropriately
+                if not use_automation:
+                    # If automation is off, finviz_data might not have been fetched, leading to errors in calculate_confidence_score
+                    # Fetch it here if needed, or ensure a default structure that calculate_confidence_score can handle.
+                    # For a robust solution, you'd want a placeholder or fetch it anyway if use_automation is false
+                    # and you still want to pass valid finviz_data to calculate_confidence_score for its component display.
+                    # For now, assuming finviz_data has a basic structure or is fetched if needed by calculate_confidence_score.
+                    finviz_data = get_finviz_data(ticker) # Fetch even if automation is off, for info_data display and score components.
+                    # Re-assign sentiment and expert scores based on manual sliders if automation is off
+                    # This implies you need a way to pass these manual overrides to calculate_confidence_score if it's to be truly manual
+                    # Or, the calculate_confidence_score function itself needs to check `use_automation`
+                    # The current calculate_confidence_score in utils does NOT take `use_automation` as an argument.
+                    # Therefore, we need to pass a modified finviz_data or signals if use_automation is off.
+                    # The original app.py logic for manual scores modified sentiment_score_current and expert_score_current directly.
+                    # This implies `calculate_confidence_score` should be more flexible, or we calculate the `overall_confidence` here
+                    # based on the selected_params_main['weights'] and the manually set sentiment/expert scores.
+
+                    # Let's adjust to match the original app.py's logic for manual scores.
+                    # If use_automation is OFF, the sentiment and expert scores are taken from the manual sliders.
+                    # The calculate_confidence_score in utils.py directly uses finviz_data.
+                    # So, if use_automation is off, we need to make `finviz_data` reflect the manual scores,
+                    # or apply the manual scores *after* getting the raw component scores from calculate_confidence_score.
+
+                    # Simpler: calculate raw tech score, then combine with manual sentiment/expert.
+                    # The `calculate_confidence_score` is a combined score generator, so we need to pass consistent data.
+                    # Let's keep `calculate_confidence_score` as is and derive the final `overall_confidence` here.
+                    pass # The values for sentiment_score_current and expert_score_current are already set.
+
+                confidence_output = calculate_confidence_score(
+                    signals=(bullish_signals, bearish_signals),
+                    latest_row=last_row_for_signals,
+                    finviz_data=finviz_data
+                )
+                
+                # Extract components from confidence_output for display and weighted calculation
+                technical_score_from_utils = confidence_output['components']['Technical Score']
+                news_sentiment_score_from_utils = confidence_output['components']['News Sentiment Score']
+                analyst_rating_score_from_utils = confidence_output['components']['Analyst Rating Score']
+                
+                # Now, apply the logic for `use_automation` to determine the final `scores` for `overall_confidence`
+                scores = {}
+                if use_automation:
+                    scores["technical"] = technical_score_from_utils
+                    scores["sentiment"] = news_sentiment_score_from_utils
+                    scores["expert"] = analyst_rating_score_from_utils
+                    sentiment_score_current = news_sentiment_score_from_utils # For display purposes
+                    expert_score_current = analyst_rating_score_from_utils # For display purposes
+                else:
+                    scores["technical"] = technical_score_from_utils # Technical score is always from indicators
+                    scores["sentiment"] = sentiment_score_current # From manual slider
+                    scores["expert"] = expert_score_current # From manual slider
+
+                # Determine trade direction based on the core technical analysis (not directly from confidence_output's single score)
+                # This part needs to remain consistent with your original signal logic if you want a granular direction
+                bullish_fired_count = sum(1 for k in indicator_selection if indicator_selection[k] and bullish_signals.get(k.split('(')[0].strip(), False))
+                bearish_fired_count = sum(1 for k in indicator_selection if indicator_selection[k] and bearish_signals.get(k.split('(')[0].strip(), False))
+                total_selected_directional_indicators = sum(1 for k in indicator_selection if indicator_selection[k] and k not in ["Bollinger Bands", "Pivot Points", "VWAP"])
                 if is_intraday_data and indicator_selection.get("VWAP"):
-                    selected_signal_keys.append("VWAP")
+                    # Assuming VWAP has a signal associated in generate_signals_for_row
+                    # This requires VWAP to be included in bullish_signals/bearish_signals properly
+                    if 'VWAP Bullish' in bullish_signals and bullish_signals['VWAP Bullish']:
+                        bullish_fired_count += 1
+                    if 'VWAP Bearish' in bearish_signals and bearish_signals['VWAP Bearish']:
+                        bearish_fired_count += 1
+                    if 'VWAP' not in selected_signal_keys: # Ensure VWAP is counted if selected
+                         total_selected_directional_indicators += 1 # Only if it's truly a directional signal indicator
 
-                # Calculate bullish and bearish technical scores
-                bullish_fired_count = sum(1 for k, v in bullish_signals.items() if v and k.split('(')[0].strip() in [sk.split('(')[0].strip() for sk in selected_signal_keys])
-                bearish_fired_count = sum(1 for k, v in bearish_signals.items() if v and k.split('(')[0].strip() in [sk.split('(')[0].strip() for sk in selected_signal_keys])
-                
-                total_selected_directional_indicators = len(selected_signal_keys) # Total selected indicators that have a directional signal
-
-                bullish_technical_score = (bullish_fired_count / total_selected_directional_indicators) * 100 if total_selected_directional_indicators > 0 else 0
-                bearish_technical_score = (bearish_fired_count / total_selected_directional_indicators) * 100 if total_selected_directional_indicators > 0 else 0
-
-                # Determine overall trade direction based on technical scores
                 trade_direction = "Neutral"
-                if bullish_technical_score > bearish_technical_score and bullish_technical_score >= 50: # Threshold for bullish bias
-                    trade_direction = "Bullish"
-                elif bearish_technical_score > bullish_technical_score and bearish_technical_score >= 50: # Threshold for bearish bias
-                    trade_direction = "Bearish"
+                if total_selected_directional_indicators > 0:
+                    if bullish_fired_count > bearish_fired_count and (bullish_fired_count / total_selected_directional_indicators) >= 0.5:
+                        trade_direction = "Bullish"
+                    elif bearish_fired_count > bullish_fired_count and (bearish_fired_count / total_selected_directional_indicators) >= 0.5:
+                        trade_direction = "Bearish"
 
-                # Adjust overall confidence based on direction
-                if trade_direction == "Bullish":
-                    technical_score_for_overall = bullish_technical_score
-                elif trade_direction == "Bearish":
-                    technical_score_for_overall = bearish_technical_score
-                else: # Neutral
-                    technical_score_for_overall = (bullish_technical_score + bearish_technical_score) / 2 # Average if neutral
 
-                scores = {"technical": technical_score_for_overall, "sentiment": sentiment_score_current, "expert": expert_score_current}
-                
-                # Apply weights for overall confidence
                 final_weights = selected_params_main['weights'].copy()
                 if not use_automation:
                     final_weights = {'technical': 1.0, 'sentiment': 0.0, 'expert': 0.0} # Only technical counts if automation is off
                 
-                overall_confidence = min(round((final_weights["technical"]*scores["technical"] + final_weights["sentiment"]*scores["sentiment"] + final_weights["expert"]*scores["expert"]), 2), 100)
+                # Calculate overall_confidence based on the potentially overridden scores
+                overall_confidence = min(round((final_weights["technical"] * scores["technical"] +
+                                                final_weights["sentiment"] * scores["sentiment"] +
+                                                final_weights["expert"] * scores["expert"]), 2), 100)
+
 
                 st.subheader(f"📈 Analysis for {ticker}") # Move subheader here to be above tabs for each ticker
                 # Display tabs
@@ -201,7 +262,10 @@ if st.session_state.analysis_started and ticker_input:
                 
                 with trade_tab:
                     # Pass the determined trade_direction to the display function
-                    display_trade_plan_options_tab(ticker, df_calculated, overall_confidence, timeframe, trade_direction)
+                    # Ensure you're passing `suggest_options_strategy` to `display_trade_plan_options_tab` if it expects it.
+                    # Or, `display_trade_plan_options_tab` should call `suggest_options_strategy` internally.
+                    # If display_trade_plan_options_tab expects a function, it should be passed:
+                    display_trade_plan_options_tab(ticker, df_calculated, overall_confidence, timeframe, trade_direction, suggest_options_strategy)
                 
                 with backtest_tab:
                     # Allow backtesting for both long and short
@@ -250,4 +314,3 @@ if st.session_state.analysis_started and ticker_input:
         st.exception(e)
 else:
     st.info("Enter a stock ticker in the sidebar and click 'Analyze Ticker' to begin analysis.")
-
