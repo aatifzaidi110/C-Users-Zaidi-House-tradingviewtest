@@ -93,7 +93,7 @@ def calculate_indicators(df, is_intraday=False):
     df_cleaned.loc[:, "MACD_Signal"] = ta.trend.MACD(df_cleaned["Close"]).macd_signal()
     df_cleaned.loc[:, "Bollinger_HBand"] = ta.volatility.BollingerBands(df_cleaned["Close"]).bollinger_hband()
     df_cleaned.loc[:, "Bollinger_LBand"] = ta.volatility.BollingerBands(df_cleaned["Close"]).bollinger_lband()
-    df_cleaned.loc[:, "Volume_MA"] = ta.volume.volume_trend(df_cleaned["Volume"]) # Placeholder for volume spike
+    df_cleaned.loc[:, "Volume_MA"] = df_cleaned["Volume"].rolling(window=20).mean() # Example: 20-period rolling mean of Volume
     df_cleaned.loc[:, "CCI"] = ta.trend.CCIIndicator(df_cleaned["High"], df_cleaned["Low"], df_cleaned["Close"]).cci()
     df_cleaned.loc[:, "ROC"] = ta.momentum.ROCIndicator(df_cleaned["Close"]).roc()
     df_cleaned.loc[:, "OBV"] = ta.volume.OnBalanceVolumeIndicator(df_cleaned["Close"], df_cleaned["Volume"]).on_balance_volume()
