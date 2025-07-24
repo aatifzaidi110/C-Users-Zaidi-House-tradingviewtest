@@ -1,4 +1,4 @@
-# display_components.py - Version 1.46
+# display_components.py - Version 1.47
 
 import streamlit as st
 import pandas as pd
@@ -315,7 +315,7 @@ def display_option_calculator_tab(ticker, current_stock_price, expirations, prev
 
 
 # === Dashboard Tab Display Functions ===
-def display_main_analysis_tab(ticker, df, info, params, selection, overall_confidence, scores, final_weights, sentiment_score, expert_score, df_pivots):
+def display_main_analysis_tab(ticker, df, info, params, selection, overall_confidence, scores, final_weights, sentiment_score, expert_score, df_pivots, trade_direction): # Added trade_direction
     """Displays the main technical analysis and confidence score tab."""
     is_intraday = params['interval'] in ['5m', '60m']
     last = df.iloc[-1]
@@ -334,13 +334,11 @@ def display_main_analysis_tab(ticker, df, info, params, selection, overall_confi
         price_delta = current_price - prev_close
         
         # Determine bullish/bearish based on overall confidence
-        sentiment_status = "Neutral"
+        sentiment_status = trade_direction # Use the determined trade_direction
         sentiment_icon = "⚪"
-        if overall_confidence >= 65: # Threshold for bullish display
-            sentiment_status = "Bullish"
+        if trade_direction == "Bullish":
             sentiment_icon = "⬆️"
-        elif overall_confidence <= 35: # Threshold for bearish display
-            sentiment_status = "Bearish"
+        elif trade_direction == "Bearish":
             sentiment_icon = "⬇️"
         
         st.metric(label="Current Price", value=f"${current_price:.2f}", delta=f"${price_delta:.2f}")
@@ -865,51 +863,4 @@ def display_trade_log_tab(LOG_FILE, ticker, timeframe, overall_confidence, curre
     user_notes = st.text_area("Add your personal notes or trade thesis here:", key=f"trade_notes_{ticker}")
     
     st.info("Trade log functionality is pending implementation.")
-
-# New function for ticker comparison chart
-def display_ticker_comparison_chart(comparison_data):
-    """
-    Displays a bar chart comparing tickers by Confidence Score and Current Price.
-    """
-    if not comparison_data:
-        st.info("No data available for ticker comparison.")
-        return
-
-    df_comparison = pd.DataFrame(comparison_data)
-    df_comparison = df_comparison.sort_values(by="Confidence Score", ascending=False)
-
-    fig, ax1 = plt.subplots(figsize=(12, 6))
-
-    # Bar chart for Confidence Score
-    bars = ax1.bar(df_comparison["Ticker"], df_comparison["Confidence Score"], color='skyblue', alpha=0.7, label="Confidence Score (%)")
-    ax1.set_xlabel("Ticker")
-    ax1.set_ylabel("Confidence Score (%)", color='skyblue')
-    ax1.tick_params(axis='y', labelcolor='skyblue')
-    ax1.set_ylim(0, 100) # Confidence is 0-100
-
-    # Add text labels on top of bars
-    for bar in bars:
-        yval = bar.get_height()
-        ax1.text(bar.get_x() + bar.get_width()/2, yval + 2, round(yval, 0), ha='center', va='bottom', fontsize=9, color='black')
-
-    # Line chart for Current Price (Secondary Y-axis)
-    ax2 = ax1.twinx()
-    ax2.plot(df_comparison["Ticker"], df_comparison["Current Price"], color='orange', marker='o', linestyle='-', linewidth=2, label="Current Price ($)")
-    ax2.set_ylabel("Current Price ($)", color='orange')
-    ax2.tick_params(axis='y', labelcolor='orange')
-
-    # Add text labels for current price
-    for i, price in enumerate(df_comparison["Current Price"]):
-        ax2.text(i, price, f"${price:.2f}", ha='center', va='bottom', fontsize=9, color='orange')
-
-    # Combine legends
-    lines, labels = ax1.get_legend_handles_labels()
-    lines2, labels2 = ax2.get_legend_handles_labels()
-    ax2.legend(lines + lines2, labels + labels2, loc='upper left')
-
-    plt.title("Ticker Comparison: Confidence Score vs. Current Price")
-    plt.xticks(rotation=45, ha='right')
-    fig.tight_layout()
-    st.pyplot(fig, clear_figure=True)
-    plt.close(fig) # Close the figure to free memory
 
