@@ -1,4 +1,4 @@
-# app.py - Version 1.29
+# app.py - Version 1.30
 import sys
 import os
 import streamlit as st
@@ -28,7 +28,8 @@ from utils import (
 try:
     from display_components import (
         display_main_analysis_tab, display_trade_plan_options_tab,
-        display_backtest_tab, display_news_info_tab, display_trade_log_tab
+        display_backtest_tab, display_news_info_tab, display_trade_log_tab,
+        display_option_calculator_tab # Ensure this is imported for the tab
         # Removed display_ticker_comparison_chart as it's no longer needed for single ticker
     )
 except ImportError as e:
@@ -79,16 +80,16 @@ use_automation = st.sidebar.toggle("Enable Automated Scoring", value=True, help=
 auto_sentiment_score_placeholder = st.sidebar.empty()
 auto_expert_score_placeholder = st.sidebar.empty()
 
-# === Buttons (Moved for better visibility) ===
-# Moved buttons directly under ticker input in sidebar
-if st.sidebar.button("▶️ Analyze Ticker", help="Click to analyze the entered ticker and display results."):
-    st.session_state.analysis_started = True
-    st.rerun()
+# === Buttons (Ensured visibility by placing in a container) ===
+with st.sidebar.container(): # Use a container to explicitly group and render buttons
+    if st.button("▶️ Analyze Ticker", help="Click to analyze the entered ticker and display results."):
+        st.session_state.analysis_started = True
+        st.rerun()
 
-if st.sidebar.button("🔄 Clear Cache & Refresh Data", help="Click to clear all cached data and re-run analysis from scratch."):
-    st.cache_data.clear() # Clear all cached data
-    st.session_state.analysis_started = False # Reset analysis state
-    st.rerun()
+    if st.button("🔄 Clear Cache & Refresh Data", help="Click to clear all cached data and re-run analysis from scratch."):
+        st.cache_data.clear() # Clear all cached data
+        st.session_state.analysis_started = False # Reset analysis state
+        st.rerun()
 
 # Initialize session state for analysis control
 if 'analysis_started' not in st.session_state:
@@ -185,7 +186,6 @@ if st.session_state.analysis_started and ticker_input:
 
                 st.subheader(f"📈 Analysis for {ticker}") # Move subheader here to be above tabs for each ticker
                 # Display tabs
-                # Removed "📊 Ticker Comparison Overview" tab
                 tab_list = ["📊 Main Analysis", "📈 Trade Plan & Options", "🧪 Backtest", "📰 News & Info", "📝 Trade Log", "🧮 Option Calculator", "📚 Glossary"]
                 main_tab, trade_tab, backtest_tab, news_tab, log_tab, option_calc_tab, glossary_tab = st.tabs(tab_list)
 
@@ -235,7 +235,7 @@ if st.session_state.analysis_started and ticker_input:
                     st.info("The glossary content will be displayed here.") # Placeholder for actual glossary content
 
     except Exception as e:
-        st.error(f"An unexpected error occurred during data processing for {ticker}: {e}", icon="�")
+        st.error(f"An unexpected error occurred during data processing for {ticker}: {e}", icon="🚫")
         st.exception(e)
 else:
     st.info("Enter a stock ticker in the sidebar and click 'Analyze Ticker' to begin analysis.")
