@@ -1,4 +1,4 @@
-# glossary_components.py - Version 1.2
+# glossary_components.py - Version 1.3
 
 import streamlit as st
 
