@@ -12,12 +12,10 @@ from datetime import datetime
 # Import functions from utils.py
 from utils import (
     backtest_strategy, calculate_indicators, generate_signals_for_row,
-    suggest_options_strategy, get_options_chain, get_data, get_finviz_data, # CHANGED: generate_option_trade_plan -> suggest_options_strategy
+    suggest_options_strategy, get_options_chain, get_data, get_finviz_data,
     calculate_pivot_points, get_moneyness, analyze_options_chain,
-    generate_directional_trade_plan # NEW: Import the directional trade plan generator - This is correct and crucial
+    generate_directional_trade_plan
 )
-# REMOVED: EXPERT_RATING_MAP import from utils.py here, as it's now defined locally or handled differently for display.
-# If you still need the numerical mapping in utils for calculation, that's fine.
 
 # Mapping for Finviz recommendation numbers to qualitative descriptions
 # This map is specific to display_components.py as it's for user-facing descriptions.
@@ -32,6 +30,7 @@ FINVIZ_RECOM_QUALITATIVE_MAP = {
     "4.50": "Sell / Strong Sell",
     "5.00": "Strong Sell"
 }
+
 # Define EXPERT_RATING_MAP locally within display_components.py
 # Assuming numerical expert scores range from 0-100, with 50 being 'Hold'.
 EXPERT_RATING_MAP = {
@@ -41,6 +40,7 @@ EXPERT_RATING_MAP = {
     "Sell": 25,
     "Strong Sell": 0
 }
+
 # === Helper for Indicator Display ===
 def format_indicator_display(signal_name_base, current_value, bullish_fired, bearish_fired, is_selected):
     """
@@ -70,7 +70,7 @@ def format_indicator_display(signal_name_base, current_value, bullish_fired, bea
 
 
 # === Common Header for Tabs ===
-def _display_common_header(ticker, current_price, prev_close, overall_confidence, trade_direction): # Added trade_direction
+def _display_common_header(ticker, current_price, prev_close, overall_confidence, trade_direction):
     """
     Displays common header information (ticker, current price, overall sentiment)
     at the top of various tabs.
@@ -170,7 +170,7 @@ def plot_generic_payoff_chart(stock_prices, payoffs, legs, strategy_name, ticker
     return fig
 
 
-def display_option_calculator_tab(ticker, current_stock_price, expirations, prev_close, overall_confidence, trade_direction): # Added trade_direction
+def display_option_calculator_tab(ticker, current_stock_price, expirations, prev_close, overall_confidence, trade_direction):
     """
     Displays a comprehensive options calculator tab, allowing users to define and visualize
     custom options strategies, including stock legs.
@@ -339,7 +339,7 @@ def display_option_calculator_tab(ticker, current_stock_price, expirations, prev
 
 
 # === Dashboard Tab Display Functions ===
-def display_main_analysis_tab(ticker, df, info, params, selection, overall_confidence, scores, final_weights, sentiment_score, expert_score, df_pivots, trade_direction): # Added trade_direction
+def display_main_analysis_tab(ticker, df, info, params, selection, overall_confidence, scores, final_weights, sentiment_score, expert_score, df_pivots, trade_direction):
     """Displays the main technical analysis and confidence score tab."""
     is_intraday = params['interval'] in ['5m', '60m']
     last = df.iloc[-1]
@@ -385,15 +385,7 @@ def display_main_analysis_tab(ticker, df, info, params, selection, overall_confi
                 sentiment_text = "Neutral"
 
         # Convert numerical expert score to descriptive text using EXPERT_RATING_MAP
-        # EXPERT_RATING_MAP is not directly imported here, but accessed via the `expert_score` parameter.
-        # This parameter is derived from `calculate_confidence_score` in `app.py`.
         expert_text = "N/A (Excluded)"
-        # You'll need access to EXPERT_RATING_MAP here if you want to convert `expert_score` back to text in `display_components.py`.
-        # Alternatively, `app.py` could pass the string representation directly.
-        # For now, let's assume `app.py` passes the raw score and we need to map it here if not already done.
-        # Since you want EXPERT_RATING_MAP to be used, it needs to be imported, or passed as a parameter.
-        # For simplicity, if it's needed here, re-importing it from utils is the cleanest.
-        from utils import EXPERT_RATING_MAP # Re-import locally if needed for display only, or pass from app.py
         if expert_score is not None:
             for key, value in EXPERT_RATING_MAP.items():
                 if expert_score == value:
@@ -549,7 +541,7 @@ def display_main_analysis_tab(ticker, df, info, params, selection, overall_confi
         else:
             st.info("Not enough data to generate chart.")
 
-def display_trade_plan_options_tab(ticker, df, overall_confidence, timeframe, trade_direction): # Added timeframe, trade_direction
+def display_trade_plan_options_tab(ticker, df, overall_confidence, timeframe, trade_direction):
     """Displays the suggested trade plan and options strategy."""
     last = df.iloc[-1]
     current_stock_price = last['Close']
@@ -670,7 +662,6 @@ def display_trade_plan_options_tab(ticker, df, overall_confidence, timeframe, tr
                     
                     # Extend range for potential unlimited profit/loss based on the strategy type
                     # For bull call spread, it's typically capped, so the 1.1 multiplier is usually sufficient.
-                    
                     stock_prices_chart = np.linspace(min_strike_chart, max_strike_chart, 200)
                     payoffs_chart = calculate_payoff_from_legs(stock_prices_chart, chart_legs) * 100 # Multiply by 100 for contracts
 
@@ -717,7 +708,7 @@ def display_backtest_tab(ticker, indicator_selection, current_price, prev_close,
                 # Fetch data for the selected period for backtesting
                 try:
                     hist_data_backtest, _ = get_data(ticker, f"{end_date - start_date}", selected_backtest_interval, start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'))
-                    
+                
                     if hist_data_backtest is None or hist_data_backtest.empty:
                         st.warning("Could not fetch historical data for the selected period. Please adjust dates or ticker.")
                     else:
@@ -751,7 +742,7 @@ def display_backtest_tab(ticker, indicator_selection, current_price, prev_close,
                     st.exception(e)
 
 
-def display_news_info_tab(ticker, info_data, finviz_data, current_price, prev_close, overall_confidence, trade_direction): # Added trade_direction
+def display_news_info_tab(ticker, info_data, finviz_data, current_price, prev_close, overall_confidence, trade_direction):
     """Displays general information and news headlines for the ticker."""
     _display_common_header(ticker, current_price, prev_close, overall_confidence, trade_direction) # Display common header
     st.subheader(f"📰 News and Information for {ticker}")
@@ -795,7 +786,7 @@ def display_news_info_tab(ticker, info_data, finviz_data, current_price, prev_cl
     else:
         st.info("No recent news headlines available from Finviz.")
 
-def display_trade_log_tab(log_file, ticker, timeframe, overall_confidence, current_price, prev_close, trade_direction): # Added trade_direction
+def display_trade_log_tab(log_file, ticker, timeframe, overall_confidence, current_price, prev_close, trade_direction):
     """
     Displays the trade log and provides functionality to add new trades.
     """
