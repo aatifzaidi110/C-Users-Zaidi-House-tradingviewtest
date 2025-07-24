@@ -1,4 +1,4 @@
-# display_components.py - Version 1.48 (Updated based on user input and utils.py)
+# display_components.py - Version 1.49 (Updated based on user input and utils.py)
 
 import streamlit as st
 import pandas as pd
@@ -45,7 +45,7 @@ EXPERT_RATING_MAP = {
 def format_indicator_display(signal_name_base, current_value, bullish_fired, bearish_fired, is_selected):
     """
     Formats and displays a single technical indicator's concise information,
-    showing both bullish and bearish status.
+    showing both bullish and bearish status, plus qualitative insights.
     """
     if not is_selected:
         return "" # Don't display if not selected
@@ -62,11 +62,183 @@ def format_indicator_display(signal_name_base, current_value, bullish_fired, bea
     else:
         value_str = "Current: N/A"
 
-    # For ADX, it's non-directional, so we'll just show its value and overall trend strength
-    if "ADX" in signal_name_base: # Check for "ADX" in the base name
-        return f"{bullish_icon} {bearish_icon} **{signal_name_base}** ({value_str})"
+    details = ""
+    # Add qualitative description and ideal values based on the indicator
+    if "RSI Momentum" in signal_name_base:
+        if current_value is not None and not pd.isna(current_value):
+            if current_value > 70:
+                qualitative = "Overbought (potential reversal or strong trend continuation)"
+                alert_suggestion = "Watch for RSI to drop below 70 for potential bearish signal, or hold above 70 for sustained strength."
+            elif current_value < 30:
+                qualitative = "Oversold (potential reversal or strong trend continuation)"
+                alert_suggestion = "Watch for RSI to rise above 30 for potential bullish signal."
+            elif current_value > 50:
+                qualitative = "Bullish Momentum (stronger as it approaches 70)"
+                alert_suggestion = "RSI above 50 indicates bullish momentum. Look for sustained move."
+            elif current_value < 50:
+                qualitative = "Bearish Momentum (stronger as it approaches 30)"
+                alert_suggestion = "RSI below 50 indicates bearish momentum. Look for sustained move."
+            else:
+                qualitative = "Neutral (around 50)"
+                alert_suggestion = "RSI around 50 indicates indecision. Look for breakout above/below 50."
+            details = f"\n    - **Status:** {qualitative}\n    - **Ideal Bullish:** Rising from 30 towards 70 (or sustained above 50)\n    - **Ideal Bearish:** Falling from 70 towards 30 (or sustained below 50)\n    - **Alert Suggestion:** {alert_suggestion}"
+        else:
+            details = "\n    - **Status:** N/A\n    - **Ideal Bullish:** Rising from 30 towards 70\n    - **Ideal Bearish:** Falling from 70 towards 30"
+
+    elif "Stochastic Oscillator" in signal_name_base:
+        if current_value is not None and not pd.isna(current_value):
+            if current_value > 80:
+                qualitative = "Overbought (potential reversal)"
+                alert_suggestion = "Watch for %K to cross below %D, or both to fall below 80 for bearish signal."
+            elif current_value < 20:
+                qualitative = "Oversold (potential reversal)"
+                alert_suggestion = "Watch for %K to cross above %D, or both to rise above 20 for bullish signal."
+            else:
+                qualitative = "Neutral"
+                alert_suggestion = "Look for %K/%D crossovers for directional signals."
+            details = f"\n    - **Status:** {qualitative}\n    - **Ideal Bullish:** %K crossing above %D (especially below 20)\n    - **Ideal Bearish:** %K crossing below %D (especially above 80)\n    - **Alert Suggestion:** {alert_suggestion}"
+        else:
+            details = "\n    - **Status:** N/A\n    - **Ideal Bullish:** %K crossing above %D (below 20)\n    - **Ideal Bearish:** %K crossing below %D (above 80)"
+
+    elif "ADX" in signal_name_base:
+        if current_value is not None and not pd.isna(current_value):
+            if current_value > 25:
+                qualitative = "Strong Trend (direction indicated by +DI/-DI)"
+                alert_suggestion = "ADX above 25 confirms trend strength. Pay attention to +DI/-DI for direction."
+            elif current_value < 20:
+                qualitative = "Weak/No Trend"
+                alert_suggestion = "ADX below 20 suggests consolidation. Look for breakout."
+            else:
+                qualitative = "Developing Trend"
+                alert_suggestion = "ADX between 20-25 suggests a trend is forming."
+            details = f"\n    - **Status:** {qualitative}\n    - **Ideal Strong Trend:** ADX > 25\n    - **Ideal Weak Trend:** ADX < 20\n    - **Alert Suggestion:** {alert_suggestion}"
+        else:
+            details = "\n    - **Status:** N/A\n    - **Ideal Strong Trend:** ADX > 25\n    - **Ideal Weak Trend:** ADX < 20"
+
+    elif "CCI" in signal_name_base:
+        if current_value is not None and not pd.isna(current_value):
+            if current_value > 100:
+                qualitative = "Strong Bullish Momentum"
+                alert_suggestion = "CCI above 100 indicates strong upside momentum. Watch for reversal below 100."
+            elif current_value < -100:
+                qualitative = "Strong Bearish Momentum"
+                alert_suggestion = "CCI below -100 indicates strong downside momentum. Watch for reversal above -100."
+            elif current_value > 0:
+                qualitative = "Bullish Momentum"
+                alert_suggestion = "CCI above 0 indicates bullish bias."
+            elif current_value < 0:
+                qualitative = "Bearish Momentum"
+                alert_suggestion = "CCI below 0 indicates bearish bias."
+            else:
+                qualitative = "Neutral"
+                alert_suggestion = "CCI around 0 indicates indecision."
+            details = f"\n    - **Status:** {qualitative}\n    - **Ideal Bullish:** CCI > 100\n    - **Ideal Bearish:** CCI < -100\n    - **Alert Suggestion:** {alert_suggestion}"
+        else:
+            details = "\n    - **Status:** N/A\n    - **Ideal Bullish:** CCI > 100\n    - **Ideal Bearish:** CCI < -100"
+
+    elif "ROC" in signal_name_base:
+        if current_value is not None and not pd.isna(current_value):
+            if current_value > 0:
+                qualitative = "Positive Momentum (Price Increasing)"
+                alert_suggestion = "ROC above 0 confirms price increase. Look for sustained positive values."
+            elif current_value < 0:
+                qualitative = "Negative Momentum (Price Decreasing)"
+                alert_suggestion = "ROC below 0 confirms price decrease. Look for sustained negative values."
+            else:
+                qualitative = "Neutral (No Change)"
+                alert_suggestion = "ROC around 0 indicates sideways movement."
+            details = f"\n    - **Status:** {qualitative}\n    - **Ideal Bullish:** ROC > 0\n    - **Ideal Bearish:** ROC < 0\n    - **Alert Suggestion:** {alert_suggestion}"
+        else:
+            details = "\n    - **Status:** N/A\n    - **Ideal Bullish:** ROC > 0\n    - **Ideal Bearish:** ROC < 0"
+
+    elif "Volume Spike" in signal_name_base:
+        # Volume Spike doesn't have a 'current value' in the same way, but rather a boolean signal
+        if bullish_fired:
+            qualitative = "Significant Volume on Up Move"
+            alert_suggestion = "A bullish volume spike can confirm a price breakout. Watch for follow-through."
+        elif bearish_fired:
+            qualitative = "Significant Volume on Down Move"
+            alert_suggestion = "A bearish volume spike can confirm a price breakdown. Watch for continuation."
+        else:
+            qualitative = "Normal Volume"
+            alert_suggestion = "No significant volume spike detected."
+        details = f"\n    - **Status:** {qualitative}\n    - **Ideal Bullish:** High volume on rising prices\n    - **Ideal Bearish:** High volume on falling prices\n    - **Alert Suggestion:** {alert_suggestion}"
+
+    elif "OBV" in signal_name_base:
+        if bullish_fired:
+            qualitative = "Rising OBV (Accumulation)"
+            alert_suggestion = "Rising OBV confirms bullish trend. Look for continued upward movement."
+        elif bearish_fired:
+            qualitative = "Falling OBV (Distribution)"
+            alert_suggestion = "Falling OBV confirms bearish trend. Look for continued downward movement."
+        else:
+            qualitative = "Sideways OBV (Indecision)"
+            alert_suggestion = "Sideways OBV suggests indecision. Watch for breakout in either direction."
+        details = f"\n    - **Status:** {qualitative}\n    - **Ideal Bullish:** Rising OBV\n    - **Ideal Bearish:** Falling OBV\n    - **Alert Suggestion:** {alert_suggestion}"
+
+    elif "VWAP" in signal_name_base:
+        if current_value is not None and not pd.isna(current_value):
+            if bullish_fired:
+                qualitative = "Price Above VWAP (Bullish Bias)"
+                alert_suggestion = "Price above VWAP indicates buyers are in control. Watch for price to hold above VWAP."
+            elif bearish_fired:
+                qualitative = "Price Below VWAP (Bearish Bias)"
+                alert_suggestion = "Price below VWAP indicates sellers are in control. Watch for price to hold below VWAP."
+            else:
+                qualitative = "Price Near VWAP (Neutral/Consolidation)"
+                alert_suggestion = "Price near VWAP suggests indecision. Look for breakout from VWAP."
+            details = f"\n    - **Status:** {qualitative}\n    - **Ideal Bullish:** Price consistently above VWAP\n    - **Ideal Bearish:** Price consistently below VWAP\n    - **Alert Suggestion:** {alert_suggestion}"
+        else:
+            details = "\n    - **Status:** N/A\n    - **Ideal Bullish:** Price consistently above VWAP\n    - **Ideal Bearish:** Price consistently below VWAP"
+
+    # For EMA Trend and Ichimoku Cloud, which are more about overall trend than single values
+    elif "EMA Trend" in signal_name_base:
+        if bullish_fired:
+            qualitative = "Strong Bullish Trend Confirmed"
+            alert_suggestion = "Maintain long positions. Watch for EMA crossovers for trend reversal signals."
+        elif bearish_fired:
+            qualitative = "Strong Bearish Trend Confirmed"
+            alert_suggestion = "Maintain short positions. Watch for EMA crossovers for trend reversal signals."
+        else:
+            qualitative = "Neutral/Consolidating Trend"
+            alert_suggestion = "Look for clear EMA alignment for trend confirmation."
+        details = f"\n    - **Status:** {qualitative}\n    - **Ideal Bullish:** 21 EMA > 50 EMA > 200 EMA\n    - **Ideal Bearish:** 21 EMA < 50 EMA < 200 EMA\n    - **Alert Suggestion:** {alert_suggestion}"
+
+    elif "Ichimoku Cloud" in signal_name_base:
+        if bullish_fired:
+            qualitative = "Bullish Ichimoku Signal (Price above Cloud, Tenkan above Kijun, Chikou Span above price)"
+            alert_suggestion = "Ichimoku confirms bullish trend. Watch for price to stay above cloud."
+        elif bearish_fired:
+            qualitative = "Bearish Ichimoku Signal (Price below Cloud, Tenkan below Kijun, Chikou Span below price)"
+            alert_suggestion = "Ichimoku confirms bearish trend. Watch for price to stay below cloud."
+        else:
+            qualitative = "Neutral/Mixed Ichimoku Signals"
+            alert_suggestion = "Look for clear alignment of Ichimoku components for trend confirmation."
+        details = f"\n    - **Status:** {qualitative}\n    - **Ideal Bullish:** Price & Tenkan/Kijun above cloud, Chikou above price\n    - **Ideal Bearish:** Price & Tenkan/Kijun below cloud, Chikou below price\n    - **Alert Suggestion:** {alert_suggestion}"
+
+    elif "Parabolic SAR" in signal_name_base:
+        if current_value is not None and not pd.isna(current_value):
+            if bullish_fired:
+                qualitative = "Bullish PSAR (Dots below price)"
+                alert_suggestion = "PSAR confirms uptrend. Watch for dots to flip above price for reversal."
+            elif bearish_fired:
+                qualitative = "Bearish PSAR (Dots above price)"
+                alert_suggestion = "PSAR confirms downtrend. Watch for dots to flip below price for reversal."
+            else:
+                qualitative = "N/A (No clear signal)"
+                alert_suggestion = "PSAR is a lagging indicator, use with other confirmations."
+            details = f"\n    - **Status:** {qualitative}\n    - **Ideal Bullish:** PSAR dots below price\n    - **Ideal Bearish:** PSAR dots above price\n    - **Alert Suggestion:** {alert_suggestion}"
+        else:
+            details = "\n    - **Status:** N/A\n    - **Ideal Bullish:** PSAR dots below price\n    - **Ideal Bearish:** PSAR dots above price"
+
+    # Combine base display with new details
+    base_display = ""
+    if "ADX" in signal_name_base:
+        base_display = f"{bullish_icon} {bearish_icon} **{signal_name_base}** ({value_str})"
     else:
-        return f"{bullish_icon} **{signal_name_base} Bullish** | {bearish_icon} **{signal_name_base} Bearish** ({value_str})"
+        base_display = f"{bullish_icon} **{signal_name_base} Bullish** | {bearish_icon} **{signal_name_base} Bearish** ({value_str})"
+    
+    return f"{base_display}{details}"
 
 
 # === Common Header for Tabs ===
@@ -404,14 +576,14 @@ def display_main_analysis_tab(ticker, df, info, params, selection, overall_confi
 
         st.markdown("---")
 
-        # --- 52-Week High/Low ---
-        st.subheader("🗓️ 52-Week Range")
-        week_52_high = info.get('fiftyTwoWeekHigh', 'N/A')
-        week_52_low = info.get('fiftyTwoWeekLow', 'N/A')
-        st.write(f"**High:** ${week_52_high:.2f}" if isinstance(week_52_high, (int, float)) else f"**High:** {week_52_high}")
-        st.write(f"**Low:** ${week_52_low:.2f}" if isinstance(week_52_low, (int, float)) else f"**Low:** {week_52_low}")
+								  
+											 
+														  
+														
+																															 
+																														
 
-        st.markdown("---")
+						  
 
         st.subheader("✅ Technical Analysis Readout")
         with st.expander("📈 Trend Indicators", expanded=True):
@@ -596,7 +768,7 @@ def display_trade_plan_options_tab(ticker, df, overall_confidence, timeframe, tr
     if not expirations:
         st.warning("No options data available for this ticker.")
     else:
-        # Pass trade_direction to suggest_options_strategy (previously generate_option_trade_plan)
+        # Pass overall_confidence as the second argument (confidence_score_value)
         trade_plan = suggest_options_strategy(ticker, overall_confidence, current_stock_price, expirations, trade_direction)
         
         # --- Start of new detailed options display ---
