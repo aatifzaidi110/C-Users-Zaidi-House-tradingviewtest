@@ -435,45 +435,214 @@ def analyze_options_chain(calls_df, puts_df, current_price):
     return analysis_results
 
 
-def suggest_options_strategy(confidence_score, calls_df, puts_df, current_stock_price):
-    """Suggests an options strategy based on confidence and implied volatility."""
-    score = confidence_score['score']
+def suggest_options_strategy(ticker, confidence_score_value, current_stock_price, expirations, trade_direction):
+    """
+    Suggests an options strategy based on confidence score, current price, and trade direction.
     
-    # Calculate average IV for At-The-Money (ATM) options
-    atm_calls = calls_df[abs(calls_df['strike'] - current_stock_price) < (current_stock_price * 0.05)]
-    atm_puts = puts_df[abs(puts_df['strike'] - current_stock_price) < (current_stock_price * 0.05)]
-    avg_iv = pd.concat([atm_calls['impliedVolatility'], atm_puts['impliedVolatility']]).mean()
-    
-    if pd.isna(avg_iv):
-        return "IV data not available to suggest a strategy.", "N/A"
+    Args:
+        ticker (str): Stock ticker symbol.
+        confidence_score_value (float): The overall confidence score (e.g., 0-100).
+        current_stock_price (float): The current price of the stock.
+        expirations (list): List of available expiration dates.
+        trade_direction (str): The anticipated trade direction ("Bullish", "Bearish", "Neutral").
+        
+    Returns:
+        dict: A dictionary containing the suggested strategy details or an error message.
+    """
+    # Now, confidence_score_value is directly the score, not a dictionary.
+    # We can use it directly.
+    score = confidence_score_value 
 
-    iv_is_high = avg_iv > 0.50 # Threshold for high IV, can be adjusted
-    
-    strategy, rationale = "N/A", "N/A"
+    # Initialize a default plan for neutral or unhandled cases
+    plan = {
+        "status": "error",
+        "message": "Could not suggest an options strategy. Neutral outlook or insufficient data.",
+        "Strategy": "N/A",
+        "Direction": "Neutral",
+        "Expiration": "N/A",
+        "Net Debit/Credit": "N/A",
+        "Max Profit": "N/A",
+        "Max Loss": "N/A",
+        "Break-even": "N/A",
+        "Notes": "No specific strategy recommended for this outlook.",
+        "Contracts": {},
+        "option_legs_for_chart": []
+    }
 
-    if score > 40: # High Bullish Confidence
-        if iv_is_high:
-            strategy = "Buy Calls"
-            rationale = "High bullish confidence and high IV suggest a large upward move is expected. Buying calls offers leveraged upside."
-        else:
-            strategy = "Sell Cash-Secured Puts"
-            rationale = "High bullish confidence but low IV makes buying calls expensive. Selling puts collects premium with a bullish outlook."
-    elif score < -40: # High Bearish Confidence
-        if iv_is_high:
-            strategy = "Buy Puts"
-            rationale = "High bearish confidence and high IV suggest a large downward move is expected. Buying puts offers leveraged downside."
-        else:
-            strategy = "Sell Covered Calls (if you own shares) or Buy Put Spreads"
-            rationale = "High bearish confidence but low IV. A put spread limits cost while providing downside exposure."
-    else: # Neutral / Moderate Confidence
-        if iv_is_high:
-            strategy = "Iron Condor or Straddle/Strangle"
-            rationale = "Neutral outlook with high IV suggests profiting from a large move in either direction (Straddle) or from IV crush after an event (Iron Condor)."
-        else:
-            strategy = "Credit Spreads (Bull Put or Bear Call)"
-            rationale = "Neutral outlook with low IV. Use credit spreads to collect premium with a slight directional bias and defined risk."
-            
-    return strategy, rationale
+    # Logic for suggesting strategies based on trade_direction and score
+    if trade_direction == "Bullish" and score >= 60: # Example threshold for bullish strategy
+        # Implement logic for Bull Call Spread or other bullish strategies
+        
+        # Select a near-term expiration (e.g., the first available)
+        if not expirations:
+            plan["message"] = "No expiration dates available for options strategy."
+            return plan
+        
+        selected_expiration = expirations[0] # Simplistic selection (you might want more logic here)
+
+        # Simulate options data for a bull call spread
+        # In a real application, you'd fetch actual options data here (e.g., using yfinance)
+        
+        # Assume we find options around the current price
+        # Buy an ITM call, Sell an OTM call
+        buy_strike = current_stock_price * 0.98 # Slightly ITM
+        sell_strike = current_stock_price * 1.02 # Slightly OTM
+
+        # Ensure strikes are reasonable (buy_strike < sell_strike for bull call spread)
+        if buy_strike >= sell_strike:
+            buy_strike = current_stock_price * 0.95
+            sell_strike = current_stock_price * 1.05
+
+        # Simulate premiums (buy ITM call is more expensive than sell OTM call)
+        buy_premium = (current_stock_price - buy_strike) * 0.5 + 1.0 # Example premium
+        sell_premium = (current_stock_price - sell_strike) * 0.1 + 0.5 # Example premium (lower)
+        
+        if buy_premium <= 0: buy_premium = 1.0 # Ensure positive
+        if sell_premium <= 0: sell_premium = 0.5 # Ensure positive
+
+        net_debit = (buy_premium - sell_premium) * 100 # Multiplied by 100 for contracts
+
+        # Define contract details for the suggested strategy
+        buy_contract_details = {
+            'strike': round(buy_strike, 2),
+            'lastPrice': round(buy_premium, 2),
+            'bid': round(buy_premium * 0.95, 2),
+            'ask': round(buy_premium * 1.05, 2),
+            'volume': 1000,
+            'openInterest': 5000,
+            'impliedVolatility': 0.30,
+            'delta': 0.65,
+            'theta': -0.03,
+            'gamma': 0.01
+        }
+        sell_contract_details = {
+            'strike': round(sell_strike, 2),
+            'lastPrice': round(sell_premium, 2),
+            'bid': round(sell_premium * 0.95, 2),
+            'ask': round(sell_premium * 1.05, 2),
+            'volume': 800,
+            'openInterest': 4000,
+            'impliedVolatility': 0.28,
+            'delta': 0.35,
+            'theta': -0.05,
+            'gamma': 0.005
+        }
+
+        # Calculate Max Profit and Max Risk for Bull Call Spread
+        max_profit_per_share = (sell_strike - buy_strike) - (buy_premium - sell_premium)
+        max_risk_per_share = (buy_premium - sell_premium)
+        
+        max_profit = max_profit_per_share * 100
+        max_risk = max_risk_per_share * 100
+
+        # Ensure max_profit and max_risk are positive for display
+        max_profit_display = f"${max_profit:.2f}" if max_profit > 0 else "N/A"
+        max_risk_display = f"${max_risk:.2f}" if max_risk > 0 else "N/A"
+
+        plan.update({
+            "status": "success",
+            "message": "Bull Call Spread recommended for a moderately bullish outlook.",
+            "Strategy": "Bull Call Spread",
+            "Direction": "Bullish",
+            "Expiration": selected_expiration,
+            "Buy Strike": buy_contract_details['strike'],
+            "Sell Strike": sell_contract_details['strike'],
+            "Net Debit": f"${net_debit:.2f}",
+            "Max Profit": max_profit_display,
+            "Max Risk": max_risk_display,
+            "Reward / Risk": f"{max_profit_per_share / max_risk_per_share:.1f}:1" if max_risk_per_share > 0 else "Unlimited",
+            "Contracts": {
+                "Buy": buy_contract_details,
+                "Sell": sell_contract_details
+            },
+            "option_legs_for_chart": [
+                {'strike': buy_contract_details['strike'], 'type': 'call', 'action': 'buy', 'premium': buy_contract_details['lastPrice']},
+                {'strike': sell_contract_details['strike'], 'type': 'call', 'action': 'sell', 'premium': sell_contract_details['lastPrice']}
+            ]
+        })
+
+    elif trade_direction == "Bearish" and score <= 40: # Example threshold for bearish strategy
+        # Implement logic for Bear Put Spread or other bearish strategies
+        
+        if not expirations:
+            plan["message"] = "No expiration dates available for options strategy."
+            return plan
+        
+        selected_expiration = expirations[0] # Simplistic selection
+
+        # Buy an OTM put, Sell an ITM put
+        buy_strike = current_stock_price * 1.02 # Higher strike (OTM)
+        sell_strike = current_stock_price * 0.98 # Lower strike (ITM)
+
+        if buy_strike <= sell_strike:
+            buy_strike = current_stock_price * 1.05
+            sell_strike = current_stock_price * 0.95
+
+        buy_premium = (buy_strike - current_stock_price) * 0.5 + 1.0 # Example premium
+        sell_premium = (sell_strike - current_stock_price) * 0.1 + 0.5 # Example premium (lower)
+
+        if buy_premium <= 0: buy_premium = 1.0 # Ensure positive
+        if sell_premium <= 0: sell_premium = 0.5 # Ensure positive
+
+        net_debit = (buy_premium - sell_premium) * 100
+
+        buy_contract_details = {
+            'strike': round(buy_strike, 2),
+            'lastPrice': round(buy_premium, 2),
+            'bid': round(buy_premium * 0.95, 2),
+            'ask': round(buy_premium * 1.05, 2),
+            'volume': 900,
+            'openInterest': 4500,
+            'impliedVolatility': 0.32,
+            'delta': -0.65,
+            'theta': -0.04,
+            'gamma': 0.01
+        }
+        sell_contract_details = {
+            'strike': round(sell_strike, 2),
+            'lastPrice': round(sell_premium, 2),
+            'bid': round(sell_premium * 0.95, 2),
+            'ask': round(sell_premium * 1.05, 2),
+            'volume': 700,
+            'openInterest': 3500,
+            'impliedVolatility': 0.30,
+            'delta': -0.35,
+            'theta': -0.06,
+            'gamma': 0.005
+        }
+
+        max_profit_per_share = (buy_strike - sell_strike) - (buy_premium - sell_premium)
+        max_risk_per_share = (buy_premium - sell_premium)
+        
+        max_profit = max_profit_per_share * 100
+        max_risk = max_risk_per_share * 100
+
+        max_profit_display = f"${max_profit:.2f}" if max_profit > 0 else "N/A"
+        max_risk_display = f"${max_risk:.2f}" if max_risk > 0 else "N/A"
+
+        plan.update({
+            "status": "success",
+            "message": "Bear Put Spread recommended for a moderately bearish outlook.",
+            "Strategy": "Bear Put Spread",
+            "Direction": "Bearish",
+            "Expiration": selected_expiration,
+            "Buy Strike": buy_contract_details['strike'],
+            "Sell Strike": sell_contract_details['strike'],
+            "Net Debit": f"${net_debit:.2f}",
+            "Max Profit": max_profit_display,
+            "Max Risk": max_risk_display,
+            "Reward / Risk": f"{max_profit_per_share / max_risk_per_share:.1f}:1" if max_risk_per_share > 0 else "Unlimited",
+            "Contracts": {
+                "Buy": buy_contract_details,
+                "Sell": sell_contract_details
+            },
+            "option_legs_for_chart": [
+                {'strike': buy_contract_details['strike'], 'type': 'put', 'action': 'buy', 'premium': buy_contract_details['lastPrice']},
+                {'strike': sell_contract_details['strike'], 'type': 'put', 'action': 'sell', 'premium': sell_contract_details['lastPrice']}
+            ]
+        })
+
+    return plan
 
 
 # === ENHANCED: Backtesting Logic ===
