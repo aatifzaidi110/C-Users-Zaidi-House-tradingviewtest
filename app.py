@@ -1,4 +1,4 @@
-# app.py - Version 1.30
+# app.py - Version 1.31
 import sys
 import os
 import streamlit as st
@@ -49,6 +49,18 @@ st.sidebar.header("⚙️ Controls")
 ticker_input = st.sidebar.text_input("Enter Ticker Symbol", value="NVDA").upper().strip()
 # No splitting needed, directly use ticker_input as the single ticker
 
+# === Buttons (Moved to directly under ticker search bar) ===
+# Use a container to explicitly group and render buttons in the sidebar
+with st.sidebar.container():
+    if st.button("▶️ Analyze Ticker", help="Click to analyze the entered ticker and display results."):
+        st.session_state.analysis_started = True
+        st.rerun()
+
+    if st.button("🔄 Clear Cache & Refresh Data", help="Click to clear all cached data and re-run analysis from scratch."):
+        st.cache_data.clear() # Clear all cached data
+        st.session_state.analysis_started = False # Reset analysis state
+        st.rerun()
+
 timeframe = st.sidebar.radio("Choose Trading Style:", ["Scalp Trading", "Day Trading", "Swing Trading", "Position Trading"], index=2)
 
 st.sidebar.header("🔧 Technical Indicator Selection")
@@ -80,16 +92,6 @@ use_automation = st.sidebar.toggle("Enable Automated Scoring", value=True, help=
 auto_sentiment_score_placeholder = st.sidebar.empty()
 auto_expert_score_placeholder = st.sidebar.empty()
 
-# === Buttons (Ensured visibility by placing in a container) ===
-with st.sidebar.container(): # Use a container to explicitly group and render buttons
-    if st.button("▶️ Analyze Ticker", help="Click to analyze the entered ticker and display results."):
-        st.session_state.analysis_started = True
-        st.rerun()
-
-    if st.button("🔄 Clear Cache & Refresh Data", help="Click to clear all cached data and re-run analysis from scratch."):
-        st.cache_data.clear() # Clear all cached data
-        st.session_state.analysis_started = False # Reset analysis state
-        st.rerun()
 
 # Initialize session state for analysis control
 if 'analysis_started' not in st.session_state:
@@ -190,10 +192,11 @@ if st.session_state.analysis_started and ticker_input:
                 main_tab, trade_tab, backtest_tab, news_tab, log_tab, option_calc_tab, glossary_tab = st.tabs(tab_list)
 
                 with main_tab:
+                    # Pass trade_direction to display_main_analysis_tab
                     display_main_analysis_tab(
                         ticker, df_calculated, info_data, selected_params_main, 
                         indicator_selection, overall_confidence, scores, final_weights, 
-                        sentiment_score_current, expert_score_current, df_pivots, trade_direction # Pass trade_direction
+                        sentiment_score_current, expert_score_current, df_pivots, trade_direction
                     )
                 
                 with trade_tab:
