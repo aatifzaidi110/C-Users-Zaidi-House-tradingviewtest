@@ -1053,4 +1053,3 @@ def get_options_suggestion(confidence, stock_price, calls_df, puts_df, trade_dir
     
     return "warning", f"Low Confidence ({confidence:.0f}%): Options trading is not recommended at this time due to low overall confidence or neutral sentiment.", "Focus on further analysis or paper trading.", None
 
-�
