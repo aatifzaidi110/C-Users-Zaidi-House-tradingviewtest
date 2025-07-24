@@ -322,7 +322,7 @@ def display_main_analysis_tab(ticker, df, info, params, selection, overall_confi
     last = df.iloc[-1]
     
     # Generate both bullish and bearish signals for the last row
-    bullish_signals, bearish_signals = generate_signals_for_row(last, selection, df, is_intraday)
+    bullish_signals, bearish_signals = generate_signals_for_row(last)
 
     col1, col2 = st.columns([1, 2])
     with col1:
