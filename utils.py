@@ -35,7 +35,7 @@ def get_finviz_data(ticker):
             avg_compound = sum(compound_scores) / len(compound_scores) if compound_scores else 0
             return {"recom": analyst_recom, "headlines": headlines, "sentiment_compound": avg_compound}
     except Exception as e:
-        st.error(f"Error fetching Finviz data: {e}", icon="🚫")
+        st.error(f"Error fetching Finviz data: {e}", icon="�")
         return {"recom": "N/A", "headlines": [], "sentiment_compound": 0, "error": str(e)} # Added 'error' key
 
 
@@ -1053,3 +1053,4 @@ def get_options_suggestion(confidence, stock_price, calls_df, puts_df, trade_dir
     
     return "warning", f"Low Confidence ({confidence:.0f}%): Options trading is not recommended at this time due to low overall confidence or neutral sentiment.", "Focus on further analysis or paper trading.", None
 
+�
