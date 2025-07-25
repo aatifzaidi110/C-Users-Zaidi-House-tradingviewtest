@@ -4,9 +4,11 @@ print("--- utils.py VERSION CHECK: Loading Version 3.0 with all functions ---")
 import streamlit as st
 import yfinance as yf
 import pandas as pd
+import pandas_datareader as pdr
 import numpy as np # Imported for calculations
 import ta
 import requests
+import datetime
 from bs4 import BeautifulSoup
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 from datetime import datetime, timedelta
@@ -240,7 +242,7 @@ def calculate_confidence_score(signals, latest_row, finviz_data):
             regime_multiplier = 0.8 # Penalize score in a downtrend
 
     # 5. Weighted Final Score
-    weights = {"tech": 0.5, "sentiment": 0.25, "analyst": 0.25}
+    weights = {"tech": 0.6, "sentiment": 0.20, "analyst": 0.20}
     
     # Apply regime filter only to the technical component before averaging
     final_score_filtered = (weights["tech"] * tech_score * regime_multiplier +
