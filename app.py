@@ -1,5 +1,5 @@
 # app.py - Version 1.32
-#st.set_page_config(layout="wide", page_title="Your App Name", initial_sidebar_state="expanded", theme="dark")
+st.set_page_config(layout="wide", page_title="Aatif's AI-Powered Trading Hub", initial_sidebar_state="expanded", theme="dark")
 
 import sys
 import os
