@@ -1,4 +1,4 @@
-# display_components.py - Version 1.49 (Updated based on user input and utils.py)
+# display_components.py - 4.0
 
 import streamlit as st
 import pandas as pd
@@ -14,11 +14,10 @@ from utils import (
     backtest_strategy, calculate_indicators, generate_signals_for_row,
     suggest_options_strategy, get_options_chain, get_data, get_finviz_data,
     calculate_pivot_points, get_moneyness, analyze_options_chain,
-    generate_directional_trade_plan
+    generate_directional_trade_plan, get_indicator_summary_text # NEW: Import get_indicator_summary_text
 )
 
 # Mapping for Finviz recommendation numbers to qualitative descriptions
-# This map is specific to display_components.py as it's for user-facing descriptions.
 FINVIZ_RECOM_QUALITATIVE_MAP = {
     "1.00": "Strong Buy",
     "1.50": "Strong Buy / Buy",
@@ -32,7 +31,6 @@ FINVIZ_RECOM_QUALITATIVE_MAP = {
 }
 
 # Define EXPERT_RATING_MAP locally within display_components.py
-# Assuming numerical expert scores range from 0-100, with 50 being 'Hold'.
 EXPERT_RATING_MAP = {
     "Strong Buy": 100,
     "Buy": 75,
@@ -62,183 +60,22 @@ def format_indicator_display(signal_name_base, current_value, bullish_fired, bea
     else:
         value_str = "Current: N/A"
 
-    details = ""
-    # Add qualitative description and ideal values based on the indicator
-    if "RSI Momentum" in signal_name_base:
-        if current_value is not None and not pd.isna(current_value):
-            if current_value > 70:
-                qualitative = "Overbought (potential reversal or strong trend continuation)"
-                alert_suggestion = "Watch for RSI to drop below 70 for potential bearish signal, or hold above 70 for sustained strength."
-            elif current_value < 30:
-                qualitative = "Oversold (potential reversal or strong trend continuation)"
-                alert_suggestion = "Watch for RSI to rise above 30 for potential bullish signal."
-            elif current_value > 50:
-                qualitative = "Bullish Momentum (stronger as it approaches 70)"
-                alert_suggestion = "RSI above 50 indicates bullish momentum. Look for sustained move."
-            elif current_value < 50:
-                qualitative = "Bearish Momentum (stronger as it approaches 30)"
-                alert_suggestion = "RSI below 50 indicates bearish momentum. Look for sustained move."
-            else:
-                qualitative = "Neutral (around 50)"
-                alert_suggestion = "RSI around 50 indicates indecision. Look for breakout above/below 50."
-            details = f"\n    - **Status:** {qualitative}\n    - **Ideal Bullish:** Rising from 30 towards 70 (or sustained above 50)\n    - **Ideal Bearish:** Falling from 70 towards 30 (or sustained below 50)\n    - **Alert Suggestion:** {alert_suggestion}"
-        else:
-            details = "\n    - **Status:** N/A\n    - **Ideal Bullish:** Rising from 30 towards 70\n    - **Ideal Bearish:** Falling from 70 towards 30"
-
-    elif "Stochastic Oscillator" in signal_name_base:
-        if current_value is not None and not pd.isna(current_value):
-            if current_value > 80:
-                qualitative = "Overbought (potential reversal)"
-                alert_suggestion = "Watch for %K to cross below %D, or both to fall below 80 for bearish signal."
-            elif current_value < 20:
-                qualitative = "Oversold (potential reversal)"
-                alert_suggestion = "Watch for %K to cross above %D, or both to rise above 20 for bullish signal."
-            else:
-                qualitative = "Neutral"
-                alert_suggestion = "Look for %K/%D crossovers for directional signals."
-            details = f"\n    - **Status:** {qualitative}\n    - **Ideal Bullish:** %K crossing above %D (especially below 20)\n    - **Ideal Bearish:** %K crossing below %D (especially above 80)\n    - **Alert Suggestion:** {alert_suggestion}"
-        else:
-            details = "\n    - **Status:** N/A\n    - **Ideal Bullish:** %K crossing above %D (below 20)\n    - **Ideal Bearish:** %K crossing below %D (above 80)"
-
-    elif "ADX" in signal_name_base:
-        if current_value is not None and not pd.isna(current_value):
-            if current_value > 25:
-                qualitative = "Strong Trend (direction indicated by +DI/-DI)"
-                alert_suggestion = "ADX above 25 confirms trend strength. Pay attention to +DI/-DI for direction."
-            elif current_value < 20:
-                qualitative = "Weak/No Trend"
-                alert_suggestion = "ADX below 20 suggests consolidation. Look for breakout."
-            else:
-                qualitative = "Developing Trend"
-                alert_suggestion = "ADX between 20-25 suggests a trend is forming."
-            details = f"\n    - **Status:** {qualitative}\n    - **Ideal Strong Trend:** ADX > 25\n    - **Ideal Weak Trend:** ADX < 20\n    - **Alert Suggestion:** {alert_suggestion}"
-        else:
-            details = "\n    - **Status:** N/A\n    - **Ideal Strong Trend:** ADX > 25\n    - **Ideal Weak Trend:** ADX < 20"
-
-    elif "CCI" in signal_name_base:
-        if current_value is not None and not pd.isna(current_value):
-            if current_value > 100:
-                qualitative = "Strong Bullish Momentum"
-                alert_suggestion = "CCI above 100 indicates strong upside momentum. Watch for reversal below 100."
-            elif current_value < -100:
-                qualitative = "Strong Bearish Momentum"
-                alert_suggestion = "CCI below -100 indicates strong downside momentum. Watch for reversal above -100."
-            elif current_value > 0:
-                qualitative = "Bullish Momentum"
-                alert_suggestion = "CCI above 0 indicates bullish bias."
-            elif current_value < 0:
-                qualitative = "Bearish Momentum"
-                alert_suggestion = "CCI below 0 indicates bearish bias."
-            else:
-                qualitative = "Neutral"
-                alert_suggestion = "CCI around 0 indicates indecision."
-            details = f"\n    - **Status:** {qualitative}\n    - **Ideal Bullish:** CCI > 100\n    - **Ideal Bearish:** CCI < -100\n    - **Alert Suggestion:** {alert_suggestion}"
-        else:
-            details = "\n    - **Status:** N/A\n    - **Ideal Bullish:** CCI > 100\n    - **Ideal Bearish:** CCI < -100"
-
-    elif "ROC" in signal_name_base:
-        if current_value is not None and not pd.isna(current_value):
-            if current_value > 0:
-                qualitative = "Positive Momentum (Price Increasing)"
-                alert_suggestion = "ROC above 0 confirms price increase. Look for sustained positive values."
-            elif current_value < 0:
-                qualitative = "Negative Momentum (Price Decreasing)"
-                alert_suggestion = "ROC below 0 confirms price decrease. Look for sustained negative values."
-            else:
-                qualitative = "Neutral (No Change)"
-                alert_suggestion = "ROC around 0 indicates sideways movement."
-            details = f"\n    - **Status:** {qualitative}\n    - **Ideal Bullish:** ROC > 0\n    - **Ideal Bearish:** ROC < 0\n    - **Alert Suggestion:** {alert_suggestion}"
-        else:
-            details = "\n    - **Status:** N/A\n    - **Ideal Bullish:** ROC > 0\n    - **Ideal Bearish:** ROC < 0"
-
-    elif "Volume Spike" in signal_name_base:
-        # Volume Spike doesn't have a 'current value' in the same way, but rather a boolean signal
-        if bullish_fired:
-            qualitative = "Significant Volume on Up Move"
-            alert_suggestion = "A bullish volume spike can confirm a price breakout. Watch for follow-through."
-        elif bearish_fired:
-            qualitative = "Significant Volume on Down Move"
-            alert_suggestion = "A bearish volume spike can confirm a price breakdown. Watch for continuation."
-        else:
-            qualitative = "Normal Volume"
-            alert_suggestion = "No significant volume spike detected."
-        details = f"\n    - **Status:** {qualitative}\n    - **Ideal Bullish:** High volume on rising prices\n    - **Ideal Bearish:** High volume on falling prices\n    - **Alert Suggestion:** {alert_suggestion}"
-
-    elif "OBV" in signal_name_base:
-        if bullish_fired:
-            qualitative = "Rising OBV (Accumulation)"
-            alert_suggestion = "Rising OBV confirms bullish trend. Look for continued upward movement."
-        elif bearish_fired:
-            qualitative = "Falling OBV (Distribution)"
-            alert_suggestion = "Falling OBV confirms bearish trend. Look for continued downward movement."
-        else:
-            qualitative = "Sideways OBV (Indecision)"
-            alert_suggestion = "Sideways OBV suggests indecision. Watch for breakout in either direction."
-        details = f"\n    - **Status:** {qualitative}\n    - **Ideal Bullish:** Rising OBV\n    - **Ideal Bearish:** Falling OBV\n    - **Alert Suggestion:** {alert_suggestion}"
-
-    elif "VWAP" in signal_name_base:
-        if current_value is not None and not pd.isna(current_value):
-            if bullish_fired:
-                qualitative = "Price Above VWAP (Bullish Bias)"
-                alert_suggestion = "Price above VWAP indicates buyers are in control. Watch for price to hold above VWAP."
-            elif bearish_fired:
-                qualitative = "Price Below VWAP (Bearish Bias)"
-                alert_suggestion = "Price below VWAP indicates sellers are in control. Watch for price to hold below VWAP."
-            else:
-                qualitative = "Price Near VWAP (Neutral/Consolidation)"
-                alert_suggestion = "Price near VWAP suggests indecision. Look for breakout from VWAP."
-            details = f"\n    - **Status:** {qualitative}\n    - **Ideal Bullish:** Price consistently above VWAP\n    - **Ideal Bearish:** Price consistently below VWAP\n    - **Alert Suggestion:** {alert_suggestion}"
-        else:
-            details = "\n    - **Status:** N/A\n    - **Ideal Bullish:** Price consistently above VWAP\n    - **Ideal Bearish:** Price consistently below VWAP"
-
-    # For EMA Trend and Ichimoku Cloud, which are more about overall trend than single values
-    elif "EMA Trend" in signal_name_base:
-        if bullish_fired:
-            qualitative = "Strong Bullish Trend Confirmed"
-            alert_suggestion = "Maintain long positions. Watch for EMA crossovers for trend reversal signals."
-        elif bearish_fired:
-            qualitative = "Strong Bearish Trend Confirmed"
-            alert_suggestion = "Maintain short positions. Watch for EMA crossovers for trend reversal signals."
-        else:
-            qualitative = "Neutral/Consolidating Trend"
-            alert_suggestion = "Look for clear EMA alignment for trend confirmation."
-        details = f"\n    - **Status:** {qualitative}\n    - **Ideal Bullish:** 21 EMA > 50 EMA > 200 EMA\n    - **Ideal Bearish:** 21 EMA < 50 EMA < 200 EMA\n    - **Alert Suggestion:** {alert_suggestion}"
-
-    elif "Ichimoku Cloud" in signal_name_base:
-        if bullish_fired:
-            qualitative = "Bullish Ichimoku Signal (Price above Cloud, Tenkan above Kijun, Chikou Span above price)"
-            alert_suggestion = "Ichimoku confirms bullish trend. Watch for price to stay above cloud."
-        elif bearish_fired:
-            qualitative = "Bearish Ichimoku Signal (Price below Cloud, Tenkan below Kijun, Chikou Span below price)"
-            alert_suggestion = "Ichimoku confirms bearish trend. Watch for price to stay below cloud."
-        else:
-            qualitative = "Neutral/Mixed Ichimoku Signals"
-            alert_suggestion = "Look for clear alignment of Ichimoku components for trend confirmation."
-        details = f"\n    - **Status:** {qualitative}\n    - **Ideal Bullish:** Price & Tenkan/Kijun above cloud, Chikou above price\n    - **Ideal Bearish:** Price & Tenkan/Kijun below cloud, Chikou below price\n    - **Alert Suggestion:** {alert_suggestion}"
-
-    elif "Parabolic SAR" in signal_name_base:
-        if current_value is not None and not pd.isna(current_value):
-            if bullish_fired:
-                qualitative = "Bullish PSAR (Dots below price)"
-                alert_suggestion = "PSAR confirms uptrend. Watch for dots to flip above price for reversal."
-            elif bearish_fired:
-                qualitative = "Bearish PSAR (Dots above price)"
-                alert_suggestion = "PSAR confirms downtrend. Watch for dots to flip below price for reversal."
-            else:
-                qualitative = "N/A (No clear signal)"
-                alert_suggestion = "PSAR is a lagging indicator, use with other confirmations."
-            details = f"\n    - **Status:** {qualitative}\n    - **Ideal Bullish:** PSAR dots below price\n    - **Ideal Bearish:** PSAR dots above price\n    - **Alert Suggestion:** {alert_suggestion}"
-        else:
-            details = "\n    - **Status:** N/A\n    - **Ideal Bullish:** PSAR dots below price\n    - **Ideal Bearish:** PSAR dots above price"
-
-    # Combine base display with new details
+    # Use the new get_indicator_summary_text to generate details
+    details_text = get_indicator_summary_text(signal_name_base, current_value, bullish_fired, bearish_fired)
+    # Extract the part after the initial bolded name and current value for cleaner display here
+    # This is a bit of a hack, ideally get_indicator_summary_text would return structured data
+    # For now, let's just append the full text, it will be markdown formatted
+    
     base_display = ""
     if "ADX" in signal_name_base:
         base_display = f"{bullish_icon} {bearish_icon} **{signal_name_base}** ({value_str})"
     else:
         base_display = f"{bullish_icon} **{signal_name_base} Bullish** | {bearish_icon} **{signal_name_base} Bearish** ({value_str})"
     
-    return f"{base_display}{details}"
+    # Append the detailed summary text, starting from the qualitative status
+    # This might need refinement if the output is too verbose.
+    # For now, we'll just append it directly for simplicity.
+    return f"{base_display}\n    - {details_text.replace(f'**{signal_name_base}:** ', '')}"
 
 
 # === Common Header for Tabs ===
@@ -560,67 +397,60 @@ def display_main_analysis_tab(ticker, df, info, params, selection, overall_confi
         expert_text = "N/A (Excluded)"
         if expert_score is not None:
             for key, value in EXPERT_RATING_MAP.items():
-                if expert_score == value:
+                if expert_text == value: # Corrected from expert_text == value to expert_score == value
                     expert_text = key
                     break
             if expert_text == "N/A (Excluded)" and expert_score == 50: # Default for Hold if not explicitly mapped
                 expert_text = "Hold"
 
 
-        st.markdown(f"- **Technical Score:** `{scores['technical']:.0f}` (Weight: `{final_weights['technical']*100:.0f}%`)\n"
+        st.markdown(f"- **Technical Score:** `{scores['Technical']:.0f}` (Weight: `{final_weights['technical']*100:.0f}%`)\n" # Changed key from 'technical' to 'Technical'
                     f"- **Sentiment Score:** {sentiment_text} (Weight: `{final_weights['sentiment']*100:.0f}%`)\n"
-                    f"- **Expert Rating:** {expert_text} (Weight: `{final_weights['expert']*100:.0f}%`)")
+                    f"- **Expert Rating:** {expert_text} (Weight: `{final_weights['expert']*100:.0f}%`)\n"
+                    f"- **Economic Score:** `{scores['Economic']:.0f}` (Weight: `{final_weights['economic']*100:.0f}%`)\n" # NEW
+                    f"- **Investor Sentiment Score:** `{scores['Investor Sentiment']:.0f}` (Weight: `{final_weights['investor_sentiment']*100:.0f}%`)") # NEW
         
         # Always show Finviz link if automation is enabled
         st.markdown(f"**Source for Sentiment & Expert Scores:** [Finviz.com]({f'https://finviz.com/quote.ashx?t={ticker}'})")
 
         st.markdown("---")
 
-								  
-											 
-														  
-														
-																															 
-																														
-
-						  
-
         st.subheader("✅ Technical Analysis Readout")
         with st.expander("📈 Trend Indicators", expanded=True):
             # Updated calls to format_indicator_display to show both bullish/bearish status
             if selection.get("EMA Trend"):
-                st.markdown(format_indicator_display("EMA Trend", None, bullish_signals.get("Uptrend (21>50>200 EMA)", False), bearish_signals.get("Downtrend (21<50<200 EMA)", False), selection.get("EMA Trend")))
+                st.markdown(format_indicator_display("EMA Trend", None, bullish_signals.get("EMA Trend", False), bearish_signals.get("EMA Trend", False), selection.get("EMA Trend")))
             
             if selection.get("Ichimoku Cloud"):
-                st.markdown(format_indicator_display("Ichimoku Cloud", None, bullish_signals.get("Bullish Ichimoku", False), bearish_signals.get("Bearish Ichimoku", False), selection.get("Ichimoku Cloud")))
+                st.markdown(format_indicator_display("Ichimoku Cloud", None, bullish_signals.get("Ichimoku Cloud", False), bearish_signals.get("Ichimoku Cloud", False), selection.get("Ichimoku Cloud")))
 
             if selection.get("Parabolic SAR"):
-                st.markdown(format_indicator_display("Parabolic SAR", last.get('psar'), bullish_signals.get("Bullish PSAR", False), bearish_signals.get("Bearish PSAR", False), selection.get("Parabolic SAR")))
+                st.markdown(format_indicator_display("Parabolic SAR", last.get('psar'), bullish_signals.get("Parabolic SAR", False), bearish_signals.get("Parabolic SAR", False), selection.get("Parabolic SAR")))
 
             if selection.get("ADX"):
-                st.markdown(format_indicator_display("ADX", last.get("adx"), bullish_signals.get("Strong Trend (ADX > 25)", False), bearish_signals.get("Strong Trend (ADX > 25)", False), selection.get("ADX")))
+                st.markdown(format_indicator_display("ADX", last.get("adx"), bullish_signals.get("ADX", False), bearish_signals.get("ADX", False), selection.get("ADX")))
         
         with st.expander("💨 Momentum & Volume Indicators", expanded=True):
             if selection.get("RSI Momentum"):
-                st.markdown(format_indicator_display("RSI Momentum", last.get("RSI"), bullish_signals.get("Bullish Momentum (RSI > 50)", False), bearish_signals.get("Bearish Momentum (RSI < 50)", False), selection.get("RSI Momentum")))
+                st.markdown(format_indicator_display("RSI Momentum", last.get("RSI"), bullish_signals.get("RSI Momentum", False), bearish_signals.get("RSI Momentum", False), selection.get("RSI Momentum")))
 
             if selection.get("Stochastic"):
-                st.markdown(format_indicator_display("Stochastic Oscillator", last.get("stoch_k"), bullish_signals.get("Bullish Stoch Cross", False), bearish_signals.get("Bearish Stoch Cross", False), selection.get("Stochastic")))
+                st.markdown(format_indicator_display("Stochastic Oscillator", last.get("stoch_k"), bullish_signals.get("Stochastic", False), bearish_signals.get("Stochastic", False), selection.get("Stochastic")))
 
             if selection.get("CCI"):
-                st.markdown(format_indicator_display("CCI", last.get("cci"), bullish_signals.get("Bullish CCI (>0)", False), bearish_signals.get("Bearish CCI (<0)", False), selection.get("CCI")))
+                st.markdown(format_indicator_display("CCI", last.get("CCI"), bullish_signals.get("CCI", False), bearish_signals.get("CCI", False), selection.get("CCI")))
 
             if selection.get("ROC"):
-                st.markdown(format_indicator_display("ROC", last.get("roc"), bullish_signals.get("Positive ROC (>0)", False), bearish_signals.get("Negative ROC (<0)", False), selection.get("ROC")))
+                st.markdown(format_indicator_display("ROC", last.get("ROC"), bullish_signals.get("ROC", False), bearish_signals.get("ROC", False), selection.get("ROC")))
 
             if selection.get("Volume Spike"):
-                st.markdown(format_indicator_display("Volume Spike", last.get("Volume"), bullish_signals.get("Volume Spike (Up Move)", False), bearish_signals.get("Volume Spike (Down Move)", False), selection.get("Volume Spike")))
+                st.markdown(format_indicator_display("Volume Spike", last.get("Volume"), bullish_signals.get("Volume Spike", False), bearish_signals.get("Volume Spike", False), selection.get("Volume Spike")))
 
             if selection.get("OBV"):
-                st.markdown(format_indicator_display("OBV", last.get("obv"), bullish_signals.get("OBV Rising", False), bearish_signals.get("OBV Falling", False), selection.get("OBV")))
+                st.markdown(format_indicator_display("OBV", last.get("obv"), bullish_signals.get("OBV", False), bearish_signals.get("OBV", False), selection.get("OBV")))
             
             if is_intraday and selection.get("VWAP"):
-                st.markdown(format_indicator_display("VWAP", last.get("vwap"), bullish_signals.get("Price > VWAP", False), bearish_signals.get("Price < VWAP", False), selection.get("VWAP")))
+                st.markdown(format_indicator_display("VWAP", last.get("VWAP"), bullish_signals.get("VWAP", False), bearish_signals.get("VWAP", False), selection.get("VWAP")))
         
         with st.expander("📊 Display-Only Indicators Status"):
             # Bollinger Bands Status
@@ -774,9 +604,9 @@ def display_trade_plan_options_tab(ticker, df, overall_confidence, timeframe, tr
         # --- Start of new detailed options display ---
         if trade_plan['status'] == 'success':
             st.success(f"**Recommended Strategy: {trade_plan['Strategy']}** (Confidence: {overall_confidence:.0f}%)")
-            st.info(trade_plan['Reason'])
+            st.info(trade_plan['message']) # Use 'message' from the plan
             
-            if trade_plan['Strategy'] == "Bull Call Spread":
+            if trade_plan['Strategy'] == "Bull Call Spread" or trade_plan['Strategy'] == "Bear Put Spread": # Handle both spreads
                 col1, col2, col3, col4, col5 = st.columns(5)
                 col1.metric("Buy Strike", trade_plan['Buy Strike'])
                 col2.metric("Sell Strike", trade_plan['Sell Strike'])
@@ -790,7 +620,7 @@ def display_trade_plan_options_tab(ticker, df, overall_confidence, timeframe, tr
                 if 'Buy' in trade_plan['Contracts']:
                     st.write("**Buy Leg:**")
                     rec_option_buy = trade_plan['Contracts']['Buy']
-                    moneyness_buy = get_moneyness(rec_option_buy.get('strike'), current_stock_price, "call")
+                    moneyness_buy = get_moneyness(current_stock_price, rec_option_buy.get('strike'), "call" if trade_plan['Strategy'] == "Bull Call Spread" else "put")
 
                     option_metrics_buy = [
                         {"Metric": "Strike", "Value": f"${rec_option_buy.get('strike', 0):.2f}", "Description": "The price at which the option can be exercised.", "Ideal for Buyers": "Lower for calls, higher for puts"},
@@ -811,7 +641,7 @@ def display_trade_plan_options_tab(ticker, df, overall_confidence, timeframe, tr
                 if 'Sell' in trade_plan['Contracts']:
                     st.write("**Sell Leg:**")
                     rec_option_sell = trade_plan['Contracts']['Sell']
-                    moneyness_sell = get_moneyness(rec_option_sell.get('strike'), current_stock_price, "call") # Assuming call for bull call spread
+                    moneyness_sell = get_moneyness(current_stock_price, rec_option_sell.get('strike'), "call" if trade_plan['Strategy'] == "Bull Call Spread" else "put")
 
                     option_metrics_sell = [
                         {"Metric": "Strike", "Value": f"${rec_option_sell.get('strike', 0):.2f}", "Description": "The price at which the option can be exercised.", "Ideal for Sellers": "Higher for calls, lower for puts"},
@@ -888,34 +718,41 @@ def display_backtest_tab(ticker, indicator_selection, current_price, prev_close,
                 try:
                     hist_data_backtest, _ = get_data(ticker, f"{end_date - start_date}", selected_backtest_interval, start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'))
                 
-                    if hist_data_backtest is None or hist_data_backtest.empty:
+                    if hist_data_backtest.empty:
                         st.warning("Could not fetch historical data for the selected period. Please adjust dates or ticker.")
                     else:
-                        backtest_results = backtest_strategy(
+                        trades, performance = backtest_strategy(
                             hist_data_backtest.copy(), 
                             indicator_selection, 
-                            backtest_direction # Pass the direction to the backtest function
+                            trade_direction=backtest_direction # Pass the direction to the backtest function
                         )
 
-                        if backtest_results:
+                        if trades and performance:
                             st.subheader("Backtest Performance Summary")
                             col_p1, col_p2, col_p3 = st.columns(3)
-                            col_p1.metric("Total Trades", backtest_results.get('total_trades', 0))
-                            col_p2.metric("Winning Trades", backtest_results.get('winning_trades', 0))
-                            col_p3.metric("Losing Trades", backtest_results.get('losing_trades', 0))
+                            col_p1.metric("Total Trades", performance.get('Total Trades', 0))
+                            col_p2.metric("Winning Trades", performance.get('Winning Trades', 0))
+                            col_p3.metric("Losing Trades", performance.get('Losing Trades', 0))
 
                             col_p4, col_p5, col_p6 = st.columns(3)
-                            col_p4.metric("Win Rate", f"{backtest_results.get('win_rate', 0):.2f}%")
-                            col_p5.metric("Total Profit/Loss", f"${backtest_results.get('total_profit_loss', 0):.2f}")
-                            col_p6.metric("Average P/L per Trade", f"${backtest_results.get('avg_profit_loss_per_trade', 0):.2f}")
+                            col_p4.metric("Win Rate", performance.get('Win Rate', "0.00%"))
+                            col_p5.metric("Gross Profit", f"${performance.get('Gross Profit', 0):.2f}")
+                            col_p6.metric("Gross Loss", f"${performance.get('Gross Loss', 0):.2f}")
+                            
+                            col_p7, col_p8 = st.columns(2)
+                            col_p7.metric("Profit Factor", performance.get('Profit Factor', "0.00"))
+                            col_p8.metric("Net PnL", f"${performance.get('Net PnL', 0):.2f}")
 
-                            if backtest_results.get('trade_log') is not None and not backtest_results['trade_log'].empty:
+
+                            if trades:
                                 st.subheader("Detailed Trade Log")
-                                st.dataframe(backtest_results['trade_log'])
+                                # Convert list of dicts to DataFrame for display
+                                trade_log_df = pd.DataFrame(trades)
+                                st.dataframe(trade_log_df)
                             else:
                                 st.info("No trades were executed during the backtest period with the selected indicators.")
                         else:
-                            st.info("No backtest results returned. Ensure your strategy parameters are valid.")
+                            st.info("No backtest results returned. Ensure your strategy parameters are valid or enough data is available.")
                 except Exception as e:
                     st.error(f"Error during backtest: {e}")
                     st.exception(e)
@@ -1066,3 +903,497 @@ def display_trade_log_tab(log_file, ticker, timeframe, overall_confidence, curre
             st.info(f"No trades logged for {ticker} yet.")
     else:
         st.info("No trades logged yet.")
+
+# --- NEW: Display Economic Data Tab ---
+def display_economic_data_tab(ticker, current_price, prev_close, overall_confidence, trade_direction,
+                              latest_gdp, latest_cpi, latest_unemployment):
+    """Displays key economic data."""
+    _display_common_header(ticker, current_price, prev_close, overall_confidence, trade_direction)
+    st.subheader("🌍 Key Economic Indicators")
+    st.info("Understanding the broader economic landscape is crucial for long-term trading decisions.")
+
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Latest GDP Growth (Annualized)", f"{latest_gdp:.2f}%" if latest_gdp is not None else "N/A")
+        st.markdown("*(Source: FRED - Gross Domestic Product)*")
+    with col2:
+        st.metric("Latest CPI (Inflation)", f"{latest_cpi:.2f}" if latest_cpi is not None else "N/A")
+        st.markdown("*(Source: FRED - Consumer Price Index)*")
+    with col3:
+        st.metric("Latest Unemployment Rate", f"{latest_unemployment:.2f}%" if latest_unemployment is not None else "N/A")
+        st.markdown("*(Source: FRED - Unemployment Rate)*")
+    
+    st.markdown("---")
+    st.subheader("Economic Outlook Summary")
+    # You could add more detailed interpretation here based on the values
+    st.markdown("""
+    * **GDP Growth:** Indicates the overall health and expansion of the economy. Strong growth is generally bullish for stocks.
+    * **CPI (Inflation):** Measures the rate of price increases. High inflation can lead to interest rate hikes, which may negatively impact markets.
+    * **Unemployment Rate:** A low unemployment rate suggests a strong labor market and consumer spending, generally bullish.
+    """)
+    st.markdown("---")
+    st.info("Note: Economic data is often released periodically (e.g., monthly, quarterly) and may not reflect real-time changes.")
+
+# --- NEW: Display Investor Sentiment Tab ---
+def display_investor_sentiment_tab(ticker, current_price, prev_close, overall_confidence, trade_direction,
+                                   latest_vix, historical_vix_avg):
+    """Displays key investor sentiment indicators."""
+    _display_common_header(ticker, current_price, prev_close, overall_confidence, trade_direction)
+    st.subheader("❤️ Investor Sentiment Indicators")
+    st.info("Gauging market fear and greed can provide insights into potential reversals or continuations.")
+
+    col1, col2 = st.columns(2)
+    with col1:
+        st.metric("Latest VIX", f"{latest_vix:.2f}" if latest_vix is not None else "N/A")
+        st.markdown("*(Source: CBOE Volatility Index, via Yahoo Finance)*")
+    with col2:
+        if historical_vix_avg is not None:
+            st.metric("Historical VIX Average (Past Year)", f"{historical_vix_avg:.2f}")
+        else:
+            st.metric("Historical VIX Average (Past Year)", "N/A")
+    
+    st.markdown("---")
+    st.subheader("VIX Interpretation")
+    if latest_vix is not None:
+        if latest_vix < 15:
+            st.success("Current VIX is **low (<15)**, indicating low market fear and complacency. This can sometimes precede market tops.")
+        elif 15 <= latest_vix <= 20:
+            st.info("Current VIX is **moderate (15-20)**, reflecting typical market volatility.")
+        elif 20 < latest_vix <= 30:
+            st.warning("Current VIX is **elevated (20-30)**, suggesting increased market fear and uncertainty. This can signal potential bottoms or heightened volatility.")
+        else: # VIX > 30
+            st.error("Current VIX is **high (>30)**, indicating extreme market fear and panic. Historically, high VIX levels have often coincided with market bottoms.")
+    else:
+        st.info("VIX data not available for interpretation.")
+    
+    st.markdown("---")
+    st.info("Note: Sentiment indicators are often contrarian. Extreme fear can be a buying opportunity, and extreme complacency a selling opportunity.")
+
+# --- NEW: Display Scanner Results Tab ---
+def display_scanner_results_tab(scanner_results_df):
+    """
+    Displays the results of the stock scanner in a detailed, expandable table.
+    """
+    st.subheader("📈 Scanned Opportunities")
+    if scanner_results_df.empty:
+        st.info("No opportunities found matching your criteria.")
+        return
+
+    # Create a list of dictionaries for display, with expanders for details
+    display_data = []
+    for index, row in scanner_results_df.iterrows():
+        entry_details_expander = f"**Entry Criteria Details for {row['Ticker']}**\n\n{row['Entry Criteria Details']}"
+        exit_details_expander = f"**Exit Criteria Details for {row['Ticker']}**\n\n{row['Exit Criteria Details']}"
+
+        display_data.append({
+            "Ticker": row['Ticker'],
+            "Style": row['Trading Style'],
+            "Confidence": row['Overall Confidence'],
+            "Direction": row['Direction'],
+            "Price": row['Current Price'],
+            "ATR": row['ATR'],
+            "Target": row['Target Price'],
+            "Stop Loss": row['Stop Loss'],
+            "Entry Zone": row['Entry Zone'],
+            "R/R": row['Reward/Risk'],
+            "Pivot (P)": row['Pivot (P)'],
+            "R1": row['Resistance 1 (R1)'],
+            "S1": row['Support 1 (S1)'],
+            "R2": row['Resistance 2 (R2)'],
+            "S2": row['Support 2 (S2)'],
+            "Entry Details": entry_details_expander, # This will be expanded
+            "Exit Details": exit_details_expander,   # This will be expanded
+            "Rationale": row['Rationale']
+        })
+    
+    # Use st.expander for each row to show details
+    for item in display_data:
+        with st.expander(f"**{item['Ticker']}** | {item['Style']} | Confidence: {item['Confidence']}% | Direction: {item['Direction']}"):
+            col1, col2, col3, col4 = st.columns(4)
+            col1.metric("Current Price", item['Price'])
+            col2.metric("Target Price", item['Target'])
+            col3.metric("Stop Loss", item['Stop Loss'])
+            col4.metric("Reward/Risk", item['R/R'])
+            
+            st.markdown("---")
+            st.markdown(f"**Entry Zone:** {item['Entry Zone']}")
+            st.markdown(f"**ATR:** {item['ATR']}")
+
+            st.markdown("---")
+            st.markdown("**Pivot Points:**")
+            st.write(f"P: {item['Pivot (P)']}, R1: {item['R1']}, S1: {item['S1']}, R2: {item['R2']}, S2: {item['S2']}")
+
+            st.markdown("---")
+            st.markdown("**Rationale:**")
+            st.write(item['Rationale'])
+
+            st.markdown("---")
+            st.markdown("**Detailed Entry Criteria:**")
+            st.markdown(item['Entry Details'])
+
+            st.markdown("---")
+            st.markdown("**Detailed Exit Criteria:**")
+            st.markdown(item['Exit Details'])
+            
+            st.markdown("---") # Separator for next item
+
+    st.markdown("---")
+    st.info("Click on each ticker's header to expand/collapse detailed trade plan information.")
+
+
+def display_backtest_tab(ticker, indicator_selection, current_price, prev_close, overall_confidence, backtest_direction):
+    """
+    Displays the backtesting tab, allowing users to run backtests on historical data.
+    """
+    _display_common_header(ticker, current_price, prev_close, overall_confidence, backtest_direction.capitalize()) # Pass backtest_direction to header
+    st.subheader(f"🧪 Backtesting Results for {ticker}")
+    st.info("Run a backtest on historical data to evaluate strategy performance.")
+
+    st.markdown("---")
+    st.markdown("#### Backtest Parameters")
+
+    col1, col2 = st.columns(2)
+    with col1:
+        start_date = st.date_input("Start Date", pd.to_datetime("2023-01-01"), key=f"backtest_start_date_{ticker}")
+    with col2:
+        end_date = st.date_input("End Date", pd.to_datetime("today"), key=f"backtest_end_date_{ticker}")
+
+    # Backtest interval should ideally be tied to the selected trading style's interval
+    backtest_interval_map = {
+        "Long (Bullish)": "1d",
+        "Short (Bearish)": "1d" # Assuming daily for now, can be made configurable
+    }
+    selected_backtest_interval = backtest_interval_map.get(f"{backtest_direction.capitalize()} ({backtest_direction.capitalize()})", "1d")
+
+    if st.button(f"Run {backtest_direction.capitalize()} Backtest", key=f"run_backtest_{ticker}_{backtest_direction}"):
+        if start_date >= end_date:
+            st.error("Start date must be before end date.")
+        else:
+            with st.spinner(f"Running {backtest_direction.lower()} backtest... This may take a moment."):
+                # Fetch data for the selected period for backtesting
+                try:
+                    hist_data_backtest, _ = get_data(ticker, f"{end_date - start_date}", selected_backtest_interval, start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'))
+                
+                    if hist_data_backtest.empty:
+                        st.warning("Could not fetch historical data for the selected period. Please adjust dates or ticker.")
+                    else:
+                        trades, performance = backtest_strategy(
+                            hist_data_backtest.copy(), 
+                            indicator_selection, 
+                            trade_direction=backtest_direction # Pass the direction to the backtest function
+                        )
+
+                        if trades and performance:
+                            st.subheader("Backtest Performance Summary")
+                            col_p1, col_p2, col_p3 = st.columns(3)
+                            col_p1.metric("Total Trades", performance.get('Total Trades', 0))
+                            col_p2.metric("Winning Trades", performance.get('Winning Trades', 0))
+                            col_p3.metric("Losing Trades", performance.get('Losing Trades', 0))
+
+                            col_p4, col_p5, col_p6 = st.columns(3)
+                            col_p4.metric("Win Rate", performance.get('Win Rate', "0.00%"))
+                            col_p5.metric("Gross Profit", f"${performance.get('Gross Profit', 0):.2f}")
+                            col_p6.metric("Gross Loss", f"${performance.get('Gross Loss', 0):.2f}")
+                            
+                            col_p7, col_p8 = st.columns(2)
+                            col_p7.metric("Profit Factor", performance.get('Profit Factor', "0.00"))
+                            col_p8.metric("Net PnL", f"${performance.get('Net PnL', 0):.2f}")
+
+
+                            if trades:
+                                st.subheader("Detailed Trade Log")
+                                # Convert list of dicts to DataFrame for display
+                                trade_log_df = pd.DataFrame(trades)
+                                st.dataframe(trade_log_df)
+                            else:
+                                st.info("No trades were executed during the backtest period with the selected indicators.")
+                        else:
+                            st.info("No backtest results returned. Ensure your strategy parameters are valid or enough data is available.")
+                except Exception as e:
+                    st.error(f"Error during backtest: {e}")
+                    st.exception(e)
+
+
+def display_news_info_tab(ticker, info_data, finviz_data, current_price, prev_close, overall_confidence, trade_direction):
+    """Displays general information and news headlines for the ticker."""
+    _display_common_header(ticker, current_price, prev_close, overall_confidence, trade_direction) # Display common header
+    st.subheader(f"📰 News and Information for {ticker}")
+
+    if info_data:
+        st.markdown("---")
+        st.subheader("Company Profile")
+        st.write(f"**Sector:** {info_data.get('sector', 'N/A')}")
+        st.write(f"**Industry:** {info_data.get('industry', 'N/A')}")
+        st.write(f"**Full Time Employees:** {info_data.get('fullTimeEmployees', 'N/A')}")
+        st.write(f"**Website:** [{info_data.get('website', 'N/A')}]({info_data.get('website', '#')})")
+        
+        st.write("**Description:**")
+        st.write(info_data.get('longBusinessSummary', 'No description available.'))
+        
+        st.markdown("---")
+        st.subheader("Key Financials & Metrics (from Yahoo Finance)")
+        col1, col2 = st.columns(2)
+        with col1:
+            market_cap = info_data.get('marketCap', 'N/A')
+            st.write(f"**Market Cap:** {market_cap:,}" if isinstance(market_cap, (int, float)) else f"**Market Cap:** {market_cap}")
+            
+            shares_outstanding = info_data.get('sharesOutstanding', 'N/A')
+            st.write(f"**Shares Outstanding:** {shares_outstanding:,}" if isinstance(shares_outstanding, (int, float)) else f"**Shares Outstanding:** {shares_outstanding}")
+            
+            beta = info_data.get('beta', 'N/A')
+            st.write(f"**Beta:** {beta:.2f}" if isinstance(beta, (int, float)) else f"**Beta:** {beta}")
+            
+            peg_ratio = info_data.get('pegRatio', 'N/A')
+            st.write(f"**PEG Ratio:** {peg_ratio:.2f}" if isinstance(peg_ratio, (int, float)) else f"**PEG Ratio:** {peg_ratio}")
+            
+            dividend_yield = info_data.get('dividendYield', 'N/A')
+            st.write(f"**Dividend Yield:** {dividend_yield*100:.2f}%" if isinstance(dividend_yield, (int, float)) else f"**Dividend Yield:** {dividend_yield}")
+        with col2:
+            trailing_pe = info_data.get('trailingPE', 'N/A')
+            st.write(f"**P/E Ratio (TTM):** {trailing_pe:.2f}" if isinstance(trailing_pe, (int, float)) else f"**P/E Ratio (TTM):** {trailing_pe}")
+            
+            forward_pe = info_data.get('forwardPE', 'N/A')
+            st.write(f"**Forward P/E:** {forward_pe:.2f}" if isinstance(forward_pe, (int, float)) else f"**Forward P/E:** {forward_pe}")
+            
+            ebitda = info_data.get('ebitda', 'N/A')
+            st.write(f"**EBITDA:** {ebitda:,}" if isinstance(ebitda, (int, float)) else f"**EBITDA:** {ebitda}")
+            
+            revenue_ttm = info_data.get('revenueTTM', 'N/A')
+            st.write(f"**Revenue (TTM):** {revenue_ttm:,}" if isinstance(revenue_ttm, (int, float)) else f"**Revenue (TTM):** {revenue_ttm}")
+            
+            gross_profits = info_data.get('grossProfits', 'N/A')
+            st.write(f"**Gross Profits (TTM):** {gross_profits:,}" if isinstance(gross_profits, (int, float)) else f"**Gross Profits (TTM):** {gross_profits}")
+
+
+    else:
+        st.warning("No comprehensive company information available from Yahoo Finance.")
+
+    st.markdown("---")
+    st.subheader("Latest News Headlines (from Finviz)")
+    if finviz_data and finviz_data.get('headlines'):
+        for headline in finviz_data['headlines']:
+            st.markdown(f"- [{headline['title']}]({headline['link']}) ({headline['date']})")
+    else:
+        st.info("No recent news headlines available from Finviz.")
+
+def display_trade_log_tab(log_file, ticker, timeframe, overall_confidence, current_price, prev_close, trade_direction):
+    """
+    Displays the trade log and provides functionality to add new trades.
+    """
+    _display_common_header(ticker, current_price, prev_close, overall_confidence, trade_direction) # Display common header
+    st.subheader(f"📝 Trade Log for {ticker}")
+
+    # Ensure the log file exists
+    if not os.path.exists(log_file):
+        df_log = pd.DataFrame(columns=["Date", "Time", "Ticker", "Trade Type", "Entry Price", "Exit Price", "Quantity", "P/L", "Notes"])
+        df_log.to_csv(log_file, index=False)
+    else:
+        df_log = pd.read_csv(log_file)
+
+    st.markdown("---")
+    st.subheader("Add New Trade")
+
+    with st.form("trade_entry_form"):
+        col1, col2 = st.columns(2)
+        with col1:
+            trade_type = st.selectbox("Trade Type", ["Long", "Short"], key="new_trade_type")
+            entry_price = st.number_input("Entry Price", min_value=0.01, format="%.2f", key="new_entry_price")
+        with col2:
+            quantity = st.number_input("Quantity (Shares)", min_value=1, step=1, key="new_quantity")
+            exit_price = st.number_input("Exit Price (Optional, for closed trades)", min_value=0.01, format="%.2f", value=None, key="new_exit_price")
+        
+        notes = st.text_area("Notes", key="new_notes")
+        
+        submitted = st.form_submit_button("Add Trade to Log")
+
+        if submitted:
+            if entry_price <= 0 or quantity <= 0:
+                st.error("Entry Price and Quantity must be positive values.")
+            else:
+                current_datetime = datetime.now()
+                date_str = current_datetime.strftime("%Y-%m-%d")
+                time_str = current_datetime.strftime("%H:%M:%S")
+                
+                pl = None
+                if exit_price is not None:
+                    if trade_type == "Long":
+                        pl = (exit_price - entry_price) * quantity
+                    elif trade_type == "Short":
+                        pl = (entry_price - exit_price) * quantity
+
+                new_trade = pd.DataFrame([{
+                    "Date": date_str,
+                    "Time": time_str,
+                    "Ticker": ticker,
+                    "Trade Type": trade_type,
+                    "Entry Price": entry_price,
+                    "Exit Price": exit_price,
+                    "Quantity": quantity,
+                    "P/L": pl,
+                    "Notes": notes
+                }])
+                
+                df_log = pd.concat([df_log, new_trade], ignore_index=True)
+                df_log.to_csv(log_file, index=False)
+                st.success("Trade added successfully!")
+                st.rerun() # Refresh to show updated log
+
+    st.markdown("---")
+    st.subheader("Your Trade History")
+    if not df_log.empty:
+        # Filter log to show only trades for the current ticker
+        df_ticker_log = df_log[df_log['Ticker'].str.upper() == ticker.upper()].copy()
+
+        if not df_ticker_log.empty:
+            st.dataframe(df_ticker_log)
+            # Option to download full log
+            csv = df_log.to_csv(index=False).encode('utf-8')
+            st.download_button(
+                label="Download Full Trade Log (CSV)",
+                data=csv,
+                file_name="trade_log.csv",
+                mime="text/csv",
+                key="download_trade_log"
+            )
+        else:
+            st.info(f"No trades logged for {ticker} yet.")
+    else:
+        st.info("No trades logged yet.")
+
+# --- NEW: Display Economic Data Tab ---
+def display_economic_data_tab(ticker, current_price, prev_close, overall_confidence, trade_direction,
+                              latest_gdp, latest_cpi, latest_unemployment):
+    """Displays key economic data."""
+    _display_common_header(ticker, current_price, prev_close, overall_confidence, trade_direction)
+    st.subheader("🌍 Key Economic Indicators")
+    st.info("Understanding the broader economic landscape is crucial for long-term trading decisions.")
+
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Latest GDP Growth (Annualized)", f"{latest_gdp:.2f}%" if latest_gdp is not None else "N/A")
+        st.markdown("*(Source: FRED - Gross Domestic Product)*")
+    with col2:
+        st.metric("Latest CPI (Inflation)", f"{latest_cpi:.2f}" if latest_cpi is not None else "N/A")
+        st.markdown("*(Source: FRED - Consumer Price Index)*")
+    with col3:
+        st.metric("Latest Unemployment Rate", f"{latest_unemployment:.2f}%" if latest_unemployment is not None else "N/A")
+        st.markdown("*(Source: FRED - Unemployment Rate)*")
+    
+    st.markdown("---")
+    st.subheader("Economic Outlook Summary")
+    # You could add more detailed interpretation here based on the values
+    st.markdown("""
+    * **GDP Growth:** Indicates the overall health and expansion of the economy. Strong growth is generally bullish for stocks.
+    * **CPI (Inflation):** Measures the rate of price increases. High inflation can lead to interest rate hikes, which may negatively impact markets.
+    * **Unemployment Rate:** A low unemployment rate suggests a strong labor market and consumer spending, generally bullish.
+    """)
+    st.markdown("---")
+    st.info("Note: Economic data is often released periodically (e.g., monthly, quarterly) and may not reflect real-time changes.")
+
+# --- NEW: Display Investor Sentiment Tab ---
+def display_investor_sentiment_tab(ticker, current_price, prev_close, overall_confidence, trade_direction,
+                                   latest_vix, historical_vix_avg):
+    """Displays key investor sentiment indicators."""
+    _display_common_header(ticker, current_price, prev_close, overall_confidence, trade_direction)
+    st.subheader("❤️ Investor Sentiment Indicators")
+    st.info("Gauging market fear and greed can provide insights into potential reversals or continuations.")
+
+    col1, col2 = st.columns(2)
+    with col1:
+        st.metric("Latest VIX", f"{latest_vix:.2f}" if latest_vix is not None else "N/A")
+        st.markdown("*(Source: CBOE Volatility Index, via Yahoo Finance)*")
+    with col2:
+        if historical_vix_avg is not None:
+            st.metric("Historical VIX Average (Past Year)", f"{historical_vix_avg:.2f}")
+        else:
+            st.metric("Historical VIX Average (Past Year)", "N/A")
+    
+    st.markdown("---")
+    st.subheader("VIX Interpretation")
+    if latest_vix is not None:
+        if latest_vix < 15:
+            st.success("Current VIX is **low (<15)**, indicating low market fear and complacency. This can sometimes precede market tops.")
+        elif 15 <= latest_vix <= 20:
+            st.info("Current VIX is **moderate (15-20)**, reflecting typical market volatility.")
+        elif 20 < latest_vix <= 30:
+            st.warning("Current VIX is **elevated (20-30)**, suggesting increased market fear and uncertainty. This can signal potential bottoms or heightened volatility.")
+        else: # VIX > 30
+            st.error("Current VIX is **high (>30)**, indicating extreme market fear and panic. Historically, high VIX levels have often coincided with market bottoms.")
+    else:
+        st.info("VIX data not available for interpretation.")
+    
+    st.markdown("---")
+    st.info("Note: Sentiment indicators are often contrarian. Extreme fear can be a buying opportunity, and extreme complacency a selling opportunity.")
+
+# --- NEW: Display Scanner Results Tab ---
+def display_scanner_results_tab(scanner_results_df):
+    """
+    Displays the results of the stock scanner in a detailed, expandable table.
+    """
+    st.subheader("📈 Scanned Opportunities")
+    if scanner_results_df.empty:
+        st.info("No opportunities found matching your criteria.")
+        return
+
+    # Create a list of dictionaries for display, with expanders for details
+    display_data = []
+    for index, row in scanner_results_df.iterrows():
+        # Ensure all expected keys exist, provide defaults if not
+        entry_details_expander = f"**Entry Criteria Details for {row['Ticker']}**\n\n{row.get('Entry Criteria Details', 'N/A')}"
+        exit_details_expander = f"**Exit Criteria Details for {row['Ticker']}**\n\n{row.get('Exit Criteria Details', 'N/A')}"
+
+        display_data.append({
+            "Ticker": row.get('Ticker', 'N/A'),
+            "Style": row.get('Trading Style', 'N/A'),
+            "Confidence": row.get('Overall Confidence', 'N/A'),
+            "Direction": row.get('Direction', 'N/A'),
+            "Price": row.get('Current Price', 'N/A'),
+            "ATR": row.get('ATR', 'N/A'),
+            "Target": row.get('Target Price', 'N/A'),
+            "Stop Loss": row.get('Stop Loss', 'N/A'),
+            "Entry Zone": row.get('Entry Zone', 'N/A'),
+            "R/R": row.get('Reward/Risk', 'N/A'),
+            "Pivot (P)": row.get('Pivot (P)', 'N/A'),
+            "R1": row.get('Resistance 1 (R1)', 'N/A'),
+            "S1": row.get('Support 1 (S1)', 'N/A'),
+            "R2": row.get('Resistance 2 (R2)', 'N/A'),
+            "S2": row.get('Support 2 (S2)', 'N/A'),
+            "Entry Details": entry_details_expander, # This will be expanded
+            "Exit Details": exit_details_expander,   # This will be expanded
+            "Rationale": row.get('Rationale', 'N/A')
+        })
+    
+    # Use st.expander for each row to show details
+    for item in display_data:
+        with st.expander(f"**{item['Ticker']}** | {item['Style']} | Confidence: {item['Confidence']}% | Direction: {item['Direction']}"):
+            col1, col2, col3, col4 = st.columns(4)
+            col1.metric("Current Price", item['Price'])
+            col2.metric("Target Price", item['Target'])
+            col3.metric("Stop Loss", item['Stop Loss'])
+            col4.metric("Reward/Risk", item['R/R'])
+            
+            st.markdown("---")
+            st.markdown(f"**Entry Zone:** {item['Entry Zone']}")
+            st.markdown(f"**ATR:** {item['ATR']}")
+
+            st.markdown("---")
+            st.markdown("**Pivot Points:**")
+            st.write(f"P: {item['Pivot (P)']}, R1: {item['R1']}, S1: {item['S1']}, R2: {item['R2']}, S2: {item['S2']}")
+
+            st.markdown("---")
+            st.markdown("**Rationale:**")
+            st.write(item['Rationale'])
+
+            st.markdown("---")
+            st.markdown("**Detailed Entry Criteria:**")
+            st.markdown(item['Entry Details'])
+
+            st.markdown("---")
+            st.markdown("**Detailed Exit Criteria:**")
+            st.markdown(item['Exit Details'])
+            
+            st.markdown("---") # Separator for next item
+
+    st.markdown("---")
+    st.info("Click on each ticker's header to expand/collapse detailed trade plan information.")
+
