@@ -1,10 +1,11 @@
-# app.py - Final Version (v1.33)
+# app.py - Final Version (v1.34)
 import sys
 import os
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt # Needed for plt.close() in display_components
 import yfinance as yf # Keep this import here for direct yf usage if any, though it's also in utils
+import datetime # ADDED THIS LINE: Import the datetime module
 
 print("Current working directory:", os.getcwd())
 print("Directory contents:", os.listdir())
@@ -22,17 +23,17 @@ from utils import (
     get_finviz_data, get_data, get_options_chain,
     calculate_indicators, calculate_pivot_points,
     generate_signals_for_row, backtest_strategy, get_moneyness, analyze_options_chain,
-    suggest_options_strategy, generate_directional_trade_plan, # Ensure this is imported
-    calculate_confidence_score, convert_finviz_recom_to_score, # Ensure these are imported
-    get_economic_data_fred, get_vix_data, calculate_economic_score, calculate_sentiment_score, # New imports
-    run_stock_scanner # New scanner function
+    suggest_options_strategy, generate_directional_trade_plan,
+    calculate_confidence_score, convert_finviz_recom_to_score,
+    get_economic_data_fred, get_vix_data, calculate_economic_score, calculate_sentiment_score,
+    run_stock_scanner
 )
 
 from display_components import (
     display_technical_analysis_tab, display_options_analysis_tab,
     display_backtesting_tab, display_trade_log_tab,
-    display_scanner_tab, display_economic_sentiment_tab, # New display components
-    display_option_calculator_tab # Ensure this is imported
+    display_scanner_tab, display_economic_sentiment_tab,
+    display_option_calculator_tab
 )
 
 # === Page Setup ===
@@ -65,14 +66,6 @@ selected_timeframe = st.sidebar.selectbox("Select Timeframe", list(timeframe_opt
 period = timeframe_options[selected_timeframe]["period"]
 interval = timeframe_options[selected_timeframe]["interval"]
 is_intraday = interval in ["1m", "1h"]
-
-# --- Main Analysis Button ---
-analyze_button = st.sidebar.button("Analyze Ticker")
-clear_cache_button = st.sidebar.button("Clear Cache & Refresh Data")
-
-if clear_cache_button:
-    st.cache_data.clear()
-    st.rerun()
 
 # Confidence Weight Sliders
 st.sidebar.subheader("Confidence Score Weights (%)")
@@ -161,6 +154,15 @@ st.session_state.indicator_selection["Bollinger Bands"] = st.sidebar.checkbox("B
 st.session_state.indicator_selection["VWAP"] = st.sidebar.checkbox("VWAP (Volume Weighted Average Price) - Intraday Only", value=st.session_state.indicator_selection["VWAP"])
 st.session_state.indicator_selection["Pivot Points"] = st.sidebar.checkbox("Pivot Points (Support/Resistance)", value=st.session_state.indicator_selection["Pivot Points"])
 
+
+# --- Main Analysis Button ---
+analyze_button = st.sidebar.button("Analyze Ticker")
+clear_cache_button = st.sidebar.button("Clear Cache & Refresh Data")
+
+if clear_cache_button:
+    st.cache_data.clear()
+    st.rerun()
+
 # --- Stock Scanner Section ---
 st.sidebar.markdown("---")
 st.sidebar.header("Stock Scanner")
@@ -200,7 +202,7 @@ if analyze_button and ticker:
         finviz_data = get_finviz_data(ticker)
         
         # Get economic and investor sentiment data
-        today = datetime.today()
+        today = datetime.date.today() # Corrected line
         one_year_ago = today - datetime.timedelta(days=365)
 
         latest_gdp = get_economic_data_fred('GDP', one_year_ago.strftime('%Y-%m-%d'), today.strftime('%Y-%m-%d'))
