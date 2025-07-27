@@ -1126,7 +1126,7 @@ def run_stock_scanner(
         pd.DataFrame: A DataFrame of qualifying tickers with relevant metrics and trade plan details.
     """
     scanned_results = []
-    today = datetime.date.today()
+    today = datetime.today()
     one_year_ago = today - datetime.timedelta(days=365) # For historical data context
 
     for ticker in ticker_list:
