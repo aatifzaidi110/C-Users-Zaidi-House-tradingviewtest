@@ -1,6 +1,8 @@
-# utils.py - Version 4.0
-print("--- utils.py VERSION CHECK: Loading Version 4.0 with all functions and scanner ---")
+# utils.py - Final Version (with distutils workaround for Python 3.10+)
+print("--- utils.py VERSION CHECK: Loading Final Version with all functions and scanner (v4.1) ---")
 
+# IMPORTANT: Import setuptools first to provide distutils compatibility for older libraries like pandas_datareader
+import setuptools
 import streamlit as st
 import yfinance as yf
 import pandas as pd
@@ -836,7 +838,7 @@ def backtest_strategy(df_historical, selection, atr_multiplier=1.5, reward_risk_
     # Clean data and ensure required columns are present
     df_clean = df_historical.dropna().copy()
     if len(df_clean) < 200:
-        # st.info("Not enough data for robust backtesting after cleaning.") # Don't show in scanner loop
+        # st.info("Not enough data for robust backtesting.") # Don't show in scanner loop
         return [], {"error": "Insufficient data"}
 
     # Ensure ATR is calculated before starting the loop for backtesting
@@ -1290,7 +1292,8 @@ def run_stock_scanner(
             exit_criteria_details.append(f"**Profit Target:** Around ${trade_plan_result.get('profit_target', 'N/A'):.2f} ({trade_plan_result.get('reward_risk_ratio', 'N/A'):.1f}:1 Reward/Risk).")
             
             entry_criteria_details.append("\n**Current Indicator Status:**")
-            for ind_name, is_selected in indicator_selection.items():
+            for ind_name in all_indicator_names: # Iterate through all indicator names
+                is_selected = indicator_selection.get(ind_name, False)
                 if is_selected:
                     # Map indicator name from selection to the key in last_row
                     current_ind_value = None
