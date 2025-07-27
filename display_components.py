@@ -33,11 +33,497 @@ FINVIZ_RECOM_QUALITATIVE_MAP = {
 # Define EXPERT_RATING_MAP locally within display_components.py
 EXPERT_RATING_MAP = {
     "Strong Buy": 100,
-    "Buy": 75,
+    "Buy": 80,
     "Hold": 50,
-    "Sell": 25,
-    "Strong Sell": 0
+    "Sell": 20,
+    "Strong Sell": 0,
+    "N/A": 50 # Neutral default for missing recommendations
 }
+# --- Display Functions for Tabs ---
+
+def display_technical_analysis_tab(ticker, df_calculated, is_intraday, indicator_selection):
+    """
+    Displays the technical analysis tab with a candlestick chart and indicator plots.
+    """
+    st.markdown(f"### 📊 Technical Analysis for {ticker}")
+
+    if df_calculated.empty:
+        st.info("No data available to display technical analysis.")
+        return
+
+    # Ensure the DataFrame index is a DatetimeIndex
+    if not isinstance(df_calculated.index, pd.DatetimeIndex):
+        df_calculated.index = pd.to_datetime(df_calculated.index)
+
+    # Filter out future dates if any (e.g., from some data sources)
+    df_calculated = df_calculated[df_calculated.index <= pd.Timestamp.now()]
+
+    # Create subplots for the chart and indicators
+    add_plots = []
+    if indicator_selection.get("EMA Trend"):
+        add_plots.append(mpf.make_addplot(df_calculated['EMA21'], color='blue', panel=0, width=0.7, secondary_y=False))
+        add_plots.append(mpf.make_addplot(df_calculated['EMA50'], color='orange', panel=0, width=0.7, secondary_y=False))
+        add_plots.append(mpf.make_addplot(df_calculated['EMA200'], color='purple', panel=0, width=0.7, secondary_y=False))
+    
+    if indicator_selection.get("Ichimoku Cloud"):
+        # Ichimoku cloud fills
+        add_plots.append(mpf.make_addplot(df_calculated['ichimoku_a'], color='green', panel=0, width=0.7, secondary_y=False))
+        add_plots.append(mpf.make_addplot(df_calculated['ichimoku_b'], color='red', panel=0, width=0.7, secondary_y=False))
+        # Fill between ichimoku_a and ichimoku_b for the cloud
+        # mplfinance does not directly support fill_between, so we might need a workaround or just plot lines.
+        # For simplicity, we'll just plot the lines.
+        add_plots.append(mpf.make_addplot(df_calculated['ichimoku_conversion_line'], color='cyan', panel=0, width=0.7, secondary_y=False))
+        add_plots.append(mpf.make_addplot(df_calculated['ichimoku_base_line'], color='magenta', panel=0, width=0.7, secondary_y=False))
+
+    if indicator_selection.get("Parabolic SAR"):
+        add_plots.append(mpf.make_addplot(df_calculated['psar'], type='scatter', marker='.', markersize=50, color='lime', panel=0, secondary_y=False))
+
+    # Add Bollinger Bands to the main panel
+    if indicator_selection.get("Bollinger Bands"):
+        add_plots.append(mpf.make_addplot(df_calculated['BB_high'], color='gray', panel=0, width=0.7, secondary_y=False))
+        add_plots.append(mpf.make_addplot(df_calculated['BB_low'], color='gray', panel=0, width=0.7, secondary_y=False))
+        add_plots.append(mpf.make_addplot(df_calculated['BB_mid'], color='blue', panel=0, width=0.7, secondary_y=False))
+
+    # Add VWAP to the main panel (if intraday)
+    if is_intraday and indicator_selection.get("VWAP"):
+        add_plots.append(mpf.make_addplot(df_calculated['VWAP'], color='darkred', panel=0, width=1.0, secondary_y=False))
+
+
+    # Setup subplots for other indicators
+    fig_panels = []
+    if indicator_selection.get("RSI Momentum"):
+        fig_panels.append(1) # RSI
+        add_plots.append(mpf.make_addplot(df_calculated['RSI'], panel=1, color='purple', ylabel='RSI'))
+        add_plots.append(mpf.make_addplot(pd.Series(70, index=df_calculated.index), panel=1, color='red', width=0.5, linestyle='--', secondary_y=False))
+        add_plots.append(mpf.make_addplot(pd.Series(30, index=df_calculated.index), panel=1, color='green', width=0.5, linestyle='--', secondary_y=False))
+    
+    if indicator_selection.get("Stochastic"):
+        fig_panels.append(len(fig_panels)) # Stochastic
+        add_plots.append(mpf.make_addplot(df_calculated['stoch_k'], panel=len(fig_panels)-1, color='blue', ylabel='Stoch %K'))
+        add_plots.append(mpf.make_addplot(df_calculated['stoch_d'], panel=len(fig_panels)-1, color='orange', ylabel='Stoch %D'))
+        add_plots.append(mpf.make_addplot(pd.Series(80, index=df_calculated.index), panel=len(fig_panels)-1, color='red', width=0.5, linestyle='--', secondary_y=False))
+        add_plots.append(mpf.make_addplot(pd.Series(20, index=df_calculated.index), panel=len(fig_panels)-1, color='green', width=0.5, linestyle='--', secondary_y=False))
+
+    if indicator_selection.get("MACD"):
+        fig_panels.append(len(fig_panels)) # MACD
+        add_plots.append(mpf.make_addplot(df_calculated['macd'], panel=len(fig_panels)-1, color='blue', ylabel='MACD'))
+        add_plots.append(mpf.make_addplot(df_calculated['macd_signal'], panel=len(fig_panels)-1, color='orange'))
+        # MACD Histogram
+        colors = ['red' if val < 0 else 'green' for val in df_calculated['macd_diff']]
+        add_plots.append(mpf.make_addplot(df_calculated['macd_diff'], type='bar', panel=len(fig_panels)-1, color=colors, width=0.7, alpha=0.7, secondary_y=False))
+
+    if indicator_selection.get("ADX"):
+        fig_panels.append(len(fig_panels)) # ADX
+        add_plots.append(mpf.make_addplot(df_calculated['adx'], panel=len(fig_panels)-1, color='blue', ylabel='ADX'))
+        add_plots.append(mpf.make_addplot(df_calculated['plus_di'], panel=len(fig_panels)-1, color='green'))
+        add_plots.append(mpf.make_addplot(df_calculated['minus_di'], panel=len(fig_panels)-1, color='red'))
+        add_plots.append(mpf.make_addplot(pd.Series(25, index=df_calculated.index), panel=len(fig_panels)-1, color='gray', width=0.5, linestyle='--', secondary_y=False))
+
+    if indicator_selection.get("CCI"):
+        fig_panels.append(len(fig_panels)) # CCI
+        add_plots.append(mpf.make_addplot(df_calculated['CCI'], panel=len(fig_panels)-1, color='teal', ylabel='CCI'))
+        add_plots.append(mpf.make_addplot(pd.Series(100, index=df_calculated.index), panel=len(fig_panels)-1, color='red', width=0.5, linestyle='--', secondary_y=False))
+        add_plots.append(mpf.make_addplot(pd.Series(-100, index=df_calculated.index), panel=len(fig_panels)-1, color='green', width=0.5, linestyle='--', secondary_y=False))
+
+    if indicator_selection.get("ROC"):
+        fig_panels.append(len(fig_panels)) # ROC
+        add_plots.append(mpf.make_addplot(df_calculated['ROC'], panel=len(fig_panels)-1, color='brown', ylabel='ROC'))
+        add_plots.append(mpf.make_addplot(pd.Series(0, index=df_calculated.index), panel=len(fig_panels)-1, color='gray', width=0.5, linestyle='--', secondary_y=False))
+
+    if indicator_selection.get("OBV"):
+        fig_panels.append(len(fig_panels)) # OBV
+        add_plots.append(mpf.make_addplot(df_calculated['obv'], panel=len(fig_panels)-1, color='darkgreen', ylabel='OBV'))
+        add_plots.append(mpf.make_addplot(df_calculated['obv_ema'], panel=len(fig_panels)-1, color='orange', width=0.7, secondary_y=False))
+
+
+    # Plotting
+    try:
+        fig, axlist = mpf.plot(
+            df_calculated,
+            type='candle',
+            style='yahoo', # You can choose other styles like 'binance', 'charles', 'yahoo'
+            title=f"{ticker} Candlestick Chart",
+            ylabel='Price',
+            ylabel_lower='Volume',
+            volume=True,
+            figscale=1.5, # Adjust figure size
+            addplot=add_plots,
+            panel_ratios=[6] + [2] * len(fig_panels), # Main chart taller, other panels shorter
+            returnfig=True
+        )
+        st.pyplot(fig)
+        plt.close(fig) # Close the figure to prevent memory issues
+    except Exception as e:
+        st.warning(f"Could not render chart. Please check data and indicator selections. Error: {e}", icon="⚠️")
+        st.exception(e)
+
+    st.markdown("---")
+    st.markdown("### Latest Indicator Values")
+    if not df_calculated.empty:
+        latest_row = df_calculated.iloc[-1]
+        st.write(latest_row.tail(20)) # Display last 20 columns of the latest row
+
+def display_options_analysis_tab(ticker, current_stock_price, expirations, trade_direction, overall_confidence):
+    """
+    Displays options analysis, including chain data and suggested strategies.
+    """
+    st.markdown(f"### 📈 Options Analysis for {ticker}")
+
+    if not expirations:
+        st.info("No options data available for this ticker.")
+        return
+
+    selected_expiry = st.selectbox("Select Expiration Date", expirations)
+
+    if selected_expiry:
+        calls_df, puts_df = get_options_chain(ticker, selected_expiry)
+
+        if calls_df.empty and puts_df.empty:
+            st.warning(f"No options chain data found for {ticker} on {selected_expiry}.", icon="⚠️")
+            return
+
+        st.markdown("#### Call Options")
+        st.dataframe(calls_df)
+
+        st.markdown("#### Put Options")
+        st.dataframe(puts_df)
+
+        analysis_results = analyze_options_chain(calls_df, puts_df, current_stock_price)
+
+        st.markdown("#### Options Chain Summary")
+        col1, col2 = st.columns(2)
+        with col1:
+            st.subheader("Calls Summary")
+            st.write(f"Total Volume: {analysis_results['calls'].get('total_volume', 'N/A')}")
+            st.write(f"Total Open Interest: {analysis_results['calls'].get('total_open_interest', 'N/A')}")
+            st.write(f"Avg IV (ITM): {analysis_results['calls'].get('avg_iv_itm', 0):.2f}")
+            st.write(f"Avg IV (OTM): {analysis_results['calls'].get('avg_iv_otm', 0):.2f}")
+            st.write(f"Avg IV (ATM): {analysis_results['calls'].get('avg_iv_atm', 0):.2f}")
+        with col2:
+            st.subheader("Puts Summary")
+            st.write(f"Total Volume: {analysis_results['puts'].get('total_volume', 'N/A')}")
+            st.write(f"Total Open Interest: {analysis_results['puts'].get('total_open_interest', 'N/A')}")
+            st.write(f"Avg IV (ITM): {analysis_results['puts'].get('avg_iv_itm', 0):.2f}")
+            st.write(f"Avg IV (OTM): {analysis_results['puts'].get('avg_iv_otm', 0):.2f}")
+            st.write(f"Avg IV (ATM): {analysis_results['puts'].get('avg_iv_atm', 0):.2f}")
+
+        st.markdown("---")
+        st.markdown("#### Suggested Options Strategy")
+        
+        # Pass the correct parameters to the suggestion function
+        suggested_strategy = suggest_options_strategy(
+            ticker,
+            overall_confidence,
+            current_stock_price,
+            expirations, # Pass all expirations, function will pick one
+            trade_direction
+        )
+
+        if suggested_strategy['status'] == 'success':
+            st.success(suggested_strategy['message'])
+            st.write(f"**Strategy:** {suggested_strategy['Strategy']}")
+            st.write(f"**Direction:** {suggested_strategy['Direction']}")
+            st.write(f"**Expiration:** {suggested_strategy['Expiration']}")
+            
+            if suggested_strategy['Strategy'] == "Bull Call Spread":
+                st.write(f"**Buy Call:** Strike ${suggested_strategy['Buy Strike']:.2f}, Premium ${suggested_strategy['Contracts']['Buy']['lastPrice']:.2f}")
+                st.write(f"**Sell Call:** Strike ${suggested_strategy['Sell Strike']:.2f}, Premium ${suggested_strategy['Contracts']['Sell']['lastPrice']:.2f}")
+            elif suggested_strategy['Strategy'] == "Bear Put Spread":
+                st.write(f"**Buy Put:** Strike ${suggested_strategy['Buy Strike']:.2f}, Premium ${suggested_strategy['Contracts']['Buy']['lastPrice']:.2f}")
+                st.write(f"**Sell Put:** Strike ${suggested_strategy['Sell Strike']:.2f}, Premium ${suggested_strategy['Contracts']['Sell']['lastPrice']:.2f}")
+            
+            st.write(f"**Net Debit/Credit:** {suggested_strategy['Net Debit']}")
+            st.write(f"**Max Profit:** {suggested_strategy['Max Profit']}")
+            st.write(f"**Max Risk:** {suggested_strategy['Max Risk']}")
+            st.write(f"**Reward / Risk:** {suggested_strategy['Reward / Risk']}")
+            st.markdown(f"**Notes:** {suggested_strategy['Notes']}")
+
+            # Optional: Plotting the payoff diagram (simplified)
+            st.markdown("##### Simplified Payoff Diagram")
+            plot_payoff_diagram(current_stock_price, suggested_strategy['option_legs_for_chart'])
+
+        else:
+            st.info(suggested_strategy['message'])
+
+def plot_payoff_diagram(current_price, option_legs):
+    """
+    Plots a simplified payoff diagram for a given options strategy.
+    This is a basic representation and doesn't account for time decay, volatility changes etc.
+    """
+    if not option_legs:
+        st.info("No option legs to plot payoff diagram.")
+        return
+
+    # Define a range of stock prices for the x-axis
+    price_range = np.linspace(current_price * 0.8, current_price * 1.2, 200)
+    payoff = np.zeros_like(price_range)
+
+    for leg in option_legs:
+        strike = leg['strike']
+        option_type = leg['type'] # 'call' or 'put'
+        action = leg['action'] # 'buy' or 'sell'
+        premium = leg['premium']
+
+        if option_type == 'call':
+            if action == 'buy':
+                payoff_leg = np.maximum(0, price_range - strike) - premium
+            else: # sell call
+                payoff_leg = -(np.maximum(0, price_range - strike) - premium)
+        else: # put
+            if action == 'buy':
+                payoff_leg = np.maximum(0, strike - price_range) - premium
+            else: # sell put
+                payoff_leg = -(np.maximum(0, strike - price_range) - premium)
+        
+        payoff += payoff_leg
+
+    fig, ax = plt.subplots(figsize=(10, 6))
+    ax.plot(price_range, payoff, label='Strategy Payoff')
+    ax.axhline(0, color='gray', linestyle='--', linewidth=0.8)
+    ax.axvline(current_price, color='red', linestyle=':', label='Current Price')
+    ax.set_title('Options Strategy Payoff Diagram')
+    ax.set_xlabel('Stock Price at Expiration')
+    ax.set_ylabel('Profit/Loss')
+    ax.grid(True, linestyle=':', alpha=0.7)
+    ax.legend()
+    st.pyplot(fig)
+    plt.close(fig)
+
+
+def display_backtesting_tab(df_historical, indicator_selection):
+    """
+    Displays the backtesting interface and results.
+    """
+    st.markdown("### 🤖 Backtesting Strategy")
+    st.info("This section allows you to backtest a simple strategy based on selected indicators.")
+
+    # Backtesting parameters
+    st.subheader("Backtesting Parameters")
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        atr_multiplier = st.number_input("ATR Multiplier for Stop Loss", value=1.5, min_value=0.1, step=0.1)
+    with col2:
+        reward_risk_ratio = st.number_input("Reward/Risk Ratio for Take Profit", value=2.0, min_value=0.5, step=0.1)
+    with col3:
+        signal_threshold_percentage = st.slider("Min % of Selected Signals to Trigger", 0.0, 1.0, 0.7, 0.05)
+
+    trade_direction_bt = st.radio("Backtest Trade Direction", ["long", "short"])
+    exit_strategy_bt = st.radio("Exit Strategy", ["fixed_rr", "trailing_psar"], help="fixed_rr: Fixed Reward/Risk. trailing_psar: Uses Parabolic SAR as a trailing stop.")
+
+    if st.button("Run Backtest"):
+        if df_historical.empty:
+            st.warning("No historical data available for backtesting. Please analyze a ticker first.")
+            return
+
+        with st.spinner("Running backtest... This may take a moment."):
+            # Ensure indicators are calculated before backtesting
+            df_bt = calculate_indicators(df_historical.copy())
+            if df_bt.empty:
+                st.error("Not enough data to calculate indicators for backtesting.")
+                return
+
+            trades, performance = backtest_strategy(
+                df_bt,
+                indicator_selection, # Pass the full indicator selection
+                atr_multiplier,
+                reward_risk_ratio,
+                signal_threshold_percentage,
+                trade_direction_bt,
+                exit_strategy_bt
+            )
+
+            if "error" in performance:
+                st.error(f"Backtesting failed: {performance['error']}")
+                return
+
+            st.subheader("Backtest Results")
+            st.json(performance) # Display performance metrics as JSON for clarity
+
+            st.subheader("Trade Log (Sample)")
+            if trades:
+                df_trades = pd.DataFrame(trades)
+                st.dataframe(df_trades.head(10)) # Show first 10 trades
+                if len(df_trades) > 10:
+                    st.info(f"Showing first 10 of {len(df_trades)} trades. Full log available in the 'Trade Log' tab.")
+            else:
+                st.info("No trades were executed based on the specified strategy and parameters.")
+
+
+def display_trade_log_tab(log_file, ticker, timeframe, overall_confidence, current_price, prev_close, trade_direction):
+    """
+    Displays the trade log and allows adding new entries.
+    """
+    st.markdown("### 📝 Trade Log")
+
+    # Load existing log
+    if os.path.exists(log_file):
+        trade_log_df = pd.read_csv(log_file)
+    else:
+        trade_log_df = pd.DataFrame(columns=["Timestamp", "Ticker", "Timeframe", "Confidence", "Direction", "Price", "PnL", "Notes"])
+
+    st.dataframe(trade_log_df)
+
+    st.markdown("#### Add New Trade Entry")
+    with st.form("new_trade_form"):
+        trade_type = st.selectbox("Trade Type", ["Long", "Short", "Exit Long", "Exit Short"])
+        price = st.number_input("Price", value=float(current_price) if current_price else 0.0, format="%.2f")
+        pnl = st.number_input("PnL (if exit)", value=0.0, format="%.2f")
+        notes = st.text_area("Notes")
+
+        submitted = st.form_submit_button("Add Trade to Log")
+        if submitted:
+            new_entry = {
+                "Timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "Ticker": ticker,
+                "Timeframe": timeframe,
+                "Confidence": f"{overall_confidence:.0f}%",
+                "Direction": trade_direction,
+                "Price": price,
+                "PnL": pnl,
+                "Notes": notes
+            }
+            new_entry_df = pd.DataFrame([new_entry])
+            trade_log_df = pd.concat([trade_log_df, new_entry_df], ignore_index=True)
+            trade_log_df.to_csv(log_file, index=False)
+            st.success("Trade added to log!")
+            st.rerun() # Rerun to update the displayed dataframe
+
+def display_option_calculator_tab(ticker, current_stock_price, expirations, prev_close, overall_confidence, trade_direction):
+    """
+    Displays a simplified options calculator.
+    """
+    st.markdown(f"### 🧮 Options Calculator for {ticker}")
+    st.write(f"**Current Stock Price:** ${current_stock_price:.2f}")
+
+    if not expirations:
+        st.info("No expiration dates available for options calculation.")
+        return
+
+    col1, col2 = st.columns(2)
+    with col1:
+        option_type = st.selectbox("Option Type", ["Call", "Put"])
+    with col2:
+        selected_expiry = st.selectbox("Expiration Date", expirations)
+
+    strike_price = st.number_input("Strike Price", value=float(current_stock_price), format="%.2f")
+    implied_volatility = st.slider("Implied Volatility (%)", 10, 100, 30) / 100.0
+    time_to_expiry_days = (datetime.strptime(selected_expiry, "%Y-%m-%d").date() - datetime.now().date()).days
+    risk_free_rate = st.slider("Risk-Free Rate (%)", 0.0, 5.0, 1.0) / 100.0
+
+    if st.button("Calculate Option Price (Black-Scholes Approximation)"):
+        # This is a highly simplified Black-Scholes approximation for demonstration.
+        # A full implementation is complex and requires more robust libraries.
+        
+        # For simplicity, let's just use a basic approximation or mock value
+        # In a real app, you'd use a proper Black-Scholes library or API
+        
+        # Mock calculation based on simplified inputs
+        if option_type == "Call":
+            premium = max(0, current_stock_price - strike_price) + (implied_volatility * current_stock_price * np.sqrt(time_to_expiry_days / 365)) * 0.5
+        else: # Put
+            premium = max(0, strike_price - current_stock_price) + (implied_volatility * current_stock_price * np.sqrt(time_to_expiry_days / 365)) * 0.5
+        
+        st.success(f"Estimated Option Premium: ${premium:.2f}")
+        st.info("Note: This is a simplified approximation. Real option pricing involves complex models and real-time data.")
+
+
+def display_scanner_tab(scanner_results_df):
+    """
+    Displays the results of the stock scanner.
+    """
+    st.markdown("### ⚡ Stock Scanner Results")
+
+    if scanner_results_df.empty:
+        st.info("No qualifying stocks found based on your criteria.")
+        return
+
+    st.dataframe(scanner_results_df)
+
+    st.markdown("#### Detailed Trade Plans for Scanned Stocks")
+    for index, row in scanner_results_df.iterrows():
+        with st.expander(f"**{row['Ticker']}** | {row['Trading Style']} | Confidence: {row['Overall Confidence']}% | Direction: {row['Direction']}"):
+            st.markdown(f"**Current Price:** {row['Current Price']}")
+            st.markdown(f"**ATR:** {row['ATR']}")
+            st.markdown(f"**Target Price:** {row['Target Price']}")
+            st.markdown(f"**Stop Loss:** {row['Stop Loss']}")
+            st.markdown(f"**Entry Zone:** {row['Entry Zone']}")
+            st.markdown(f"**Reward/Risk:** {row['Reward/Risk']}")
+            
+            st.markdown("---")
+            st.markdown("**Pivot Points:**")
+            st.write(f"P: {row['Pivot (P)']}, R1: {row['Resistance 1 (R1)']}, R2: {row['Resistance 2 (R2)']}, S1: {row['Support 1 (S1)']}, S2: {row['Support 2 (S2)']}")
+
+            st.markdown("---")
+            st.markdown("**Rationale:**")
+            st.write(row['Rationale'])
+
+            st.markdown("---")
+            st.markdown("**Detailed Entry Criteria:**")
+            st.markdown(row['Entry Criteria Details'])
+
+            st.markdown("---")
+            st.markdown("**Detailed Exit Criteria:**")
+            st.markdown(row['Exit Criteria Details'])
+
+def display_economic_sentiment_tab(economic_score, investor_sentiment_score, news_sentiment_score, finviz_headlines, latest_gdp, latest_cpi, latest_unemployment, vix_data):
+    """
+    Displays economic and investor sentiment data and scores.
+    """
+    st.markdown("### 🌍 Economic & Investor Sentiment Overview")
+
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Overall Economic Score", f"{economic_score:.0f}%")
+    with col2:
+        st.metric("Overall Investor Sentiment Score", f"{investor_sentiment_score:.0f}%")
+    with col3:
+        st.metric("News Sentiment Score (Finviz)", f"{news_sentiment_score:.0f}%")
+
+    st.markdown("---")
+    st.subheader("Key Economic Indicators")
+    
+    if latest_gdp is not None and not latest_gdp.empty:
+        st.write(f"**Latest GDP Growth:** {latest_gdp.iloc[-1]:.2f}% (as of {latest_gdp.index[-1].strftime('%Y-%m-%d')})")
+    else:
+        st.info("GDP data not available.")
+
+    if latest_cpi is not None and not latest_cpi.empty:
+        st.write(f"**Latest CPI (Inflation):** {latest_cpi.iloc[-1]:.2f} (as of {latest_cpi.index[-1].strftime('%Y-%m-%d')})")
+    else:
+        st.info("CPI data not available.")
+
+    if latest_unemployment is not None and not latest_unemployment.empty:
+        st.write(f"**Latest Unemployment Rate:** {latest_unemployment.iloc[-1]:.2f}% (as of {latest_unemployment.index[-1].strftime('%Y-%m-%d')})")
+    else:
+        st.info("Unemployment data not available.")
+
+    st.markdown("---")
+    st.subheader("VIX (Volatility Index)")
+    if vix_data is not None and not vix_data.empty:
+        st.write(f"**Latest VIX Reading:** {vix_data['Close'].iloc[-1]:.2f}")
+        st.write(f"**VIX 1-Year Average:** {vix_data['Close'].mean():.2f}")
+        
+        # Plot VIX
+        fig, ax = plt.subplots(figsize=(10, 4))
+        ax.plot(vix_data.index, vix_data['Close'], label='VIX Close')
+        ax.axhline(vix_data['Close'].mean(), color='red', linestyle='--', label='1-Year Average')
+        ax.set_title('VIX (CBOE Volatility Index)')
+        ax.set_xlabel('Date')
+        ax.set_ylabel('VIX Value')
+        ax.grid(True)
+        ax.legend()
+        st.pyplot(fig)
+        plt.close(fig)
+    else:
+        st.info("VIX data not available.")
+
+    st.markdown("---")
+    st.subheader("Latest News Headlines (from Finviz)")
+    if finviz_headlines:
+        for i, headline in enumerate(finviz_headlines):
+            st.write(f"- {headline}")
+    else:
+        st.info("No recent news headlines found.")
 
 # === Helper for Indicator Display ===
 def format_indicator_display(signal_name_base, current_value, bullish_fired, bearish_fired, is_selected):
