@@ -1,4 +1,4 @@
-# display_components.py - Final Version (v4.2)
+# display_components.py - Final Version (v4.3)
 
 import streamlit as st
 import pandas as pd
@@ -8,6 +8,7 @@ import yfinance as yf
 import os
 import numpy as np
 from datetime import datetime
+import pytz # Import pytz for timezone handling
 
 # Import functions from utils.py
 from utils import (
@@ -63,8 +64,20 @@ def display_technical_analysis_tab(ticker, df_calculated, is_intraday, indicator
         st.info("No valid date data in the DataFrame index after cleaning. Cannot display chart.")
         return
 
+    # --- FIX START: Handle timezone-aware comparison ---
+    # Get the timezone from the DataFrame's index if it's timezone-aware
+    # If the index is naive, pd.Timestamp.now() (naive) will work.
+    # If it's timezone-aware, we need to make pd.Timestamp.now() timezone-aware too.
+    if df_calculated.index.tz is not None:
+        # Create a timezone-aware timestamp matching the DataFrame's timezone
+        current_time_aware = pd.Timestamp.now(tz=df_calculated.index.tz)
+    else:
+        # If DataFrame index is naive, use a naive timestamp for comparison
+        current_time_aware = pd.Timestamp.now()
+
     # Filter out future dates if any (e.g., from some data sources)
-    df_calculated = df_calculated[df_calculated.index <= pd.Timestamp.now()]
+    df_calculated = df_calculated[df_calculated.index <= current_time_aware]
+    # --- FIX END ---
 
     # Create subplots for the chart and indicators
     add_plots = []
@@ -459,7 +472,7 @@ def display_scanner_tab(scanner_results_df):
             
             st.markdown("---")
             st.markdown("**Pivot Points:**")
-            st.write(f"P: {row['Pivot (P)']}, R1: {row['Resistance 1 (R1)']}, R2: {row['Resistance 2 (R2)']}, S1: {row['Support 1 (S1)']}, S2: {row['Support 2 (S2)']}")
+            st.write(f"P: {row['Pivot (P)']}, R1: {row['R1']}, S1: {row['S1']}, R2: {row['R2']}, S2: {row['S2']}")
 
             st.markdown("---")
             st.markdown("**Rationale:**")
@@ -496,12 +509,12 @@ def display_economic_sentiment_tab(economic_score, investor_sentiment_score, new
         st.info("GDP data not available.")
 
     if latest_cpi is not None and not latest_cpi.empty:
-        st.write(f"**Latest CPI (Inflation):** {latest_cpi.iloc[-1]:.2f} (as of {latest_cpi.index[-1].strftime('%Y-%m-%d')})")
+        st.write(f"**Latest CPI (Inflation):** {latest_cpi.iloc[-1]:.2f}" (as of {latest_cpi.index[-1].strftime('%Y-%m-%d')})")
     else:
         st.info("CPI data not available.")
 
     if latest_unemployment is not None and not latest_unemployment.empty:
-        st.write(f"**Latest Unemployment Rate:** {latest_unemployment.iloc[-1]:.2f}% (as of {latest_unemployment.index[-1].strftime('%Y-%m-%d')})")
+        st.write(f"**Latest Unemployment Rate:** {latest_unemployment.iloc[-1]:.2f}%" (as of {latest_unemployment.index[-1].strftime('%Y-%m-%d')})")
     else:
         st.info("Unemployment data not available.")
 
