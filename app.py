@@ -44,7 +44,7 @@ except ImportError as e:
     raise
 
 # === Page Setup ===
-st.set_page_config(page_title="Aatif's AI Trading Hub", layout="wide", theme="dark") # Set dark theme
+st.set_page_config(page_title="Aatif's AI Trading Hub", layout="wide", initial_sidebar_state="expanded")
 st.title("🚀 Aatif's AI-Powered Trading Hub")
 
 # === Constants and Configuration ===
