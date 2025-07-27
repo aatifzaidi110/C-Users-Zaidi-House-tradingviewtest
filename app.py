@@ -1,11 +1,10 @@
-# app.py - Final Version
+# app.py - Final Version (v1.33)
 import sys
 import os
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt # Needed for plt.close() in display_components
 import yfinance as yf # Keep this import here for direct yf usage if any, though it's also in utils
-import datetime # Import datetime for date calculations
 
 print("Current working directory:", os.getcwd())
 print("Directory contents:", os.listdir())
@@ -23,309 +22,352 @@ from utils import (
     get_finviz_data, get_data, get_options_chain,
     calculate_indicators, calculate_pivot_points,
     generate_signals_for_row, backtest_strategy, get_moneyness, analyze_options_chain,
-    suggest_options_strategy,
-    calculate_confidence_score, # Ensure calculate_confidence_score is imported from utils
-    calculate_economic_score, # NEW
-    calculate_sentiment_score, # NEW
-    run_stock_scanner, # NEW
-    generate_directional_trade_plan # Ensure this is imported for the scanner
+    suggest_options_strategy, generate_directional_trade_plan, # Ensure this is imported
+    calculate_confidence_score, convert_finviz_recom_to_score, # Ensure these are imported
+    get_economic_data_fred, get_vix_data, calculate_economic_score, calculate_sentiment_score, # New imports
+    run_stock_scanner # New scanner function
 )
-try:
-    from display_components import (
-        display_main_analysis_tab, display_trade_plan_options_tab,
-        display_backtest_tab, display_news_info_tab, display_trade_log_tab,
-        display_option_calculator_tab,
-        display_economic_data_tab, # NEW
-        display_investor_sentiment_tab, # NEW
-        display_scanner_results_tab # NEW
-    )
-except ImportError as e:
-    print("Import error details:", str(e))
-    raise
+
+from display_components import (
+    display_technical_analysis_tab, display_options_analysis_tab,
+    display_backtesting_tab, display_trade_log_tab,
+    display_scanner_tab, display_economic_sentiment_tab, # New display components
+    display_option_calculator_tab # Ensure this is imported
+)
 
 # === Page Setup ===
+# Removed 'theme="dark"' as it's deprecated/removed in newer Streamlit versions
 st.set_page_config(page_title="Aatif's AI Trading Hub", layout="wide", initial_sidebar_state="expanded")
 st.title("🚀 Aatif's AI-Powered Trading Hub")
 
 # === Constants and Configuration ===
-LOG_FILE = "trade_log.csv" # Define here or pass from a config module
+LOG_FILE = "trade_log.csv"
 
-# === SIDEBAR: Controls & Selections ===
-st.sidebar.header("⚙️ Controls")
-ticker_input = st.sidebar.text_input("Enter Ticker Symbol", value="NVDA").upper().strip()
+# --- Sidebar Inputs ---
+st.sidebar.header("Configuration")
+ticker = st.sidebar.text_input("Enter Stock Ticker (e.g., AAPL)", "AAPL").upper()
 
-# === Buttons (Moved to directly under ticker search bar) ===
-with st.sidebar.container():
-    if st.button("▶️ Analyze Ticker", help="Click to analyze the entered ticker and display results."):
-        st.session_state.analysis_started = True
-        st.session_state.scan_started = False # Stop scan if analysis is started
-        st.rerun()
+# Timeframe selection
+timeframe_options = {
+    "1 Day": {"period": "1y", "interval": "1d"},
+    "5 Day": {"period": "5d", "interval": "1m"}, # Intraday
+    "1 Month": {"period": "1mo", "interval": "1m"}, # Intraday
+    "3 Month": {"period": "3mo", "interval": "1h"}, # Intraday
+    "6 Month": {"period": "6mo", "interval": "1d"},
+    "1 Year": {"period": "1y", "interval": "1d"},
+    "2 Year": {"period": "2y", "interval": "1d"},
+    "5 Year": {"period": "5y", "interval": "1wk"},
+    "10 Year": {"period": "10y", "interval": "1wk"},
+    "YTD": {"period": "ytd", "interval": "1d"},
+    "Max": {"period": "max", "interval": "1mo"}
+}
+selected_timeframe = st.sidebar.selectbox("Select Timeframe", list(timeframe_options.keys()))
+period = timeframe_options[selected_timeframe]["period"]
+interval = timeframe_options[selected_timeframe]["interval"]
+is_intraday = interval in ["1m", "1h"]
 
-    if st.button("🔄 Clear Cache & Refresh Data", help="Click to clear all cached data and re-run analysis from scratch."):
-        st.cache_data.clear() # Clear all cached data
-        st.session_state.analysis_started = False # Reset analysis state
-        st.session_state.scan_started = False # Reset scan state
-        st.rerun()
-
-timeframe = st.sidebar.radio("Choose Trading Style:", ["Scalp Trading", "Day Trading", "Swing Trading", "Position Trading"], index=2)
-
-st.sidebar.header("🔧 Technical Indicator Selection")
-with st.sidebar.expander("Trend Indicators", expanded=True):
-    indicator_selection = {
-        "EMA Trend": st.checkbox("EMA Trend (21, 50, 200)", value=True),
-        "Ichimoku Cloud": st.checkbox("Ichimoku Cloud", value=True),
-        "Parabolic SAR": st.checkbox("Parabolic SAR", value=True),
-        "ADX": st.checkbox("ADX", value=True),
+# Confidence Weight Sliders
+st.sidebar.subheader("Confidence Score Weights (%)")
+# Initialize session state for weights if not already present
+if 'weights' not in st.session_state:
+    st.session_state.weights = {
+        'technical': 40,
+        'sentiment': 20,
+        'expert': 20,
+        'economic': 10,
+        'investor_sentiment': 10
     }
-with st.sidebar.expander("Momentum & Volume Indicators"):
-    indicator_selection.update({
-        "RSI Momentum": st.checkbox("RSI Momentum", value=True),
-        "Stochastic": st.checkbox("Stochastic Oscillator", value=True),
-        "CCI": st.checkbox("Commodity Channel Index (CCI)", value=True),
-        "ROC": st.checkbox("Rate of Change (ROC)", value=True),
-        "Volume Spike": st.checkbox("Volume Spike", value=True),
-        "OBV": st.checkbox("On-Balance Volume (OBV)", value=True),
-        "VWAP": st.checkbox("VWAP (Intraday only)", value=True, disabled=(timeframe not in ["Scalp Trading", "Day Trading"])),
-    })
-with st.sidebar.expander("Display-Only Indicators"):
-    indicator_selection.update({
-        "Bollinger Bands": st.checkbox("Bollinger Bands Display", value=True),
-        "Pivot Points": st.checkbox("Pivot Points Display (Daily only)", value=True, disabled=(timeframe not in ["Swing Trading", "Position Trading"])),
-    })
 
-st.sidebar.header("🧠 Qualitative Scores")
-use_automation = st.sidebar.toggle("Enable Automated Scoring", value=True, help="ON: AI scores are used. OFF: Use manual sliders and only the Technical Score will count.")
+# Sliders for weights
+tech_weight = st.sidebar.slider("Technical Analysis", 0, 100, st.session_state.weights['technical'], key="tech_weight_slider")
+sentiment_weight = st.sidebar.slider("News Sentiment", 0, 100, st.session_state.weights['sentiment'], key="sentiment_weight_slider")
+expert_weight = st.sidebar.slider("Expert Ratings", 0, 100, st.session_state.weights['expert'], key="expert_weight_slider")
+economic_weight = st.sidebar.slider("Economic Data", 0, 100, st.session_state.weights['economic'], key="economic_weight_slider")
+investor_sentiment_weight = st.sidebar.slider("Investor Sentiment", 0, 100, st.session_state.weights['investor_sentiment'], key="investor_sentiment_weight_slider")
 
-# NEW: Confidence Score Weights (Moved here for better organization)
-st.sidebar.subheader("Confidence Score Weights")
-weight_technical = st.sidebar.slider("Technical Analysis Weight", 0.0, 1.0, 0.4, 0.05, key="w_tech")
-weight_sentiment = st.sidebar.slider("News Sentiment Weight", 0.0, 1.0, 0.2, 0.05, key="w_sent")
-weight_expert = st.sidebar.slider("Expert Rating Weight", 0.0, 1.0, 0.2, 0.05, key="w_expert")
-weight_economic = st.sidebar.slider("Economic Data Weight", 0.0, 1.0, 0.1, 0.05, key="w_eco") # NEW
-weight_investor_sentiment = st.sidebar.slider("Investor Sentiment Weight", 0.0, 1.0, 0.1, 0.05, key="w_inv_sent") # NEW
+# Update session state weights
+st.session_state.weights['technical'] = tech_weight
+st.session_state.weights['sentiment'] = sentiment_weight
+st.session_state.weights['expert'] = expert_weight
+st.session_state.weights['economic'] = economic_weight
+st.session_state.weights['investor_sentiment'] = investor_sentiment_weight
 
-total_weights = weight_technical + weight_sentiment + weight_expert + weight_economic + weight_investor_sentiment
-if total_weights == 0:
-    st.sidebar.warning("Total weights cannot be zero. Adjust sliders.")
-    # Set a default if all are zero to prevent division by zero
-    final_weights = {'technical': 0.25, 'sentiment': 0.25, 'expert': 0.25, 'economic': 0.125, 'investor_sentiment': 0.125}
+# Normalize weights to sum to 1.0 for the calculation function
+total_weights = (tech_weight + sentiment_weight + expert_weight + economic_weight + investor_sentiment_weight)
+if total_weights == 0: # Avoid division by zero
+    st.sidebar.warning("Total weights sum to 0. Please adjust weights.")
+    normalized_weights = {k: 0 for k in st.session_state.weights}
 else:
-    final_weights = {
-        'technical': weight_technical / total_weights,
-        'sentiment': weight_sentiment / total_weights,
-        'expert': weight_expert / total_weights,
-        'economic': economic_weight / total_weights, # Corrected variable name
-        'investor_sentiment': weight_investor_sentiment / total_weights
+    normalized_weights = {
+        'technical': tech_weight / total_weights,
+        'sentiment': sentiment_weight / total_weights,
+        'expert': expert_weight / total_weights,
+        'economic': economic_weight / total_weights,
+        'investor_sentiment': investor_sentiment_weight / total_weights
     }
 
+st.sidebar.markdown(f"**Total Weight: {total_weights}%**")
+if total_weights != 100:
+    st.sidebar.warning("Weights do not sum to 100%. Please adjust for accurate scoring.")
 
-# === NEW: Stock Scanner Controls ===
-st.sidebar.markdown("---")
-st.sidebar.header("🔍 Stock Scanner")
-scanner_tickers_input = st.sidebar.text_area("Tickers to Scan (comma-separated)", value="AAPL,MSFT,GOOGL,AMZN,NVDA").upper().strip()
-scanner_trading_style = st.sidebar.selectbox(
-    "Scanner Trading Style",
-    ["Day Trading Long", "Day Trading Short", "Swing Trading Call", "Swing Trading Put"],
-    key="scanner_style"
-)
-min_scanner_confidence = st.sidebar.slider("Minimum Scanner Confidence (%)", 0, 100, 70, 5, key="min_scan_conf")
 
-if st.sidebar.button("🚀 Run Scanner", help="Scan multiple tickers for opportunities."):
-    st.session_state.scan_started = True
-    st.session_state.analysis_started = False # Stop single ticker analysis if scan is started
-    st.session_state.scanner_results = pd.DataFrame() # Clear previous results
+# === Technical Indicator Selection for Signal Generation and Scanner ===
+st.sidebar.subheader("Technical Indicators for Signals")
+# Initialize session state for indicator selection
+if 'indicator_selection' not in st.session_state:
+    st.session_state.indicator_selection = {
+        "EMA Trend": True,
+        "Ichimoku Cloud": True,
+        "Parabolic SAR": True,
+        "ADX": True,
+        "RSI Momentum": True,
+        "Stochastic": True,
+        "MACD": True,
+        "Bollinger Bands": False, # Typically for volatility, not direct signal
+        "Volume Spike": True,
+        "CCI": True,
+        "ROC": True,
+        "OBV": True,
+        "VWAP": True, # Intraday specific
+        "Pivot Points": False # For support/resistance, not direct signal
+    }
+
+# Checkboxes for indicator selection
+st.sidebar.markdown("**Trend Indicators**")
+st.session_state.indicator_selection["EMA Trend"] = st.sidebar.checkbox("EMA Trend (21, 50, 200)", value=st.session_state.indicator_selection["EMA Trend"])
+st.session_state.indicator_selection["Ichimoku Cloud"] = st.sidebar.checkbox("Ichimoku Cloud", value=st.session_state.indicator_selection["Ichimoku Cloud"])
+st.session_state.indicator_selection["Parabolic SAR"] = st.sidebar.checkbox("Parabolic SAR", value=st.session_state.indicator_selection["Parabolic SAR"])
+st.session_state.indicator_selection["ADX"] = st.sidebar.checkbox("ADX (Average Directional Index)", value=st.session_state.indicator_selection["ADX"])
+
+st.sidebar.markdown("**Momentum & Volume Indicators**")
+st.session_state.indicator_selection["RSI Momentum"] = st.sidebar.checkbox("RSI (Relative Strength Index)", value=st.session_state.indicator_selection["RSI Momentum"])
+st.session_state.indicator_selection["Stochastic"] = st.sidebar.checkbox("Stochastic Oscillator", value=st.session_state.indicator_selection["Stochastic"])
+st.session_state.indicator_selection["MACD"] = st.sidebar.checkbox("MACD (Moving Average Convergence Divergence)", value=st.session_state.indicator_selection["MACD"])
+st.session_state.indicator_selection["Volume Spike"] = st.sidebar.checkbox("Volume Spike", value=st.session_state.indicator_selection["Volume Spike"])
+st.session_state.indicator_selection["CCI"] = st.sidebar.checkbox("CCI (Commodity Channel Index)", value=st.session_state.indicator_selection["CCI"])
+st.session_state.indicator_selection["ROC"] = st.sidebar.checkbox("ROC (Rate of Change)", value=st.session_state.indicator_selection["ROC"])
+st.session_state.indicator_selection["OBV"] = st.sidebar.checkbox("OBV (On Balance Volume)", value=st.session_state.indicator_selection["OBV"])
+
+st.sidebar.markdown("**Volatility & Other Indicators**")
+st.session_state.indicator_selection["Bollinger Bands"] = st.sidebar.checkbox("Bollinger Bands", value=st.session_state.indicator_selection["Bollinger Bands"])
+st.session_state.indicator_selection["VWAP"] = st.sidebar.checkbox("VWAP (Volume Weighted Average Price) - Intraday Only", value=st.session_state.indicator_selection["VWAP"])
+st.session_state.indicator_selection["Pivot Points"] = st.sidebar.checkbox("Pivot Points (Support/Resistance)", value=st.session_state.indicator_selection["Pivot Points"])
+
+
+# --- Main Analysis Button ---
+analyze_button = st.sidebar.button("Analyze Ticker")
+clear_cache_button = st.sidebar.button("Clear Cache & Refresh Data")
+
+if clear_cache_button:
+    st.cache_data.clear()
     st.rerun()
 
+# --- Stock Scanner Section ---
+st.sidebar.markdown("---")
+st.sidebar.header("Stock Scanner")
+scanner_ticker_list_str = st.sidebar.text_area("Tickers for Scanner (comma-separated)", "AAPL,MSFT,GOOGL,AMZN,TSLA")
+scanner_ticker_list = [t.strip().upper() for t in scanner_ticker_list_str.split(',') if t.strip()]
 
-# Initialize session state for analysis and scan control
-if 'analysis_started' not in st.session_state:
-    st.session_state.analysis_started = False
-if 'scan_started' not in st.session_state:
-    st.session_state.scan_started = False
-if 'scanner_results' not in st.session_state:
-    st.session_state.scanner_results = pd.DataFrame()
+trading_style_options = [
+    "Day Trading Long", "Day Trading Short",
+    "Swing Trading Call", "Swing Trading Put",
+    "Long-Term Investment" # Added for completeness, though not actively used for signals yet
+]
+selected_trading_style = st.sidebar.selectbox("Select Trading Style", trading_style_options)
+min_scanner_confidence = st.sidebar.slider("Minimum Scanner Confidence (%)", 0, 100, 70)
+
+run_scanner_button = st.sidebar.button("Run Scanner")
 
 
-# Main Script Execution
-TIMEFRAME_MAP = {
-    "Scalp Trading": {"period": "5d", "interval": "5m"},
-    "Day Trading": {"period": "60d", "interval": "60m"},
-    "Swing Trading": {"period": "1y", "interval": "1d"},
-    "Position Trading": {"period": "5y", "interval": "1wk"}
-}
-selected_params_main = TIMEFRAME_MAP[timeframe]
-
-# --- Main Analysis Logic ---
-if st.session_state.analysis_started and ticker_input:
-    ticker = ticker_input
-
-    # Fetch Finviz data once for the main analysis flow
-    finviz_data = get_finviz_data(ticker)
-
-    # Fetch Economic Data
-    today = datetime.date.today()
-    one_year_ago = today - datetime.timedelta(days=365)
+# --- Main Content Area ---
+if analyze_button and ticker:
+    st.header(f"Analyzing {ticker}")
     
-    gdp_data = get_economic_data_fred('GDP', one_year_ago.strftime('%Y-%m-%d'), today.strftime('%Y-%m-%d'))
-    cpi_data = get_economic_data_fred('CPIAUCSL', one_year_ago.strftime('%Y-%m-%d'), today.strftime('%Y-%m-%d'))
-    unemployment_data = get_economic_data_fred('UNRATE', one_year_ago.strftime('%Y-%m-%d'), today.strftime('%Y-%m-%d'))
+    # Fetch data and calculate indicators
+    with st.spinner(f"Fetching and calculating data for {ticker} ({selected_timeframe})..."):
+        df_hist, stock_info = get_data(ticker, period, interval)
+        
+        if df_hist.empty:
+            st.error(f"Could not retrieve data for {ticker}. Please check the ticker symbol and timeframe.", icon="🚫")
+            st.stop()
 
-    latest_gdp = gdp_data.iloc[-1] if gdp_data is not None and not gdp_data.empty else None
-    latest_cpi = cpi_data.iloc[-1] if cpi_data is not None and not cpi_data.empty else None
-    latest_unemployment = unemployment_data.iloc[-1] if unemployment_data is not None and not unemployment_data.empty else None
+        df_calculated = calculate_indicators(df_hist.copy(), is_intraday)
+        
+        if df_calculated.empty:
+            st.warning(f"Not enough data to calculate indicators for {ticker} with the selected timeframe. Displaying raw data if available.", icon="⚠️")
+            df_calculated = df_hist.copy() # Fallback to raw data if indicators can't be calculated
 
-    economic_score_current = calculate_economic_score(latest_gdp, latest_cpi, latest_unemployment)
+        # Get Finviz data for sentiment and expert ratings
+        finviz_data = get_finviz_data(ticker)
+        
+        # Get economic and investor sentiment data
+        today = datetime.date.today()
+        one_year_ago = today - datetime.timedelta(days=365)
 
-    # Fetch Investor Sentiment Data (VIX example)
-    vix_data = get_vix_data(one_year_ago.strftime('%Y-%m-%d'), today.strftime('%Y-%m-%d'))
-    latest_vix = vix_data['Close'].iloc[-1] if vix_data is not None and not vix_data.empty else None
-    historical_vix_avg = vix_data['Close'].mean() if vix_data is not None and not vix_data.empty else None
+        latest_gdp = get_economic_data_fred('GDP', one_year_ago.strftime('%Y-%m-%d'), today.strftime('%Y-%m-%d'))
+        latest_cpi = get_economic_data_fred('CPIAUCSL', one_year_ago.strftime('%Y-%m-%d'), today.strftime('%Y-%m-%d'))
+        latest_unemployment = get_economic_data_fred('UNRATE', one_year_ago.strftime('%Y-%m-%d'), today.strftime('%Y-%m-%d'))
 
-    investor_sentiment_score_current = calculate_sentiment_score(latest_vix, historical_vix_avg)
+        economic_score_val = calculate_economic_score(
+            latest_gdp.iloc[-1] if latest_gdp is not None and not latest_gdp.empty else None,
+            latest_cpi.iloc[-1] if latest_cpi is not None and not latest_cpi.empty else None,
+            latest_unemployment.iloc[-1] if latest_unemployment is not None and not latest_unemployment.empty else None
+        )
 
-    try:
-        hist_data, info_data = get_data(ticker, selected_params_main['period'], selected_params_main['interval'])
-        if hist_data.empty or not info_data:
-            st.error(f"Could not fetch data for {ticker} on a {selected_params_main['interval']} interval. Please check the ticker symbol or try again later.")
+        vix_data = get_vix_data(one_year_ago.strftime('%Y-%m-%d'), today.strftime('%Y-%m-%d'))
+        latest_vix = vix_data['Close'].iloc[-1] if vix_data is not None and not vix_data.empty else None
+        historical_vix_avg = vix_data['Close'].mean() if vix_data is not None and not vix_data.empty else None
+        investor_sentiment_score_val = calculate_sentiment_score(latest_vix, historical_vix_avg)
+
+    # Calculate overall confidence score
+    if not df_calculated.empty:
+        last_row = df_calculated.iloc[-1]
+        
+        # Generate technical signals for the latest row
+        bullish_signals, bearish_signals = generate_signals_for_row(last_row)
+
+        tech_score_raw = 0
+        total_possible_tech_points = 0
+        for ind_name, is_selected in st.session_state.indicator_selection.items():
+            if is_selected and ind_name not in ["Bollinger Bands", "Pivot Points"]: # Exclude non-directional for scoring
+                total_possible_tech_points += 1
+                if bullish_signals.get(ind_name, False):
+                    tech_score_raw += 1
+                elif bearish_signals.get(ind_name, False):
+                    tech_score_raw -= 1
+        
+        if total_possible_tech_points > 0:
+            technical_score = ((tech_score_raw + total_possible_tech_points) / (2 * total_possible_tech_points)) * 100
         else:
-            is_intraday_data = selected_params_main['interval'] in ['5m', '60m']
-            df_calculated = calculate_indicators(hist_data.copy(), is_intraday_data)
-            df_pivots = calculate_pivot_points(hist_data.copy())
+            technical_score = 50 # Neutral if no selected indicators were directional
 
-            if df_calculated.empty:
-                st.warning(f"No data available for {ticker} after indicator calculations and cleaning. Please check ticker or time period.", icon="⚠️")
-            else:
-                last_row_for_signals = df_calculated.iloc[-1]
-                bullish_signals, bearish_signals = generate_signals_for_row(last_row_for_signals)
+        # News sentiment score (Finviz)
+        news_sentiment_score = finviz_data.get("sentiment_compound", 0) * 100
 
-                # Calculate the technical score component
-                tech_score_raw = 0
-                total_possible_tech_points = 0
-                all_indicator_names = [
-                    "EMA Trend", "Ichimoku Cloud", "Parabolic SAR", "ADX",
-                    "RSI Momentum", "Stochastic", "MACD", "Volume Spike",
-                    "CCI", "ROC", "OBV", "VWAP"
-                ]
-                for ind_name in all_indicator_names:
-                    is_selected_in_sidebar = indicator_selection.get(ind_name, False)
-                    if is_selected_in_sidebar:
-                        total_possible_tech_points += 1
-                        if bullish_signals.get(ind_name, False):
-                            tech_score_raw += 1
-                        elif bearish_signals.get(ind_name, False):
-                            tech_score_raw -= 1
-                
-                technical_score_current = 50 # Default neutral
-                if total_possible_tech_points > 0:
-                    technical_score_current = ((tech_score_raw + total_possible_tech_points) / (2 * total_possible_tech_points)) * 100
+        # Expert rating score (Finviz)
+        expert_recom_str = stock_info.get('recommendationMean', None)
+        expert_score = convert_finviz_recom_to_score(str(expert_recom_str))
 
-                # Use the fetched Finviz sentiment and expert scores directly if automation is on
-                # Otherwise, use manual sliders (which are now handled by passing to calculate_confidence_score)
-                sentiment_score_for_confidence = finviz_data.get("sentiment_compound", 0) * 100
-                expert_score_for_confidence = (lambda recom_str: (100 - (float(recom_str) - 1) * 25) if recom_str != "N/A" else 50)(finviz_data.get("recom_str", "N/A"))
-
-
-                # Calculate overall confidence using the unified function
-                confidence_results = calculate_confidence_score(
-                    technical_score_current,
-                    sentiment_score_for_confidence if use_automation else st.session_state.get('manual_sentiment_score', 50),
-                    expert_score_for_confidence if use_automation else st.session_state.get('manual_expert_score', 50),
-                    economic_score_current,
-                    investor_sentiment_score_current,
-                    final_weights
-                )
-                overall_confidence = confidence_results['score']
-                trade_direction = confidence_results['direction']
-                scores = confidence_results['components'] # This now contains all 5 component scores
-
-                st.subheader(f"📈 Analysis for {ticker}")
-                tab_list = ["📊 Main Analysis", "📈 Trade Plan & Options", "🧪 Backtest", "📰 News & Info", "📝 Trade Log", "🧮 Option Calculator", "📊 Economic Data", "❤️ Investor Sentiment", "📚 Glossary"] # Added Glossary tab
-                main_tab, trade_tab, backtest_tab, news_tab, log_tab, option_calc_tab, economic_tab, investor_sentiment_tab, glossary_tab = st.tabs(tab_list) # Added glossary_tab
-
-                with main_tab:
-                    display_main_analysis_tab(
-                        ticker, df_calculated, info_data, selected_params_main, 
-                        indicator_selection, overall_confidence, scores, final_weights, 
-                        sentiment_score_for_confidence, expert_score_for_confidence, df_pivots, trade_direction
-                    )
-                
-                with trade_tab:
-                    display_trade_plan_options_tab(ticker, df_calculated, overall_confidence, timeframe, trade_direction)
-                
-                with backtest_tab:
-                    st.markdown("---")
-                    st.subheader("🧪 Historical Backtest Parameters")
-                    backtest_direction_radio = st.radio(
-                        f"Select Backtest Direction for {ticker}:",
-                        ["Long (Bullish)", "Short (Bearish)"],
-                        key=f"backtest_direction_{ticker}",
-                        horizontal=True
-                    )
-                    current_price = df_calculated.iloc[-1]['Close']
-                    prev_close = df_calculated.iloc[-2]['Close'] if len(df_calculated) > 1 else current_price
-                    display_backtest_tab(ticker, indicator_selection, current_price, prev_close, overall_confidence, backtest_direction_radio.split(' ')[0].lower())
-                
-                with news_tab:
-                    current_price = df_calculated.iloc[-1]['Close']
-                    prev_close = df_calculated.iloc[-2]['Close'] if len(df_calculated) > 1 else current_price
-                    display_news_info_tab(ticker, info_data, finviz_data, current_price, prev_close, overall_confidence, trade_direction)
-                
-                with log_tab:
-                    current_price = df_calculated.iloc[-1]['Close']
-                    prev_close = df_calculated.iloc[-2]['Close'] if len(df_calculated) > 1 else current_price
-                    display_trade_log_tab(LOG_FILE, ticker, timeframe, overall_confidence, current_price, prev_close, trade_direction)
-                
-                with option_calc_tab:
-                    current_stock_price = df_calculated.iloc[-1]['Close']
-                    stock_obj_for_options = yf.Ticker(ticker)
-                    expirations = stock_obj_for_options.options
-                    prev_close = df_calculated.iloc[-2]['Close'] if len(df_calculated) > 1 else current_stock_price
-                    display_option_calculator_tab(ticker, current_stock_price, expirations, prev_close, overall_confidence, trade_direction)
-
-                with economic_tab: # NEW Economic Data Tab
-                    current_price = df_calculated.iloc[-1]['Close']
-                    prev_close = df_calculated.iloc[-2]['Close'] if len(df_calculated) > 1 else current_price
-                    display_economic_data_tab(ticker, current_price, prev_close, overall_confidence, trade_direction,
-                                              latest_gdp, latest_cpi, latest_unemployment)
-
-                with investor_sentiment_tab: # NEW Investor Sentiment Tab
-                    current_price = df_calculated.iloc[-1]['Close']
-                    prev_close = df_calculated.iloc[-2]['Close'] if len(df_calculated) > 1 else current_price
-                    display_investor_sentiment_tab(ticker, current_price, prev_close, overall_confidence, trade_direction,
-                                                   latest_vix, historical_vix_avg)
-                with glossary_tab: # Added Glossary tab
-                    st.markdown("### 📚 Glossary")
-                    st.info("The glossary content will be displayed here.") # Placeholder for actual glossary content
-
-
-    except Exception as e:
-        st.error(f"An unexpected error occurred during data processing for {ticker}: {e}", icon="🚫")
-        st.exception(e)
-
-# --- Scanner Results Logic ---
-elif st.session_state.scan_started and scanner_tickers_input:
-    st.subheader(f"🔍 Scan Results for {scanner_trading_style}")
-    tickers_to_scan = [t.strip() for t in scanner_tickers_input.split(',') if t.strip()]
-    
-    if not tickers_to_scan:
-        st.warning("Please enter at least one ticker to scan.")
+        # Calculate overall confidence
+        confidence_results = calculate_confidence_score(
+            technical_score,
+            news_sentiment_score,
+            expert_score,
+            economic_score_val, # Use the calculated economic score
+            investor_sentiment_score_val, # Use the calculated investor sentiment score
+            normalized_weights # Pass the normalized weights here
+        )
+        overall_confidence = confidence_results['score']
+        trade_direction = confidence_results['direction']
     else:
-        with st.spinner(f"Running scanner for {scanner_trading_style} on {len(tickers_to_scan)} tickers... This may take a while."):
-            # Pass the indicator_selection and final_weights to the scanner
-            scanner_results_df = run_stock_scanner(
-                tickers_to_scan,
-                scanner_trading_style,
-                min_scanner_confidence,
-                indicator_selection, # Pass the current indicator selection
-                final_weights # Pass the current confidence weights
-            )
-            st.session_state.scanner_results = scanner_results_df # Store results in session state
+        overall_confidence = 50
+        trade_direction = "Neutral"
+        technical_score = 50
+        news_sentiment_score = 50
+        expert_score = 50
+        economic_score_val = 50
+        investor_sentiment_score_val = 50
 
-        if not st.session_state.scanner_results.empty:
-            display_scanner_results_tab(st.session_state.scanner_results)
+    # Create tabs for different analysis views
+    tab_titles = [
+        "📊 Technical Analysis", "📈 Options Analysis", "🤖 Backtesting",
+        "📝 Trade Log", "💡 Trade Plan", "🌍 Economic & Sentiment", "📚 Glossary"
+    ]
+    
+    # Check if df_calculated is empty and adjust tabs accordingly
+    if df_calculated.empty:
+        st.warning("No data available for technical analysis. Some tabs may be empty.")
+        # Filter out tabs that heavily rely on df_calculated if it's empty
+        tab_titles = ["📝 Trade Log", "💡 Trade Plan", "🌍 Economic & Sentiment", "📚 Glossary"]
+
+
+    tabs = st.tabs(tab_titles)
+
+    with tabs[0]: # 📊 Technical Analysis
+        if not df_calculated.empty:
+            display_technical_analysis_tab(ticker, df_calculated, is_intraday, st.session_state.indicator_selection)
         else:
-            st.info(f"No tickers found matching the criteria for '{scanner_trading_style}' with confidence >= {min_scanner_confidence}%.")
-else:
-    st.info("Enter a stock ticker in the sidebar and click 'Analyze Ticker' to begin analysis, or use the 'Stock Scanner' to find opportunities across multiple tickers.")
+            st.info("No data to display technical analysis.")
 
+    with tabs[1]: # 📈 Options Analysis
+        current_stock_price = df_calculated.iloc[-1]['Close'] if not df_calculated.empty else None
+        if current_stock_price:
+            stock_obj_for_options = yf.Ticker(ticker)
+            expirations = stock_obj_for_options.options
+            display_options_analysis_tab(ticker, current_stock_price, expirations, trade_direction, overall_confidence)
+        else:
+            st.info("No stock price data to perform options analysis.")
+
+    with tabs[2]: # 🤖 Backtesting
+        if not df_hist.empty:
+            display_backtesting_tab(df_hist, st.session_state.indicator_selection)
+        else:
+            st.info("No historical data available for backtesting.")
+
+    with tabs[3]: # 📝 Trade Log
+        display_trade_log_tab(LOG_FILE, ticker, selected_timeframe, overall_confidence,
+                              df_calculated.iloc[-1]['Close'] if not df_calculated.empty else None,
+                              df_calculated.iloc[-2]['Close'] if not df_calculated.empty and len(df_calculated) > 1 else (df_calculated.iloc[-1]['Close'] if not df_calculated.empty else None),
+                              trade_direction)
+
+    with tabs[4]: # 💡 Trade Plan
+        if not df_calculated.empty:
+            # Pass the full latest_row to generate_directional_trade_plan
+            trade_plan = generate_directional_trade_plan(
+                {'score': overall_confidence, 'band': trade_direction},
+                df_calculated.iloc[-1]['Close'],
+                df_calculated.iloc[-1], # Pass the latest row of df_calculated
+                interval # Pass the interval
+            )
+            
+            st.markdown("### 💡 AI-Generated Trade Plan")
+            if trade_plan['status'] == 'success':
+                st.success(trade_plan['message'])
+                st.write(f"**Direction:** {trade_plan['direction']}")
+                st.write(f"**Current Price:** ${df_calculated.iloc[-1]['Close']:.2f}")
+                st.write(f"**Entry Zone:** ${trade_plan['entry_zone_start']:.2f} - ${trade_plan['entry_zone_end']:.2f}")
+                st.write(f"**Stop Loss:** ${trade_plan['stop_loss']:.2f}")
+                st.write(f"**Profit Target:** ${trade_plan['profit_target']:.2f}")
+                st.write(f"**Reward/Risk Ratio:** {trade_plan['reward_risk_ratio']:.2f}:1")
+                st.markdown(f"**Rationale:** {trade_plan['key_rationale']}")
+            else:
+                st.info(trade_plan['message'])
+        else:
+            st.info("No data to generate a trade plan.")
+
+    with tabs[5]: # 🌍 Economic & Sentiment
+        display_economic_sentiment_tab(
+            economic_score_val,
+            investor_sentiment_score_val,
+            news_sentiment_score,
+            finviz_data.get("headlines", []),
+            latest_gdp,
+            latest_cpi,
+            latest_unemployment,
+            vix_data
+        )
+
+    with tabs[6]: # 📚 Glossary
+        st.markdown("### 📚 Glossary")
+        st.info("The glossary content will be displayed here.") # Placeholder for actual glossary content
+
+elif run_scanner_button:
+    st.header("⚡ Stock Scanner Results")
+    with st.spinner(f"Running scanner for {len(scanner_ticker_list)} tickers with '{selected_trading_style}' style..."):
+        # Pass all necessary parameters to the scanner function
+        scanner_results_df = run_stock_scanner(
+            scanner_ticker_list,
+            selected_trading_style,
+            min_scanner_confidence,
+            st.session_state.indicator_selection, # Pass the full selection dict
+            normalized_weights # Pass the normalized weights
+        )
+
+        if not scanner_results_df.empty:
+            display_scanner_tab(scanner_results_df)
+        else:
+            st.info("No qualifying stocks found based on your criteria.")
+            
+else:
+    st.info("Enter a stock ticker in the sidebar and click 'Analyze Ticker' to begin analysis, or configure and run the 'Stock Scanner'.")
 
