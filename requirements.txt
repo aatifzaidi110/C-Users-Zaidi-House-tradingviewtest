@@ -10,5 +10,6 @@ pandas>=1.5.0
 numpy>=1.23.0
 matplotlib>=3.6.0
 pandas_datareader
+setuptools==80.9.0
 vaderSentiment>=3.3.2  # Optional alternative
 nltk
