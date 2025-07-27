@@ -1,4 +1,4 @@
-# display_components.py - Final Version (v4.3)
+# display_components.py - Final Version (v4.4)
 
 import streamlit as st
 import pandas as pd
@@ -64,19 +64,28 @@ def display_technical_analysis_tab(ticker, df_calculated, is_intraday, indicator
         st.info("No valid date data in the DataFrame index after cleaning. Cannot display chart.")
         return
 
-    # --- FIX START: Handle timezone-aware comparison ---
-    # Get the timezone from the DataFrame's index if it's timezone-aware
-    # If the index is naive, pd.Timestamp.now() (naive) will work.
-    # If it's timezone-aware, we need to make pd.Timestamp.now() timezone-aware too.
+    # --- FIX START: Standardize to UTC for robust comparison ---
+    # Convert DataFrame index to UTC if it's timezone-aware, or localize then convert if naive
     if df_calculated.index.tz is not None:
-        # Create a timezone-aware timestamp matching the DataFrame's timezone
-        current_time_aware = pd.Timestamp.now(tz=df_calculated.index.tz)
+        df_calculated.index = df_calculated.index.tz_convert('UTC')
     else:
-        # If DataFrame index is naive, use a naive timestamp for comparison
-        current_time_aware = pd.Timestamp.now()
+        # If the index is naive, assume it's in a local timezone (e.g., 'America/New_York' from yfinance)
+        # and then convert to UTC. You might need to adjust this 'America/New_York' if your data source
+        # is consistently in a different timezone and is naive.
+        try:
+            df_calculated.index = df_calculated.index.tz_localize('America/New_York', errors='coerce').tz_convert('UTC')
+        except pytz.exceptions.NonExistentTimeError:
+            # Handle cases where localization might fail due to DST gaps, etc.
+            # Fallback to just converting to UTC if already localized, or leave naive if problematic
+            st.warning("Could not localize DataFrame index to 'America/New_York' for UTC conversion. Proceeding with existing timezone or naive index.", icon="⚠️")
+            if df_calculated.index.tz is None: # If still naive after failed localization attempt
+                 df_calculated.index = df_calculated.index.tz_localize('UTC', errors='coerce') # Treat as UTC naive if no other info
+
+    # Create a timezone-aware timestamp in UTC for comparison
+    current_time_utc = pd.Timestamp.now(tz='UTC')
 
     # Filter out future dates if any (e.g., from some data sources)
-    df_calculated = df_calculated[df_calculated.index <= current_time_aware]
+    df_calculated = df_calculated[df_calculated.index <= current_time_utc]
     # --- FIX END ---
 
     # Create subplots for the chart and indicators
@@ -504,7 +513,7 @@ def display_economic_sentiment_tab(economic_score, investor_sentiment_score, new
     st.subheader("Key Economic Indicators")
     
     if latest_gdp is not None and not latest_gdp.empty:
-        st.write(f"**Latest GDP Growth:** {latest_gdp.iloc[-1]:.2f}% (as of {latest_gdp.index[-1].strftime('%Y-%m-%d')})")
+        st.write(f"**Latest GDP Growth:** {latest_gdp.iloc[-1]:.2f}%" (as of {latest_gdp.index[-1].strftime('%Y-%m-%d')})")
     else:
         st.info("GDP data not available.")
 
@@ -1046,7 +1055,7 @@ def display_main_analysis_tab(ticker, df, info, params, selection, overall_confi
                 title=f"{ticker} - {params['interval']} chart",
                 returnfig=True
             )
-            st.pyplot(fig, clear_figure=True)
+            st.pyplot(fig)
             plt.close(fig)
         else:
             st.info("Not enough data to generate chart.")
@@ -1335,4 +1344,3 @@ def display_scanner_results_tab(scanner_results_df):
 
     st.markdown("---")
     st.info("Click on each ticker's header to expand/collapse detailed trade plan information.")
-
