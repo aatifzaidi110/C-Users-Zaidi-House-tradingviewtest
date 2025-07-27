@@ -1,11 +1,11 @@
-# utils.py - Version 3.0
-print("--- utils.py VERSION CHECK: Loading Version 3.0 with all functions ---")
+# utils.py - Version 4.0
+print("--- utils.py VERSION CHECK: Loading Version 4.0 with all functions and scanner ---")
 
 import streamlit as st
 import yfinance as yf
 import pandas as pd
 import pandas_datareader as pdr
-import numpy as np # Imported for calculations
+import numpy as np
 import ta
 import requests
 import datetime
@@ -20,56 +20,113 @@ try:
 except LookupError:
     nltk.download('vader_lexicon')
 
-# === Data Fetching Functions (Largely Unchanged) ===
+# === Data Fetching Functions ===
 @st.cache_data(ttl=900)
 def get_finviz_data(ticker):
     """Fetches analyst recommendations and news sentiment from Finviz."""
     url = f"https://finviz.com/quote.ashx?t={ticker}"
     headers = {'User-Agent': 'Mozilla/5.0'}
     try:
-        with st.spinner(f"Fetching Finviz data for {ticker}..."):
-            response = requests.get(url, headers=headers)
-            response.raise_for_status()
-            soup = BeautifulSoup(response.text, 'html.parser')
-            recom_tag = soup.find('td', text='Recom')
-            analyst_recom_str = recom_tag.find_next_sibling('td').text if recom_tag else "N/A"
-            headlines = [tag.text for tag in soup.findAll('a', class_='news-link-left')[:10]]
-            analyzer = SentimentIntensityAnalyzer()
-            compound_scores = [analyzer.polarity_scores(h)['compound'] for h in headlines]
-            avg_compound = sum(compound_scores) / len(compound_scores) if compound_scores else 0
-            return {"recom_str": analyst_recom_str, "headlines": headlines, "sentiment_compound": avg_compound}
+        # Finviz scraping can be unstable; handle errors gracefully
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.text, 'html.parser')
+        
+        recom_tag = soup.find('td', text='Recom')
+        analyst_recom_str = recom_tag.find_next_sibling('td').text if recom_tag else "N/A"
+        
+        # Extract headlines
+        headlines_tags = soup.findAll('a', class_='news-link-left')
+        headlines = [tag.text for tag in headlines_tags[:10]] # Get top 10 headlines
+        
+        analyzer = SentimentIntensityAnalyzer()
+        compound_scores = [analyzer.polarity_scores(h)['compound'] for h in headlines]
+        avg_compound = sum(compound_scores) / len(compound_scores) if compound_scores else 0
+        
+        return {"recom_str": analyst_recom_str, "headlines": headlines, "sentiment_compound": avg_compound}
     except Exception as e:
-        st.error(f"Error fetching Finviz data: {e}", icon="🚨")
+        # st.error(f"Error fetching Finviz data for {ticker}: {e}", icon="🚨") # Don't show error in scanner loop
         return {"recom_str": "N/A", "headlines": [], "sentiment_compound": 0, "error": str(e)}
 
 @st.cache_data(ttl=60)
-def get_data(symbol, period, interval):
+def get_data(symbol, period, interval, start_date=None, end_date=None):
     """Fetches historical stock data and basic info from Yahoo Finance."""
-    with st.spinner(f"Fetching {period} of {interval} data for {symbol}..."):
-        stock = yf.Ticker(symbol)
-        try:
+    stock = yf.Ticker(symbol)
+    try:
+        # Use start/end date if provided, otherwise use period/interval
+        if start_date and end_date:
+            hist = stock.history(start=start_date, end=end_date, interval=interval, auto_adjust=True)
+        else:
             hist = stock.history(period=period, interval=interval, auto_adjust=True)
-            return (hist, stock.info) if not hist.empty else (None, None)
-        except Exception as e:
-            st.error(f"YFinance error fetching data for {symbol}: {e}", icon="🚫")
-            return None, None
+        
+        # Fetch info separately as stock.history might not always return it directly
+        info = stock.info
+        
+        return (hist, info) if not hist.empty else (pd.DataFrame(), {})
+    except Exception as e:
+        # st.error(f"YFinance error fetching data for {symbol}: {e}", icon="🚫") # Don't show error in scanner loop
+        return pd.DataFrame(), {}
 
 @st.cache_data(ttl=300)
 def get_options_chain(ticker, expiry_date):
     """Fetches call and put options data for a given ticker and expiry."""
-    with st.spinner(f"Fetching options chain for {ticker} ({expiry_date})..."):
-        stock_obj = yf.Ticker(ticker)
-        try:
-            options = stock_obj.option_chain(expiry_date)
-            return options.calls, options.puts
-        except Exception as e:
-            st.warning(f"Could not fetch options chain for {ticker} on {expiry_date}: {e}", icon="⚠️")
-            return pd.DataFrame(), pd.DataFrame()
+    stock_obj = yf.Ticker(ticker)
+    try:
+        options = stock_obj.option_chain(expiry_date)
+        return options.calls, options.puts
+    except Exception as e:
+        # st.warning(f"Could not fetch options chain for {ticker} on {expiry_date}: {e}", icon="⚠️") # Don't show error in scanner loop
+        return pd.DataFrame(), pd.DataFrame()
 
-# === Indicator Calculation (Largely Unchanged) ===
+# --- NEW: Economic Data Fetching ---
+@st.cache_data(ttl=3600) # Cache for longer as economic data updates less frequently
+def get_economic_data_fred(series_id, start_date, end_date):
+    """
+    Fetches economic data from FRED (Federal Reserve Economic Data).
+    
+    Args:
+        series_id (str): The FRED series ID (e.g., 'GDP', 'CPIAUCSL', 'UNRATE').
+        start_date (str): Start date in 'YYYY-MM-DD' format.
+        end_date (str): End date in 'YYYY-MM-DD' format.
+    
+    Returns:
+        pd.Series: A pandas Series with the economic data, or None if fetching fails.
+    """
+    try:
+        # FRED data is often daily, weekly, monthly, or quarterly.
+        # pandas_datareader handles date ranges.
+        data = pdr.data.DataReader(series_id, 'fred', start_date, end_date)
+        return data[series_id] # Return the specific series
+    except Exception as e:
+        # print(f"Error fetching FRED data for {series_id}: {e}") # For debugging
+        return None
+
+# --- NEW: Investor Sentiment Data Fetching ---
+@st.cache_data(ttl=300) # VIX updates frequently, but not as fast as stock prices
+def get_vix_data(start_date, end_date):
+    """
+    Fetches VIX (CBOE Volatility Index) data using yfinance.
+    
+    Args:
+        start_date (str): Start date in 'YYYY-MM-DD' format.
+        end_date (str): End date in 'YYYY-MM-DD' format.
+    
+    Returns:
+        pd.DataFrame: DataFrame with VIX historical data, or None.
+    """
+    try:
+        vix_ticker = yf.Ticker("^VIX")
+        vix_data = vix_ticker.history(start=start_date, end=end_date)
+        if not vix_data.empty:
+            return vix_data
+        return None
+    except Exception as e:
+        # print(f"Error fetching VIX data: {e}") # For debugging
+        return None
+
+# === Indicator Calculation ===
 def calculate_indicators(df, is_intraday=False):
     """Calculates various technical indicators for a given DataFrame."""
-    initial_len = len(df)
     required_cols = ['Open', 'High', 'Low', 'Close', 'Volume']
     if not all(col in df.columns for col in required_cols):
         return df
@@ -77,38 +134,69 @@ def calculate_indicators(df, is_intraday=False):
     if df_cleaned.empty: return df_cleaned
     
     # EMAs
-    df_cleaned.loc[:, "EMA21"] = ta.trend.ema_indicator(df_cleaned["Close"], 21)
-    df_cleaned.loc[:, "EMA50"] = ta.trend.ema_indicator(df_cleaned["Close"], 50)
-    df_cleaned.loc[:, "EMA200"] = ta.trend.ema_indicator(df_cleaned["Close"], 200)
+    df_cleaned.loc[:, "EMA21"] = ta.trend.ema_indicator(df_cleaned["Close"], 21, fillna=True)
+    df_cleaned.loc[:, "EMA50"] = ta.trend.ema_indicator(df_cleaned["Close"], 50, fillna=True)
+    df_cleaned.loc[:, "EMA200"] = ta.trend.ema_indicator(df_cleaned["Close"], 200, fillna=True)
     
     # Ichimoku
     df_cleaned.loc[:, 'ichimoku_a'] = ta.trend.ichimoku_a(df_cleaned['High'], df_cleaned['Low'], fillna=True)
     df_cleaned.loc[:, 'ichimoku_b'] = ta.trend.ichimoku_b(df_cleaned['High'], df_cleaned['Low'], fillna=True)
-    
+    # Tenkan-sen (Conversion Line) and Kijun-sen (Base Line) are also part of Ichimoku
+    df_cleaned.loc[:, 'ichimoku_conversion_line'] = ta.trend.ichimoku_conversion_line(df_cleaned['High'], df_cleaned['Low'], fillna=True)
+    df_cleaned.loc[:, 'ichimoku_base_line'] = ta.trend.ichimoku_base_line(df_cleaned['High'], df_cleaned['Low'], fillna=True)
+
     # Other indicators
-    df_cleaned.loc[:, 'psar'] = ta.trend.PSARIndicator(df_cleaned['High'], df_cleaned['Low'], df_cleaned['Close']).psar()
-    df_cleaned.loc[:, 'adx'] = ta.trend.ADXIndicator(df_cleaned['High'], df_cleaned['Low'], df_cleaned['Close']).adx()
-    df_cleaned.loc[:, "RSI"] = ta.momentum.RSIIndicator(df_cleaned["Close"]).rsi()
-    df_cleaned.loc[:, "Stochastic_K"] = ta.momentum.StochasticOscillator(df_cleaned["High"], df_cleaned["Low"], df_cleaned["Close"]).stoch()
-    df_cleaned.loc[:, "Stochastic_D"] = ta.momentum.StochasticOscillator(df_cleaned["High"], df_cleaned["Low"], df_cleaned["Close"]).stoch_signal()
-    df_cleaned.loc[:, "MACD"] = ta.trend.MACD(df_cleaned["Close"]).macd()
-    df_cleaned.loc[:, "MACD_Signal"] = ta.trend.MACD(df_cleaned["Close"]).macd_signal()
-    df_cleaned.loc[:, "Bollinger_HBand"] = ta.volatility.BollingerBands(df_cleaned["Close"]).bollinger_hband()
-    df_cleaned.loc[:, "Bollinger_LBand"] = ta.volatility.BollingerBands(df_cleaned["Close"]).bollinger_lband()
+    df_cleaned.loc[:, 'psar'] = ta.trend.PSARIndicator(df_cleaned['High'], df_cleaned['Low'], df_cleaned['Close'], fillna=True).psar()
+    
+    # ADX requires +DI and -DI
+    adx_indicator = ta.trend.ADXIndicator(df_cleaned['High'], df_cleaned['Low'], df_cleaned['Close'], fillna=True)
+    df_cleaned.loc[:, 'adx'] = adx_indicator.adx()
+    df_cleaned.loc[:, 'plus_di'] = adx_indicator.adx_pos()
+    df_cleaned.loc[:, 'minus_di'] = adx_indicator.adx_neg()
+
+    df_cleaned.loc[:, "RSI"] = ta.momentum.RSIIndicator(df_cleaned["Close"], fillna=True).rsi()
+    
+    stoch_indicator = ta.momentum.StochasticOscillator(df_cleaned["High"], df_cleaned["Low"], df_cleaned["Close"], fillna=True)
+    df_cleaned.loc[:, "stoch_k"] = stoch_indicator.stoch()
+    df_cleaned.loc[:, "stoch_d"] = stoch_indicator.stoch_signal()
+    
+    macd_indicator = ta.trend.MACD(df_cleaned["Close"], fillna=True)
+    df_cleaned.loc[:, "macd"] = macd_indicator.macd()
+    df_cleaned.loc[:, "macd_signal"] = macd_indicator.macd_signal()
+    df_cleaned.loc[:, "macd_diff"] = macd_indicator.macd_diff() # MACD Histogram
+    
+    bollinger_indicator = ta.volatility.BollingerBands(df_cleaned["Close"], fillna=True)
+    df_cleaned.loc[:, "BB_high"] = bollinger_indicator.bollinger_hband()
+    df_cleaned.loc[:, "BB_low"] = bollinger_indicator.bollinger_lband()
+    df_cleaned.loc[:, "BB_mid"] = bollinger_indicator.bollinger_mavg()
+    df_cleaned.loc[:, "BB_width"] = bollinger_indicator.bollinger_wband()
+
     df_cleaned.loc[:, "Volume_MA"] = df_cleaned["Volume"].rolling(window=20).mean() # Example: 20-period rolling mean of Volume
-    df_cleaned.loc[:, "CCI"] = ta.trend.CCIIndicator(df_cleaned["High"], df_cleaned["Low"], df_cleaned["Close"]).cci()
-    df_cleaned.loc[:, "ROC"] = ta.momentum.ROCIndicator(df_cleaned["Close"]).roc()
-    df_cleaned.loc[:, "OBV"] = ta.volume.OnBalanceVolumeIndicator(df_cleaned["Close"], df_cleaned["Volume"]).on_balance_volume()
+    
+    df_cleaned.loc[:, "CCI"] = ta.trend.CCIIndicator(df_cleaned["High"], df_cleaned["Low"], df_cleaned["Close"], fillna=True).cci()
+    df_cleaned.loc[:, "ROC"] = ta.momentum.ROCIndicator(df_cleaned["Close"], fillna=True).roc()
+    
+    obv_indicator = ta.volume.OnBalanceVolumeIndicator(df_cleaned["Close"], df_cleaned["Volume"], fillna=True)
+    df_cleaned.loc[:, "obv"] = obv_indicator.on_balance_volume()
+    df_cleaned.loc[:, "obv_ema"] = ta.trend.ema_indicator(df_cleaned["obv"], window=20, fillna=True) # EMA of OBV for trend
+
+    # ATR (Average True Range)
+    df_cleaned.loc[:, "ATR"] = ta.volatility.AverageTrueRange(df_cleaned["High"], df_cleaned["Low"], df_cleaned["Close"], fillna=True).average_true_range()
+
 
     if is_intraday:
-        df_cleaned.loc[:, "VWAP"] = (df_cleaned['Volume'] * (df_cleaned['High'] + df_cleaned['Low'] + df_cleaned['Close']) / 3).cumsum() / df_cleaned['Volume'].cumsum()
+        # VWAP calculation for intraday. Ensure it handles potential division by zero for initial rows.
+        cumulative_volume = df_cleaned['Volume'].cumsum()
+        cumulative_vwap_numerator = (df_cleaned['Volume'] * (df_cleaned['High'] + df_cleaned['Low'] + df_cleaned['Close']) / 3).cumsum()
+        df_cleaned.loc[:, "VWAP"] = cumulative_vwap_numerator / cumulative_volume
+        df_cleaned.loc[cumulative_volume == 0, "VWAP"] = np.nan # Handle division by zero
     else:
         df_cleaned.loc[:, "VWAP"] = np.nan # Not applicable for daily/weekly
 
-    return df_cleaned
+    return df_cleaned.dropna() # Drop any remaining NaNs after indicator calculation
 
 
-# === Signal Generation (Largely Unchanged) ===
+# === Signal Generation ===
 def generate_signals_for_row(row_data):
     """Generates bullish and bearish signals for a single row of data."""
     bullish_signals = {}
@@ -120,153 +208,262 @@ def generate_signals_for_row(row_data):
     ema21 = row_data.get("EMA21")
     ema50 = row_data.get("EMA50")
     ema200 = row_data.get("EMA200")
-    if ema21 and ema50 and ema200:
+    if ema21 and ema50 and ema200 and not pd.isna(ema21) and not pd.isna(ema50) and not pd.isna(ema200):
         bullish_signals["EMA Trend"] = ema21 > ema50 > ema200
         bearish_signals["EMA Trend"] = ema21 < ema50 < ema200
         
     # Ichimoku Cloud
     ichimoku_a = row_data.get("ichimoku_a")
     ichimoku_b = row_data.get("ichimoku_b")
-    if close_price and ichimoku_a and ichimoku_b:
+    if close_price and ichimoku_a and ichimoku_b and not pd.isna(close_price) and not pd.isna(ichimoku_a) and not pd.isna(ichimoku_b):
         bullish_signals["Ichimoku Cloud"] = close_price > ichimoku_a and close_price > ichimoku_b
         bearish_signals["Ichimoku Cloud"] = close_price < ichimoku_a and close_price < ichimoku_b
     
     # Parabolic SAR
     psar = row_data.get("psar")
-    if close_price and psar:
+    if close_price and psar and not pd.isna(close_price) and not pd.isna(psar):
         bullish_signals["Parabolic SAR"] = close_price > psar
         bearish_signals["Parabolic SAR"] = close_price < psar
     
-    # ADX
+    # ADX (requires +DI and -DI from calculate_indicators)
     adx = row_data.get("adx")
-    if adx and row_data.get('plus_di') and row_data.get('minus_di'): # Assuming plus_di and minus_di are also available from calculate_indicators
-        bullish_signals["ADX"] = adx > 25 and row_data['plus_di'] > row_data['minus_di']
-        bearish_signals["ADX"] = adx > 25 and row_data['minus_di'] > row_data['plus_di']
+    plus_di = row_data.get('plus_di')
+    minus_di = row_data.get('minus_di')
+    if adx and plus_di and minus_di and not pd.isna(adx) and not pd.isna(plus_di) and not pd.isna(minus_di):
+        bullish_signals["ADX"] = adx > 25 and plus_di > minus_di # Strong trend and bullish direction
+        bearish_signals["ADX"] = adx > 25 and minus_di > plus_di # Strong trend and bearish direction
 
     # RSI Momentum
     rsi = row_data.get("RSI")
-    if rsi:
-        bullish_signals["RSI Momentum"] = rsi < 30 # Oversold, bullish
-        bearish_signals["RSI Momentum"] = rsi > 70 # Overbought, bearish
+    if rsi is not None and not pd.isna(rsi):
+        bullish_signals["RSI Momentum"] = rsi > 50 # General bullish momentum
+        bearish_signals["RSI Momentum"] = rsi < 50 # General bearish momentum
 
     # Stochastic
-    stoch_k = row_data.get("Stochastic_K")
-    stoch_d = row_data.get("Stochastic_D")
-    if stoch_k and stoch_d:
-        bullish_signals["Stochastic"] = stoch_k < 20 and stoch_k > stoch_d # Oversold and K-line crossing above D-line
-        bearish_signals["Stochastic"] = stoch_k > 80 and stoch_k < stoch_d # Overbought and K-line crossing below D-line
+    stoch_k = row_data.get("stoch_k")
+    stoch_d = row_data.get("stoch_d")
+    if stoch_k is not None and stoch_d is not None and not pd.isna(stoch_k) and not pd.isna(stoch_d):
+        bullish_signals["Stochastic"] = stoch_k > stoch_d and stoch_k < 80 # K-line crossing above D-line, not overbought
+        bearish_signals["Stochastic"] = stoch_k < stoch_d and stoch_k > 20 # K-line crossing below D-line, not oversold
 
     # MACD (using crosses of MACD and Signal line)
-    macd = row_data.get("MACD")
-    macd_signal = row_data.get("MACD_Signal")
-    if macd and macd_signal and row_data.get('MACD_Hist'): # Assuming MACD_Hist is also available
-        # Simple cross logic; more complex divergence could be added
+    macd = row_data.get("macd")
+    macd_signal = row_data.get("macd_signal")
+    if macd is not None and macd_signal is not None and not pd.isna(macd) and not pd.isna(macd_signal):
         bullish_signals["MACD"] = macd > macd_signal # Bullish cross
         bearish_signals["MACD"] = macd < macd_signal # Bearish cross
 
     # Volume Spike (simplified: current volume much higher than recent average)
     volume = row_data.get("Volume")
-    volume_ma = row_data.get("Volume_MA") # Volume_MA could be a simple moving average of volume
-    if volume and volume_ma:
-        bullish_signals["Volume Spike"] = volume > (volume_ma * 1.5) # 50% above average
-        bearish_signals["Volume Spike"] = volume < (volume_ma * 0.5) # 50% below average (unusual low volume)
+    volume_ma = row_data.get("Volume_MA")
+    if volume is not None and volume_ma is not None and not pd.isna(volume) and not pd.isna(volume_ma):
+        # A bullish volume spike is high volume on an up day (close > open)
+        # A bearish volume spike is high volume on a down day (close < open)
+        if volume > (volume_ma * 1.5): # 50% above average
+            if close_price > row_data.get("Open", close_price): # Check if it's an up day
+                bullish_signals["Volume Spike"] = True
+            elif close_price < row_data.get("Open", close_price): # Check if it's a down day
+                bearish_signals["Volume Spike"] = True
+        else:
+            bullish_signals["Volume Spike"] = False
+            bearish_signals["Volume Spike"] = False
+    else:
+        bullish_signals["Volume Spike"] = False
+        bearish_signals["Volume Spike"] = False
+
 
     # CCI
     cci = row_data.get("CCI")
-    if cci:
-        bullish_signals["CCI"] = cci < -100 # Oversold
-        bearish_signals["CCI"] = cci > 100 # Overbought
+    if cci is not None and not pd.isna(cci):
+        bullish_signals["CCI"] = cci > 100 # Overbought, but can indicate strong trend
+        bearish_signals["CCI"] = cci < -100 # Oversold, but can indicate strong trend
 
     # ROC
     roc = row_data.get("ROC")
-    if roc:
+    if roc is not None and not pd.isna(roc):
         bullish_signals["ROC"] = roc > 0 # Positive rate of change
         bearish_signals["ROC"] = roc < 0 # Negative rate of change
 
     # OBV (needs previous OBV for comparison, assuming OBV values are cumulative)
-    obv = row_data.get("OBV")
-    prev_obv = row_data.get("OBV_prev") # You would need to add a previous OBV calculation to df
-    if obv and prev_obv:
-        bullish_signals["OBV"] = obv > prev_obv # OBV rising
-        bearish_signals["OBV"] = obv < prev_obv # OBV falling
+    obv = row_data.get("obv")
+    obv_ema = row_data.get("obv_ema")
+    if obv is not None and obv_ema is not None and not pd.isna(obv) and not pd.isna(obv_ema):
+        bullish_signals["OBV"] = obv > obv_ema # OBV rising above its EMA
+        bearish_signals["OBV"] = obv < obv_ema # OBV falling below its EMA
+    else:
+        bullish_signals["OBV"] = False
+        bearish_signals["OBV"] = False
 
     # VWAP (Intraday only - needs current price vs VWAP)
     vwap = row_data.get("VWAP")
-    if vwap and close_price: # Check if VWAP is calculated (i.e., intraday)
+    if vwap is not None and close_price is not None and not pd.isna(vwap) and not pd.isna(close_price):
         bullish_signals["VWAP"] = close_price > vwap
         bearish_signals["VWAP"] = close_price < vwap
+    else:
+        bullish_signals["VWAP"] = False
+        bearish_signals["VWAP"] = False
     
     return bullish_signals, bearish_signals
 
 
-# === NEW: Confidence Score and Strategy Engine ===
-
-def calculate_confidence_score(signals, latest_row, finviz_data):
-    """
-    Calculates a weighted confidence score based on technicals, sentiment, and analyst ratings.
-    """
-    # 1. Technical Score
-    bullish_signals, bearish_signals = signals
-    active_bull = sum(1 for v in bullish_signals.values() if v)
-    active_bear = sum(1 for v in bearish_signals.values() if v)
-    total_signals = len(bullish_signals)
+# --- NEW: Helper for converting Finviz expert recommendation string to a numerical score ---
+def convert_finviz_recom_to_score(recom_str):
+    """Converts a Finviz recommendation string (e.g., "2.50") to a numerical score (0-100)."""
+    if recom_str is None or not isinstance(recom_str, str):
+        return 50 # Default to neutral if no recommendation
     
-    tech_score = 0
-    if total_signals > 0:
-        tech_score = ((active_bull - active_bear) / total_signals) * 100
+    try:
+        recom_val = float(recom_str)
+        # Map 1.00 (Strong Buy) to 100, 5.00 (Strong Sell) to 0
+        # Linear interpolation: score = 100 - (recom_val - 1) * (100 / 4)
+        score = 100 - (recom_val - 1) * 25
+        return max(0, min(100, score)) # Ensure score is within 0-100
+    except ValueError:
+        return 50 # Default to neutral if conversion fails
+
+# --- NEW: Function to calculate Economic Score ---
+def calculate_economic_score(latest_gdp_growth, latest_cpi, latest_unemployment_rate):
+    """
+    Calculates an economic score (e.g., 0-100) based on key economic indicators.
+    This is a simplified example; real models use more complex logic.
+    
+    Args:
+        latest_gdp_growth (float): Latest GDP growth rate (e.g., quarterly, annualized).
+        latest_cpi (float): Latest CPI (inflation) reading.
+        latest_unemployment_rate (float): Latest unemployment rate.
         
-    # 2. Sentiment Score (from -100 to 100)
-    sentiment_compound = finviz_data.get("sentiment_compound", 0)
-    sentiment_score = sentiment_compound * 100
+    Returns:
+        float: Economic score between 0 and 100.
+    """
+    score = 50 # Start neutral
 
-    # 3. Analyst Rating Score (from -100 to 100)
-    def convert_finviz_recom_to_score(recom_str):
-        try:
-            recom_val = float(recom_str)
-            # Scale from 1 (Strong Buy) to 5 (Strong Sell) to -100 to 100
-            # 1 -> 100, 3 -> 0, 5 -> -100
-            return -50 * (recom_val - 3)
-        except (ValueError, TypeError):
-            return 0 # Neutral/Hold
+    # Example logic:
+    # GDP Growth: Positive is good for economy/market.
+    if latest_gdp_growth is not None and not pd.isna(latest_gdp_growth):
+        if latest_gdp_growth > 2.0: # Strong growth
+            score += 15
+        elif latest_gdp_growth < 0: # Contraction
+            score -= 15
     
-    analyst_score = convert_finviz_recom_to_score(finviz_data.get("recom_str", "N/A"))
+    # CPI (Inflation): Moderate is good, too high or too low is bad.
+    if latest_cpi is not None and not pd.isna(latest_cpi):
+        if 2.0 <= latest_cpi <= 3.0: # Ideal inflation range
+            score += 10
+        elif latest_cpi > 5.0: # High inflation
+            score -= 15
+        elif latest_cpi < 0: # Deflation
+            score -= 10
 
-    # 4. Market Regime Filter (using EMA 200)
-    regime_multiplier = 1.0
-    close = latest_row.get("Close")
-    ema200 = latest_row.get("EMA200")
-    if close is not None and ema200 is not None and not pd.isna(close) and not pd.isna(ema200):
-        if close > ema200:
-            regime_multiplier = 1.2 # Boost score in an uptrend
-        else:
-            regime_multiplier = 0.8 # Penalize score in a downtrend
+    # Unemployment Rate: Lower is generally better.
+    if latest_unemployment_rate is not None and not pd.isna(latest_unemployment_rate):
+        if latest_unemployment_rate < 4.0: # Low unemployment
+            score += 15
+        elif latest_unemployment_rate > 6.0: # High unemployment
+            score -= 15
+            
+    return max(0, min(100, score)) # Cap score between 0 and 100
 
-    # 5. Weighted Final Score
-    weights = {"tech": 0.6, "sentiment": 0.20, "analyst": 0.20}
+# --- NEW: Function to calculate Investor Sentiment Score ---
+def calculate_sentiment_score(latest_vix, historical_vix_avg=None):
+    """
+    Calculates an investor sentiment score (0-100) based on VIX.
+    Lower VIX usually means higher sentiment (less fear).
     
-    # Apply regime filter only to the technical component before averaging
-    final_score_filtered = (weights["tech"] * tech_score * regime_multiplier +
-                            weights["sentiment"] * sentiment_score +
-                            weights["analyst"] * analyst_score)
-    final_score_filtered = max(-100, min(100, final_score_filtered)) # Clamp between -100 and 100
+    Args:
+        latest_vix (float): Latest VIX reading.
+        historical_vix_avg (float, optional): Historical average VIX for context.
+        
+    Returns:
+        float: Sentiment score between 0 and 100.
+    """
+    score = 50 # Start neutral
 
-    # 6. Qualitative Confidence Bands
-    band = "Neutral / Unclear"
-    if final_score_filtered > 70: band = "Very High Confidence (Bullish)"
-    elif final_score_filtered > 40: band = "High Confidence (Bullish)"
-    elif final_score_filtered > 15: band = "Moderate Confidence (Bullish)"
-    elif final_score_filtered < -70: band = "Very High Confidence (Bearish)"
-    elif final_score_filtered < -40: band = "High Confidence (Bearish)"
-    elif final_score_filtered < -15: band = "Moderate Confidence (Bearish)"
+    if latest_vix is None or pd.isna(latest_vix):
+        return 50 # Return neutral if no VIX data
+
+    # Example VIX thresholds (these can be adjusted)
+    # VIX < 15: Low fear, high sentiment
+    # VIX 15-20: Moderate fear
+    # VIX > 20: High fear, low sentiment
     
+    if latest_vix < 15:
+        score += 30 # Very bullish sentiment
+    elif 15 <= latest_vix <= 20:
+        score += 10 # Moderately bullish
+    elif 20 < latest_vix <= 30:
+        score -= 10 # Moderately bearish
+    else: # VIX > 30
+        score -= 30 # Very bearish sentiment (high fear)
+
+    # You could also compare to historical average if available
+    if historical_vix_avg is not None and historical_vix_avg > 0:
+        if latest_vix < historical_vix_avg * 0.8: # Significantly below average
+            score += 10
+        elif latest_vix > historical_vix_avg * 1.2: # Significantly above average
+            score -= 10
+            
+    return max(0, min(100, score)) # Cap score between 0 and 100
+
+
+# --- MODIFIED: calculate_confidence_score to include new components ---
+def calculate_confidence_score(technical_score, sentiment_score, expert_score, economic_score, investor_sentiment_score, weights):
+    """
+    Calculates the overall confidence score by combining technical, sentiment,
+    expert, economic, and investor sentiment scores with user-defined weights.
+    
+    Args:
+        technical_score (float): Score from technical indicators (0-100).
+        sentiment_score (float): Score from news/social sentiment (0-100).
+        expert_score (float): Score from expert ratings (0-100).
+        economic_score (float): Score from economic data (0-100).
+        investor_sentiment_score (float): Score from investor sentiment indicators (0-100).
+        weights (dict): Dictionary of weights for each component
+                        (e.g., {'technical': 0.4, 'sentiment': 0.2, 'expert': 0.2, 'economic': 0.1, 'investor_sentiment': 0.1}).
+                        Weights should sum to 1.
+                        
+    Returns:
+        dict: A dictionary containing the overall score, direction, and component scores.
+    """
+    # Ensure scores are not None before multiplication
+    technical_score = technical_score if technical_score is not None else 50
+    sentiment_score = sentiment_score if sentiment_score is not None else 50
+    expert_score = expert_score if expert_score is not None else 50
+    economic_score = economic_score if economic_score is not None else 50
+    investor_sentiment_score = investor_sentiment_score if investor_sentiment_score is not None else 50
+
+    # Apply weights
+    weighted_technical = technical_score * weights.get('technical', 0)
+    weighted_sentiment = sentiment_score * weights.get('sentiment', 0)
+    weighted_expert = expert_score * weights.get('expert', 0)
+    weighted_economic = economic_score * weights.get('economic', 0)
+    weighted_investor_sentiment = investor_sentiment_score * weights.get('investor_sentiment', 0)
+
+    # Sum weighted scores
+    overall_score = (
+        weighted_technical +
+        weighted_sentiment +
+        weighted_expert +
+        weighted_economic +
+        weighted_investor_sentiment
+    )
+
+    # Determine overall direction based on the final score
+    if overall_score >= 60:
+        trade_direction = "Bullish"
+    elif overall_score <= 40:
+        trade_direction = "Bearish"
+    else:
+        trade_direction = "Neutral"
+
     return {
-        "score": round(final_score_filtered, 2),
-        "band": band,
-        "components": {
-            "Technical Score": round(tech_score, 2),
-            "News Sentiment Score": round(sentiment_score, 2),
-            "Analyst Rating Score": round(analyst_score, 2),
-            "Market Regime": "Uptrend" if regime_multiplier > 1 else "Downtrend" if regime_multiplier < 1 else "Neutral"
+        'score': overall_score,
+        'direction': trade_direction,
+        'components': {
+            'Technical': technical_score,
+            'Sentiment': sentiment_score,
+            'Expert': expert_score,
+            'Economic': economic_score,
+            'Investor Sentiment': investor_sentiment_score
         }
     }
 
@@ -317,7 +514,6 @@ def generate_directional_trade_plan(confidence_score, current_price, latest_row,
     entry_atr_multiplier = 0.5
     stop_loss_atr_multiplier = 1.5
     profit_target_atr_multiplier_1 = 2.0
-    profit_target_atr_multiplier_2 = 3.5 # For a second target, if desired
 
     # Only generate a detailed plan if confidence is high enough and direction is clear
     if trade_direction == "Bullish" and score >= 60: # Example threshold
@@ -451,11 +647,8 @@ def suggest_options_strategy(ticker, confidence_score_value, current_stock_price
     Returns:
         dict: A dictionary containing the suggested strategy details or an error message.
     """
-    # Now, confidence_score_value is directly the score, not a dictionary.
-    # We can use it directly.
     score = confidence_score_value 
 
-    # Initialize a default plan for neutral or unhandled cases
     plan = {
         "status": "error",
         "message": "Could not suggest an options strategy. Neutral outlook or insufficient data.",
@@ -471,40 +664,28 @@ def suggest_options_strategy(ticker, confidence_score_value, current_stock_price
         "option_legs_for_chart": []
     }
 
-    # Logic for suggesting strategies based on trade_direction and score
-    if trade_direction == "Bullish" and score >= 60: # Example threshold for bullish strategy
-        # Implement logic for Bull Call Spread or other bullish strategies
-        
-        # Select a near-term expiration (e.g., the first available)
+    if trade_direction == "Bullish" and score >= 60:
         if not expirations:
             plan["message"] = "No expiration dates available for options strategy."
             return plan
         
-        selected_expiration = expirations[0] # Simplistic selection (you might want more logic here)
+        selected_expiration = expirations[0]
 
-        # Simulate options data for a bull call spread
-        # In a real application, you'd fetch actual options data here (e.g., using yfinance)
-        
-        # Assume we find options around the current price
-        # Buy an ITM call, Sell an OTM call
-        buy_strike = current_stock_price * 0.98 # Slightly ITM
-        sell_strike = current_stock_price * 1.02 # Slightly OTM
+        buy_strike = current_stock_price * 0.98
+        sell_strike = current_stock_price * 1.02
 
-        # Ensure strikes are reasonable (buy_strike < sell_strike for bull call spread)
         if buy_strike >= sell_strike:
             buy_strike = current_stock_price * 0.95
             sell_strike = current_stock_price * 1.05
 
-        # Simulate premiums (buy ITM call is more expensive than sell OTM call)
-        buy_premium = (current_stock_price - buy_strike) * 0.5 + 1.0 # Example premium
-        sell_premium = (current_stock_price - sell_strike) * 0.1 + 0.5 # Example premium (lower)
+        buy_premium = (current_stock_price - buy_strike) * 0.5 + 1.0
+        sell_premium = (current_stock_price - sell_strike) * 0.1 + 0.5
         
-        if buy_premium <= 0: buy_premium = 1.0 # Ensure positive
-        if sell_premium <= 0: sell_premium = 0.5 # Ensure positive
+        if buy_premium <= 0: buy_premium = 1.0
+        if sell_premium <= 0: sell_premium = 0.5
 
-        net_debit = (buy_premium - sell_premium) * 100 # Multiplied by 100 for contracts
+        net_debit = (buy_premium - sell_premium) * 100
 
-        # Define contract details for the suggested strategy
         buy_contract_details = {
             'strike': round(buy_strike, 2),
             'lastPrice': round(buy_premium, 2),
@@ -530,14 +711,12 @@ def suggest_options_strategy(ticker, confidence_score_value, current_stock_price
             'gamma': 0.005
         }
 
-        # Calculate Max Profit and Max Risk for Bull Call Spread
         max_profit_per_share = (sell_strike - buy_strike) - (buy_premium - sell_premium)
         max_risk_per_share = (buy_premium - sell_premium)
         
         max_profit = max_profit_per_share * 100
         max_risk = max_risk_per_share * 100
 
-        # Ensure max_profit and max_risk are positive for display
         max_profit_display = f"${max_profit:.2f}" if max_profit > 0 else "N/A"
         max_risk_display = f"${max_risk:.2f}" if max_risk > 0 else "N/A"
 
@@ -563,28 +742,25 @@ def suggest_options_strategy(ticker, confidence_score_value, current_stock_price
             ]
         })
 
-    elif trade_direction == "Bearish" and score <= 40: # Example threshold for bearish strategy
-        # Implement logic for Bear Put Spread or other bearish strategies
-        
+    elif trade_direction == "Bearish" and score <= 40:
         if not expirations:
             plan["message"] = "No expiration dates available for options strategy."
             return plan
         
-        selected_expiration = expirations[0] # Simplistic selection
+        selected_expiration = expirations[0]
 
-        # Buy an OTM put, Sell an ITM put
-        buy_strike = current_stock_price * 1.02 # Higher strike (OTM)
-        sell_strike = current_stock_price * 0.98 # Lower strike (ITM)
+        buy_strike = current_stock_price * 1.02
+        sell_strike = current_stock_price * 0.98
 
         if buy_strike <= sell_strike:
             buy_strike = current_stock_price * 1.05
             sell_strike = current_stock_price * 0.95
 
-        buy_premium = (buy_strike - current_stock_price) * 0.5 + 1.0 # Example premium
-        sell_premium = (sell_strike - current_stock_price) * 0.1 + 0.5 # Example premium (lower)
+        buy_premium = (buy_strike - current_stock_price) * 0.5 + 1.0
+        sell_premium = (sell_strike - current_stock_price) * 0.1 + 0.5
 
-        if buy_premium <= 0: buy_premium = 1.0 # Ensure positive
-        if sell_premium <= 0: sell_premium = 0.5 # Ensure positive
+        if buy_premium <= 0: buy_premium = 1.0
+        if sell_premium <= 0: sell_premium = 0.5
 
         net_debit = (buy_premium - sell_premium) * 100
 
@@ -647,7 +823,7 @@ def suggest_options_strategy(ticker, confidence_score_value, current_stock_price
     return plan
 
 
-# === ENHANCED: Backtesting Logic ===
+# === Backtesting Logic ===
 
 def backtest_strategy(df_historical, selection, atr_multiplier=1.5, reward_risk_ratio=2.0, signal_threshold_percentage=0.7, trade_direction="long", exit_strategy="fixed_rr"):
     """
@@ -660,15 +836,15 @@ def backtest_strategy(df_historical, selection, atr_multiplier=1.5, reward_risk_
     # Clean data and ensure required columns are present
     df_clean = df_historical.dropna().copy()
     if len(df_clean) < 200:
-        st.info("Not enough data for robust backtesting after cleaning.")
+        # st.info("Not enough data for robust backtesting after cleaning.") # Don't show in scanner loop
         return [], {"error": "Insufficient data"}
 
     # Ensure ATR is calculated before starting the loop for backtesting
     if 'ATR' not in df_clean.columns:
-        df_clean['ATR'] = ta.volatility.AverageTrueRange(df_clean['High'], df_clean['Low'], df_clean['Close']).average_true_range()
+        df_clean.loc[:, 'ATR'] = ta.volatility.AverageTrueRange(df_clean['High'], df_clean['Low'], df_clean['Close'], fillna=True).average_true_range()
         df_clean.dropna(subset=['ATR'], inplace=True) # Drop rows where ATR is NaN
         if df_clean.empty:
-            st.error("Not enough data after calculating ATR for backtesting.")
+            # st.error("Not enough data after calculating ATR for backtesting.") # Don't show in scanner loop
             return [], {"error": "Insufficient data after ATR calculation"}
 
 
@@ -681,7 +857,7 @@ def backtest_strategy(df_historical, selection, atr_multiplier=1.5, reward_risk_
             exit_reason = None
             if trade_direction == "long":
                 # NEW: Trailing PSAR exit
-                if exit_strategy == 'trailing_psar' and 'psar' in df_clean.columns and prev_day.get('psar') is not None:
+                if exit_strategy == 'trailing_psar' and 'psar' in df_clean.columns and prev_day.get('psar') is not None and not pd.isna(prev_day.get('psar')):
                     stop_loss = max(stop_loss, prev_day['psar'])
 
                 if current_day['Low'] <= stop_loss:
@@ -691,7 +867,7 @@ def backtest_strategy(df_historical, selection, atr_multiplier=1.5, reward_risk_
             
             elif trade_direction == "short":
                  # NEW: Trailing PSAR exit for short
-                if exit_strategy == 'trailing_psar' and 'psar' in df_clean.columns and prev_day.get('psar') is not None:
+                if exit_strategy == 'trailing_psar' and 'psar' in df_clean.columns and prev_day.get('psar') is not None and not pd.isna(prev_day.get('psar')):
                     stop_loss = min(stop_loss, prev_day['psar']) # For short, PSAR trailing stop moves down
 
                 if current_day['High'] >= stop_loss: # For short, if price goes above SL
@@ -730,7 +906,7 @@ def backtest_strategy(df_historical, selection, atr_multiplier=1.5, reward_risk_
                             fired_signals_count += 1
                             
                         # Special handling for VWAP if selected and applicable
-                        if signal_key == "VWAP" and prev_day.get('VWAP') is not None: # VWAP is intraday, check if data exists
+                        if signal_key == "VWAP" and prev_day.get('VWAP') is not None and not pd.isna(prev_day.get('VWAP')): # VWAP is intraday, check if data exists
                              if trade_direction == "long" and bullish_signals.get("VWAP", False):
                                  fired_signals_count += 1
                              elif trade_direction == "short" and bearish_signals.get("VWAP", False):
@@ -781,18 +957,15 @@ def backtest_strategy(df_historical, selection, atr_multiplier=1.5, reward_risk_
 
 def calculate_pivot_points(df):
     """Calculates classical pivot points for a DataFrame."""
-    # Ensure we have the required columns
     required_cols = ['High', 'Low', 'Close']
     if not all(col in df.columns for col in required_cols):
-        st.warning("DataFrame is missing High, Low, or Close columns for pivot point calculation.")
-        return pd.DataFrame(index=df.index) # Return empty DF to prevent errors
+        # st.warning("DataFrame is missing High, Low, or Close columns for pivot point calculation.") # Don't show in scanner loop
+        return pd.DataFrame(index=df.index)
 
-    # Use the previous period's data to calculate the current period's pivots
     prev_high = df['High'].shift(1)
     prev_low = df['Low'].shift(1)
     prev_close = df['Close'].shift(1)
 
-    # Calculate Pivot Points
     pivot = (prev_high + prev_low + prev_close) / 3
     r1 = (2 * pivot) - prev_low
     s1 = (2 * pivot) - prev_high
@@ -801,7 +974,6 @@ def calculate_pivot_points(df):
     r3 = prev_high + 2 * (pivot - prev_low)
     s3 = prev_low - 2 * (prev_high - pivot)
 
-    # Create a new DataFrame with the pivot levels
     pivots_df = pd.DataFrame({
         'Pivot': pivot,
         'R1': r1,
@@ -813,3 +985,384 @@ def calculate_pivot_points(df):
     }, index=df.index)
 
     return pivots_df
+
+# --- NEW HELPER: Get Indicator Summary Text for Scanner ---
+def get_indicator_summary_text(signal_name_base, current_value, bullish_fired, bearish_fired):
+    """
+    Generates a concise text summary for a single technical indicator, suitable for scanner results.
+    """
+    summary = f"**{signal_name_base}:** "
+    value_str = f"Current: {current_value:.2f}" if current_value is not None and not pd.isna(current_value) else "Current: N/A"
+
+    if "ADX" in signal_name_base:
+        if current_value is not None and not pd.isna(current_value):
+            if current_value > 25:
+                status = "Strong Trend"
+            elif current_value < 20:
+                status = "Weak/No Trend"
+            else:
+                status = "Developing Trend"
+            summary += f"{status} ({value_str}). Ideal Strong Trend: >25."
+        else:
+            summary += f"N/A ({value_str})."
+    elif "EMA Trend" in signal_name_base:
+        if bullish_fired:
+            summary += f"Bullish Trend Confirmed. Ideal: 21>50>200 EMA."
+        elif bearish_fired:
+            summary += f"Bearish Trend Confirmed. Ideal: 21<50<200 EMA."
+        else:
+            summary += f"Neutral/Consolidating Trend. Ideal: Clear EMA alignment."
+    elif "Ichimoku Cloud" in signal_name_base:
+        if bullish_fired:
+            summary += f"Bullish Ichimoku Signal. Ideal: Price above Cloud, Tenkan above Kijun."
+        elif bearish_fired:
+            summary += f"Bearish Ichimoku Signal. Ideal: Price below Cloud, Tenkan below Kijun."
+        else:
+            summary += f"Neutral/Mixed Ichimoku Signals. Ideal: Clear alignment."
+    elif "Parabolic SAR" in signal_name_base:
+        if bullish_fired:
+            summary += f"Bullish PSAR (dots below price). Ideal: PSAR dots below price."
+        elif bearish_fired:
+            summary += f"Bearish PSAR (dots above price). Ideal: PSAR dots above price."
+        else:
+            summary += f"N/A (no clear signal) ({value_str})."
+    elif "RSI Momentum" in signal_name_base:
+        if current_value is not None and not pd.isna(current_value):
+            if current_value > 70:
+                status = "Overbought"
+            elif current_value < 30:
+                status = "Oversold"
+            elif current_value > 50:
+                status = "Bullish Momentum"
+            else:
+                status = "Bearish Momentum"
+            summary += f"{status} ({value_str}). Ideal Bullish: Rising from 30-70. Ideal Bearish: Falling from 70-30."
+        else:
+            summary += f"N/A ({value_str})."
+    elif "Stochastic" in signal_name_base: # Assuming this is Stochastic Oscillator
+        if current_value is not None and not pd.isna(current_value):
+            if current_value > 80:
+                status = "Overbought"
+            elif current_value < 20:
+                status = "Oversold"
+            else:
+                status = "Neutral"
+            summary += f"{status} ({value_str}). Ideal Bullish: %K above %D (below 20). Ideal Bearish: %K below %D (above 80)."
+        else:
+            summary += f"N/A ({value_str})."
+    elif "CCI" in signal_name_base:
+        if current_value is not None and not pd.isna(current_value):
+            if current_value > 100:
+                status = "Strong Bullish"
+            elif current_value < -100:
+                status = "Strong Bearish"
+            elif current_value > 0:
+                status = "Bullish Bias"
+            else:
+                status = "Bearish Bias"
+            summary += f"{status} ({value_str}). Ideal Bullish: >100. Ideal Bearish: <-100."
+        else:
+            summary += f"N/A ({value_str})."
+    elif "ROC" in signal_name_base:
+        if current_value is not None and not pd.isna(current_value):
+            if current_value > 0:
+                status = "Positive Momentum"
+            else:
+                status = "Negative Momentum"
+            summary += f"{status} ({value_str}). Ideal Bullish: >0. Ideal Bearish: <0."
+        else:
+            summary += f"N/A ({value_str})."
+    elif "Volume Spike" in signal_name_base:
+        if bullish_fired:
+            summary += f"Bullish Volume Spike Detected. Ideal: High volume on rising prices."
+        elif bearish_fired:
+            summary += f"Bearish Volume Spike Detected. Ideal: High volume on falling prices."
+        else:
+            summary += f"Normal Volume. Ideal: High volume on breakouts."
+    elif "OBV" in signal_name_base:
+        if bullish_fired:
+            summary += f"Rising OBV (Accumulation). Ideal: Rising OBV."
+        elif bearish_fired:
+            summary += f"Falling OBV (Distribution). Ideal: Falling OBV."
+        else:
+            summary += f"Sideways OBV (Indecision). Ideal: OBV confirms price trend."
+    elif "VWAP" in signal_name_base:
+        if current_value is not None and not pd.isna(current_value):
+            if bullish_fired:
+                status = "Price Above VWAP"
+            elif bearish_fired:
+                status = "Price Below VWAP"
+            else:
+                status = "Price Near VWAP"
+            summary += f"{status} ({value_str}). Ideal Bullish: Price consistently above VWAP. Ideal Bearish: Price consistently below VWAP."
+        else:
+            summary += f"N/A ({value_str})."
+
+    return summary
+
+
+# --- NEW: Stock Scanner Function to include detailed trade plan ---
+def run_stock_scanner(
+    ticker_list,
+    trading_style,
+    min_confidence,
+    indicator_selection,
+    confidence_weights
+):
+    """
+    Scans a list of tickers for trading opportunities based on selected style and confidence,
+    including detailed trade plan elements.
+
+    Args:
+        ticker_list (list): List of stock ticker symbols to scan.
+        trading_style (str): Desired trading style (e.g., "Day Trading Long", "Swing Trading Call").
+        min_confidence (int): Minimum overall confidence score required (0-100).
+        indicator_selection (dict): Dictionary of selected technical indicators.
+        confidence_weights (dict): Weights for confidence score components.
+
+    Returns:
+        pd.DataFrame: A DataFrame of qualifying tickers with relevant metrics and trade plan details.
+    """
+    scanned_results = []
+    today = datetime.date.today()
+    one_year_ago = today - datetime.timedelta(days=365) # For historical data context
+
+    for ticker in ticker_list:
+        try:
+            # 1. Fetch Data
+            # get_data now returns (hist_df, info_dict)
+            df_hist, info_data = get_data(ticker, "1y", "1d", one_year_ago.strftime('%Y-%m-%d'), today.strftime('%Y-%m-%d'))
+            
+            if df_hist.empty:
+                # print(f"Skipping {ticker}: No historical data found.") # For debugging
+                continue
+
+            current_price = df_hist['Close'].iloc[-1]
+            if pd.isna(current_price):
+                # print(f"Skipping {ticker}: Current price is NaN.") # For debugging
+                continue
+
+            # Calculate indicators for the full historical data
+            df_calculated = calculate_indicators(df_hist.copy())
+            
+            # Get Finviz data
+            finviz_data = get_finviz_data(ticker)
+
+            # 2. Calculate Confidence Scores
+            last_row = df_calculated.iloc[-1]
+            bullish_signals, bearish_signals = generate_signals_for_row(last_row)
+            
+            tech_score_raw = 0
+            total_possible_tech_points = 0
+            
+            # Define all possible indicator names for consistent scoring
+            all_indicator_names = [
+                "EMA Trend", "Ichimoku Cloud", "Parabolic SAR", "ADX",
+                "RSI Momentum", "Stochastic", "MACD", "Volume Spike",
+                "CCI", "ROC", "OBV", "VWAP"
+            ]
+
+            for ind_name in all_indicator_names:
+                is_selected = indicator_selection.get(ind_name, False) # Check if user selected it
+                if is_selected:
+                    total_possible_tech_points += 1 
+                    # Check for specific bullish signals based on indicator name
+                    if ind_name == "EMA Trend" and bullish_signals.get("EMA Trend", False):
+                        tech_score_raw += 1
+                    elif ind_name == "Ichimoku Cloud" and bullish_signals.get("Ichimoku Cloud", False):
+                        tech_score_raw += 1
+                    elif ind_name == "Parabolic SAR" and bullish_signals.get("Parabolic SAR", False):
+                        tech_score_raw += 1
+                    elif ind_name == "ADX" and bullish_signals.get("ADX", False): # ADX signal includes direction
+                        tech_score_raw += 1
+                    elif ind_name == "RSI Momentum" and bullish_signals.get("RSI Momentum", False):
+                        tech_score_raw += 1
+                    elif ind_name == "Stochastic" and bullish_signals.get("Stochastic", False):
+                        tech_score_raw += 1
+                    elif ind_name == "MACD" and bullish_signals.get("MACD", False):
+                        tech_score_raw += 1
+                    elif ind_name == "Volume Spike" and bullish_signals.get("Volume Spike", False):
+                        tech_score_raw += 1
+                    elif ind_name == "CCI" and bullish_signals.get("CCI", False):
+                        tech_score_raw += 1
+                    elif ind_name == "ROC" and bullish_signals.get("ROC", False):
+                        tech_score_raw += 1
+                    elif ind_name == "OBV" and bullish_signals.get("OBV", False):
+                        tech_score_raw += 1
+                    elif ind_name == "VWAP" and bullish_signals.get("VWAP", False):
+                        tech_score_raw += 1
+                    
+                    # Check for specific bearish signals and subtract
+                    if ind_name == "EMA Trend" and bearish_signals.get("EMA Trend", False):
+                        tech_score_raw -= 1
+                    elif ind_name == "Ichimoku Cloud" and bearish_signals.get("Ichimoku Cloud", False):
+                        tech_score_raw -= 1
+                    elif ind_name == "Parabolic SAR" and bearish_signals.get("Parabolic SAR", False):
+                        tech_score_raw -= 1
+                    elif ind_name == "ADX" and bearish_signals.get("ADX", False):
+                        tech_score_raw -= 1
+                    elif ind_name == "RSI Momentum" and bearish_signals.get("RSI Momentum", False):
+                        tech_score_raw -= 1
+                    elif ind_name == "Stochastic" and bearish_signals.get("Stochastic", False):
+                        tech_score_raw -= 1
+                    elif ind_name == "MACD" and bearish_signals.get("MACD", False):
+                        tech_score_raw -= 1
+                    elif ind_name == "Volume Spike" and bearish_signals.get("Volume Spike", False):
+                        tech_score_raw -= 1
+                    elif ind_name == "CCI" and bearish_signals.get("CCI", False):
+                        tech_score_raw -= 1
+                    elif ind_name == "ROC" and bearish_signals.get("ROC", False):
+                        tech_score_raw -= 1
+                    elif ind_name == "OBV" and bearish_signals.get("OBV", False):
+                        tech_score_raw -= 1
+                    elif ind_name == "VWAP" and bearish_signals.get("VWAP", False):
+                        tech_score_raw -= 1
+
+            if total_possible_tech_points > 0:
+                technical_score_current = ((tech_score_raw + total_possible_tech_points) / (2 * total_possible_tech_points)) * 100
+            else:
+                technical_score_current = 50 # Neutral if no selected indicators were directional
+
+            sentiment_score_current = finviz_data.get("sentiment_compound", 0) * 100 # Use the compound score directly
+
+            expert_recom_str = info_data.get('recommendationMean', None)
+            expert_score_current = convert_finviz_recom_to_score(str(expert_recom_str))
+
+            latest_gdp = get_economic_data_fred('GDP', one_year_ago.strftime('%Y-%m-%d'), today.strftime('%Y-%m-%d'))
+            latest_cpi = get_economic_data_fred('CPIAUCSL', one_year_ago.strftime('%Y-%m-%d'), today.strftime('%Y-%m-%d'))
+            latest_unemployment = get_economic_data_fred('UNRATE', one_year_ago.strftime('%Y-%m-%d'), today.strftime('%Y-%m-%d'))
+
+            economic_score_current = calculate_economic_score(
+                latest_gdp.iloc[-1] if latest_gdp is not None and not latest_gdp.empty else None,
+                latest_cpi.iloc[-1] if latest_cpi is not None and not latest_cpi.empty else None,
+                latest_unemployment.iloc[-1] if latest_unemployment is not None and not latest_unemployment.empty else None
+            )
+
+            vix_data = get_vix_data(one_year_ago.strftime('%Y-%m-%d'), today.strftime('%Y-%m-%d'))
+            latest_vix = vix_data['Close'].iloc[-1] if vix_data is not None and not vix_data.empty else None
+            historical_vix_avg = vix_data['Close'].mean() if vix_data is not None and not vix_data.empty else None
+            investor_sentiment_score_current = calculate_sentiment_score(latest_vix, historical_vix_avg)
+
+            confidence_results = calculate_confidence_score(
+                technical_score_current,
+                sentiment_score_current,
+                expert_score_current,
+                economic_score_current,
+                investor_sentiment_score_current,
+                confidence_weights
+            )
+            overall_confidence = confidence_results['score']
+            trade_direction = confidence_results['direction']
+
+            # 3. Calculate Trade Plan Details and Support/Resistance
+            confidence_for_plan = {
+                'score': overall_confidence,
+                'band': trade_direction
+            }
+            
+            trade_plan_interval = '1d' # Default for swing
+            if "Day Trading" in trading_style:
+                trade_plan_interval = '60m' # Assuming hourly data for day trading plans
+                # For more accurate day trading, you'd ideally fetch and calculate indicators on 60m data here
+                # For simplicity, we'll use daily ATR from last_row, but it's a limitation for intraday
+            
+            atr_val = last_row.get('ATR')
+            if atr_val is None or pd.isna(atr_val) or atr_val == 0:
+                atr_val = (last_row['High'] - last_row['Low']) * 0.01 # Fallback for ATR
+
+            trade_plan_result = generate_directional_trade_plan(
+                confidence_for_plan,
+                current_price,
+                last_row, # Pass the full latest_row
+                trade_plan_interval
+            )
+
+            df_pivots = calculate_pivot_points(df_hist.copy())
+            last_pivot = df_pivots.iloc[-1] if not df_pivots.empty else {}
+
+            # 4. Generate Detailed Indicator Descriptions for Entry/Exit Rationale
+            entry_criteria_details = []
+            exit_criteria_details = []
+
+            entry_criteria_details.append(f"**Overall Outlook:** {trade_plan_result.get('key_rationale', 'N/A')}")
+            entry_criteria_details.append(f"**Entry Zone:** Between ${trade_plan_result.get('entry_zone_start', 'N/A'):.2f} and ${trade_plan_result.get('entry_zone_end', 'N/A'):.2f}.")
+            exit_criteria_details.append(f"**Stop-Loss:** Close {'below' if trade_direction == 'Bullish' else 'above'} ${trade_plan_result.get('stop_loss', 'N/A'):.2f}.")
+            exit_criteria_details.append(f"**Profit Target:** Around ${trade_plan_result.get('profit_target', 'N/A'):.2f} ({trade_plan_result.get('reward_risk_ratio', 'N/A'):.1f}:1 Reward/Risk).")
+            
+            entry_criteria_details.append("\n**Current Indicator Status:**")
+            for ind_name, is_selected in indicator_selection.items():
+                if is_selected:
+                    # Map indicator name from selection to the key in last_row
+                    current_ind_value = None
+                    if ind_name == "RSI Momentum": current_ind_value = last_row.get("RSI")
+                    elif ind_name == "Stochastic": current_ind_value = last_row.get("stoch_k")
+                    elif ind_name == "ADX": current_ind_value = last_row.get("adx")
+                    elif ind_name == "CCI": current_ind_value = last_row.get("cci")
+                    elif ind_name == "ROC": current_ind_value = last_row.get("roc")
+                    elif ind_name == "OBV": current_ind_value = last_row.get("obv")
+                    elif ind_name == "VWAP": current_ind_value = last_row.get("VWAP")
+                    # For EMA Trend, Ichimoku, Parabolic SAR, Volume Spike, their 'current value' is often implicit in signal
+                    # For these, get_indicator_summary_text relies more on bullish_fired/bearish_fired
+                    
+                    summary_text = get_indicator_summary_text(
+                        ind_name,
+                        current_ind_value,
+                        bullish_signals.get(ind_name, False), # Pass signal directly
+                        bearish_signals.get(ind_name, False) # Pass signal directly
+                    )
+                    entry_criteria_details.append(f"- {summary_text}")
+
+            # 5. Apply Filtering Logic and Store Results
+            if overall_confidence >= min_confidence:
+                if trade_plan_result['status'] != 'success':
+                    # print(f"Skipping {ticker}: Trade plan generation failed for {trade_direction} direction.") # For debugging
+                    continue
+
+                qualifies = False
+                if trading_style == "Day Trading Long" and trade_direction == "Bullish":
+                    if atr_val is not None and not pd.isna(atr_val) and atr_val > 0.5: # ATR threshold for day trading
+                        qualifies = True
+                elif trading_style == "Day Trading Short" and trade_direction == "Bearish":
+                    if atr_val is not None and not pd.isna(atr_val) and atr_val > 0.5:
+                        qualifies = True
+                elif trading_style == "Swing Trading Call" and trade_direction == "Bullish":
+                    qualifies = True
+                elif trading_style == "Swing Trading Put" and trade_direction == "Bearish":
+                    qualifies = True
+
+                if qualifies:
+                    scanned_results.append({
+                        "Ticker": ticker,
+                        "Trading Style": trading_style,
+                        "Overall Confidence": f"{overall_confidence:.0f}",
+                        "Direction": trade_direction,
+                        "Current Price": f"${current_price:.2f}",
+                        "ATR": f"{atr_val:.2f}",
+                        "Target Price": f"${trade_plan_result.get('profit_target', 'N/A'):.2f}",
+                        "Stop Loss": f"${trade_plan_result.get('stop_loss', 'N/A'):.2f}",
+                        "Entry Zone": f"${trade_plan_result.get('entry_zone_start', 'N/A'):.2f} - ${trade_plan_result.get('entry_zone_end', 'N/A'):.2f}",
+                        "Reward/Risk": f"{trade_plan_result.get('reward_risk_ratio', 'N/A'):.1f}:1",
+                        "Pivot (P)": f"${last_pivot.get('Pivot', 'N/A'):.2f}",
+                        "Resistance 1 (R1)": f"${last_pivot.get('R1', 'N/A'):.2f}",
+                        "Resistance 2 (R2)": f"${last_pivot.get('R2', 'N/A'):.2f}",
+                        "Support 1 (S1)": f"${last_pivot.get('S1', 'N/A'):.2f}",
+                        "Support 2 (S2)": f"${last_pivot.get('S2', 'N/A'):.2f}",
+                        "Entry Criteria Details": "\n".join(entry_criteria_details),
+                        "Exit Criteria Details": "\n".join(exit_criteria_details),
+                        "Rationale": trade_plan_result.get('key_rationale', '')
+                    })
+
+        except Exception as e:
+            # print(f"Error scanning {ticker}: {e}") # For debugging
+            # import traceback
+            # print(traceback.format_exc()) # Uncomment for full traceback during debugging
+            continue
+    
+    # Sort results by confidence (highest first)
+    if scanned_results:
+        df_results = pd.DataFrame(scanned_results)
+        df_results['Overall Confidence'] = pd.to_numeric(df_results['Overall Confidence'])
+        df_results = df_results.sort_values(by='Overall Confidence', ascending=False).reset_index(drop=True)
+        return df_results
+    return pd.DataFrame() # Return empty DataFrame if no results
+
