@@ -200,7 +200,7 @@ if analyze_button and ticker:
         finviz_data = get_finviz_data(ticker)
         
         # Get economic and investor sentiment data
-        today = datetime.date.today()
+        today = datetime.today()
         one_year_ago = today - datetime.timedelta(days=365)
 
         latest_gdp = get_economic_data_fred('GDP', one_year_ago.strftime('%Y-%m-%d'), today.strftime('%Y-%m-%d'))
