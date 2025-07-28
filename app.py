@@ -5,7 +5,7 @@ import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt # Needed for plt.close() in display_components
 import yfinance as yf # Keep this import here for direct yf usage if any, though it's also in utils
-import datetime # ADDED THIS LINE: Import the datetime module
+import datetime.timedelta # ADDED THIS LINE: Import the datetime module
 
 print("Current working directory:", os.getcwd())
 print("Directory contents:", os.listdir())
