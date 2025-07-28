@@ -402,7 +402,6 @@ elif run_scanner_button: # <--- UNINDENT THIS LINE
 else: # <--- UNINDENT THIS LINE to match 'if ticker:' or 'elif run_scanner_button:'
     st.info("Enter a stock ticker in the sidebar and click 'Analyze Ticker' to begin analysis, or configure and run the 'Stock Scanner'.")
 
-
 if __name__ == "__main__":
-    main()
+    pass # Or you can simply remove the 'if __name__ == "__main__":' block entirely if it's empty
    
