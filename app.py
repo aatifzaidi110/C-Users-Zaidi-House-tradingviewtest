@@ -32,8 +32,10 @@ from utils import (
 from display_components import (
     display_technical_analysis_tab, display_options_analysis_tab,
     display_backtesting_tab, display_trade_log_tab,
-    display_scanner_tab, display_economic_sentiment_tab,
-    display_option_calculator_tab
+    display_scanner_tab,
+    display_economic_data_tab, # <--- New function name
+    display_investor_sentiment_tab, # <--- New function name
+    # ... other imports
 )
 
 # === Page Setup ===
@@ -334,17 +336,44 @@ if analyze_button and ticker:
         else:
             st.info("No data to generate a trade plan.")
 
-    with tabs[5]: # 🌍 Economic & Sentiment
-        display_economic_sentiment_tab(
-            economic_score_val,
-            investor_sentiment_score_val,
-            news_sentiment_score,
-            finviz_data.get("headlines", []),
+  with tabs[5]: # 🌍 Economic & Sentiment
+        # Display Economic Data
+        display_economic_data_tab(
+            ticker, # Assuming ticker is available
+            current_price, # Assuming current_price is available
+            prev_close, # Assuming prev_close is available
+            overall_confidence, # Assuming overall_confidence is available
+            trade_direction, # Assuming trade_direction is available
             latest_gdp,
             latest_cpi,
-            latest_unemployment,
-            vix_data
+            latest_unemployment
         )
+        
+        st.markdown("---") # Add a separator if you like
+        
+        # Display Investor Sentiment Data
+        display_investor_sentiment_tab(
+            ticker, # Assuming ticker is available
+            current_price, # Assuming current_price is available
+            prev_close, # Assuming prev_close is available
+            overall_confidence, # Assuming overall_confidence is available
+            trade_direction, # Assuming trade_direction is available
+            vix_data['Close'].iloc[-1] if not vix_data.empty else None, # latest_vix
+            vix_data['Close'].mean() if not vix_data.empty else None # historical_vix_avg
+        )
+        
+        # You might need to decide where to display news_sentiment_score and finviz_headlines
+        # You could add them to display_news_info_tab or create a separate small section here.
+        # For example, if you want news sentiment here:
+        st.markdown("---")
+        st.subheader("News Sentiment (from Finviz)")
+        st.metric("News Sentiment Score (Finviz)", f"{news_sentiment_score:.0f}%")
+        if finviz_data and finviz_data.get('headlines'):
+            st.markdown("##### Latest Headlines:")
+            for headline in finviz_data['headlines']:
+                st.markdown(f"- [{headline['title']}]({headline['link']}) ({headline['date']})")
+        else:
+            st.info("No recent news headlines found.")
 
     with tabs[6]: # 📚 Glossary
         st.markdown("### 📚 Glossary")
