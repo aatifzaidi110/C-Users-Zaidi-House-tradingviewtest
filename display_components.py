@@ -134,13 +134,15 @@ def display_technical_analysis_tab(ticker, df_calculated, is_intraday, indicator
         add_plots.append(mpf.make_addplot(pd.Series(80, index=df_calculated.index), panel=len(fig_panels)-1, color='red', width=0.5, linestyle='--', secondary_y=False))
         add_plots.append(mpf.make_addplot(pd.Series(20, index=df_calculated.index), panel=len(fig_panels)-1, color='green', width=0.5, linestyle='--', secondary_y=False))
 
+  
     if indicator_selection.get("MACD"):
         fig_panels.append(len(fig_panels)) # MACD
-        add_plots.append(mpf.make_addplot(df_calculated['macd'], panel=len(fig_panels)-1, color='blue', ylabel='MACD'))
-        add_plots.append(mpf.make_addplot(df_calculated['macd_signal'], panel=len(fig_panels)-1, color='orange'))
+        add_plots.append(mpf.make_addplot(df_calculated['MACD'], panel=len(fig_panels)-1, color='blue',ylabel='MACD', width=0.7))
+        add_plots.append(mpf.make_addplot(df_calculated['MACD_Signal'], panel=len(fig_panels)-1, color='orange',ylabel='Signal', width=0.7))
         # MACD Histogram
-        colors = ['red' if val < 0 else 'green' for val in df_calculated['macd_diff']]
-        add_plots.append(mpf.make_addplot(df_calculated['macd_diff'], type='bar', panel=len(fig_panels)-1, color=colors, width=0.7, alpha=0.7, secondary_y=False))
+        colors = ['red' if val < 0 else 'green' for val in df_calculated['MACD_Hist']] # Corrected casing here
+        add_plots.append(mpf.make_addplot(df_calculated['MACD_Hist'], type='bar', panel=len(fig_panels)-1, color=colors, ylabel='Histogram', width=0.7))
+
 
     if indicator_selection.get("ADX"):
         fig_panels.append(len(fig_panels)) # ADX
