@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 import yfinance as yf
 import os
 import numpy as np
-from datetime import datetime
+from datetime import datetime, timedelta
 import pytz # Import pytz for timezone handling
 
 # Import functions from utils.py
