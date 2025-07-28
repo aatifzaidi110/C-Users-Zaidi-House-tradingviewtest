@@ -126,42 +126,63 @@ def get_vix_data(start_date, end_date):
         return None
 
 # === Indicator Calculation ===
+
 def calculate_indicators(df, is_intraday=False):
     """Calculates various technical indicators for a given DataFrame."""
     required_cols = ['Open', 'High', 'Low', 'Close', 'Volume']
 
-     # Initial check for required columns
-    if not all(col in df.columns for col in required_cols):
-        print("Warning: Missing required columns for indicator calculation. Returning original DataFrame.")
-        # Ensure indicator columns are added with NaN even if initial data is incomplete
-        for col in ["EMA21", "EMA50", "EMA200", 'ichimoku_a', 'ichimoku_b',
-                    'ichimoku_conversion_line', 'ichimoku_base_line', 'psar',
-                    "BB_upper", "BB_lower", "BB_mavg", "RSI", "MACD",
-                    "MACD_Signal", "MACD_Hist", "Stoch_K", "Stoch_D", # Existing
-                    "adx", "plus_di", "minus_di"]: # <-- Make sure these are ADDED here
-            if col not in df.columns:
-                df.loc[:, col] = np.nan
-        return df
+    # --- Initial check for required columns and robust return for empty/incomplete data ---
+    # Prepare a DataFrame for cleaning, or use original if already bad
+    df_processed = df.copy()
 
-    df_cleaned = df.dropna(subset=required_cols).copy()
+    if not all(col in df_processed.columns for col in required_cols):
+        print("Warning: Missing required columns for indicator calculation. Attempting to add missing indicator columns with NaN.")
+        # Ensure all indicator columns are added with NaN even if initial data is incomplete
+        all_indicator_cols = [
+            "EMA21", "EMA50", "EMA200",
+            'ichimoku_a', 'ichimoku_b', 'ichimoku_conversion_line', 'ichimoku_base_line',
+            'psar', "BB_upper", "BB_lower", "BB_mavg", "RSI", "MACD", "MACD_Signal",
+            "MACD_Hist", "Stoch_K", "Stoch_D", "adx", "plus_di", "minus_di", "CCI"
+        ]
+        for col in all_indicator_cols:
+            if col not in df_processed.columns:
+                df_processed.loc[:, col] = np.nan
+        # If essential columns are missing, we can't calculate anything meaningful. Return with NaNs.
+        return df_processed.set_index(df.index) # Ensure index is preserved if coming from yf
+
+    df_cleaned = df_processed.dropna(subset=required_cols).copy()
 
     if df_cleaned.empty:
-        print("Warning: DataFrame is empty after dropping NA values. Returning empty DataFrame.")
-        # Ensure EMA columns are added with NaN even if DataFrame is empty
-        for col in ["EMA21", "EMA50", "EMA200", 'ichimoku_a', 'ichimoku_b',
-                    'ichimoku_conversion_line', 'ichimoku_base_line', 'psar',
-                    "BB_upper", "BB_lower", "BB_mavg", "RSI", "MACD",
-                    "MACD_Signal", "MACD_Hist", "Stoch_K", "Stoch_D"]:
+        print("Warning: DataFrame is empty after dropping NA values. Attempting to add missing indicator columns with NaN.")
+        # Ensure all indicator columns are added with NaN even if DataFrame is empty after dropna
+        all_indicator_cols = [
+            "EMA21", "EMA50", "EMA200",
+            'ichimoku_a', 'ichimoku_b', 'ichimoku_conversion_line', 'ichimoku_base_line',
+            'psar', "BB_upper", "BB_lower", "BB_mavg", "RSI", "MACD", "MACD_Signal",
+            "MACD_Hist", "Stoch_K", "Stoch_D", "adx", "plus_di", "minus_di", "CCI"
+        ]
+        for col in all_indicator_cols:
             if col not in df_cleaned.columns:
                 df_cleaned.loc[:, col] = np.nan
-        return df_cleaned
+        return df_cleaned # Return the empty DataFrame with expected columns
 
-    # Initialize all indicator columns to NaN to ensure they always exist
-    for col in ["EMA21", "EMA50", "EMA200", 'ichimoku_a', 'ichimoku_b',
-                'ichimoku_conversion_line', 'ichimoku_base_line', 'psar',
-                "BB_upper", "BB_lower", "BB_mavg", "RSI", "MACD",
-                "MACD_Signal", "MACD_Hist", "Stoch_K", "Stoch_D"]:
-        df_cleaned.loc[:, col] = np.nan
+    # --- End of initial checks ---
+
+
+    # --- Initialize all indicator columns to NaN to ensure they always exist before calculation attempts ---
+    all_indicator_cols = [
+        "EMA21", "EMA50", "EMA200",
+        'ichimoku_a', 'ichimoku_b', 'ichimoku_conversion_line', 'ichimoku_base_line',
+        'psar', "BB_upper", "BB_lower", "BB_mavg", "RSI", "MACD", "MACD_Signal",
+        "MACD_Hist", "Stoch_K", "Stoch_D", "adx", "plus_di", "minus_di", "CCI"
+    ]
+    for col in all_indicator_cols:
+        if col not in df_cleaned.columns: # Only add if not already present
+             df_cleaned.loc[:, col] = np.nan
+        # Otherwise, existing (NaN or otherwise) values will be overwritten by calculations below
+
+
+    # --- Indicator Calculations ---
 
     # EMAs
     try:
@@ -171,7 +192,6 @@ def calculate_indicators(df, is_intraday=False):
             df_cleaned.loc[:, "EMA200"] = ta.trend.ema_indicator(df_cleaned["Close"], 200, fillna=True)
     except Exception as e:
         print(f"Error calculating EMA indicators: {e}")
-        # Columns are already initialized to NaN, so no further action needed for existence here.
 
     # Ichimoku
     try:
@@ -182,7 +202,6 @@ def calculate_indicators(df, is_intraday=False):
             df_cleaned.loc[:, 'ichimoku_base_line'] = ta.trend.ichimoku_base_line(df_cleaned['High'], df_cleaned['Low'], fillna=True)
     except Exception as e:
         print(f"Error calculating Ichimoku indicators: {e}")
-        # Columns are already initialized to NaN.
 
     # PSAR
     try:
@@ -190,7 +209,6 @@ def calculate_indicators(df, is_intraday=False):
             df_cleaned.loc[:, 'psar'] = ta.trend.PSARIndicator(df_cleaned['High'], df_cleaned['Low'], df_cleaned['Close'], fillna=True).psar()
     except Exception as e:
         print(f"Error calculating PSAR indicator: {e}")
-        # Column is already initialized to NaN.
 
     # Bollinger Bands
     try:
@@ -201,7 +219,6 @@ def calculate_indicators(df, is_intraday=False):
             df_cleaned.loc[:, "BB_mavg"] = bollinger_bands.bollinger_mavg()
     except Exception as e:
         print(f"Error calculating Bollinger Bands: {e}")
-        # Columns are already initialized to NaN.
 
     # RSI
     try:
@@ -209,7 +226,6 @@ def calculate_indicators(df, is_intraday=False):
             df_cleaned.loc[:, "RSI"] = ta.momentum.rsi(df_cleaned["Close"], window=14, fillna=True)
     except Exception as e:
         print(f"Error calculating RSI: {e}")
-        # Column is already initialized to NaN.
 
     # MACD
     try:
@@ -220,7 +236,6 @@ def calculate_indicators(df, is_intraday=False):
             df_cleaned.loc[:, "MACD_Hist"] = macd.macd_diff()
     except Exception as e:
         print(f"Error calculating MACD: {e}")
-        # Columns are already initialized to NaN.
 
     # Stochastic Oscillator
     try:
@@ -230,11 +245,8 @@ def calculate_indicators(df, is_intraday=False):
             df_cleaned.loc[:, "Stoch_D"] = stoch.stoch_signal()
     except Exception as e:
         print(f"Error calculating Stochastic Oscillator: {e}")
-        # Columns are already initialized to NaN.
 
-    return df_cleaned
-
-     # ADX (Average Directional Index)
+    # ADX (Average Directional Index)
     try:
         if not df_cleaned["High"].empty and not df_cleaned["Low"].empty and not df_cleaned["Close"].empty:
             adx_indicator = ta.trend.ADXIndicator(df_cleaned["High"], df_cleaned["Low"], df_cleaned["Close"], window=14, fillna=True)
@@ -243,8 +255,13 @@ def calculate_indicators(df, is_intraday=False):
             df_cleaned.loc[:, "minus_di"] = adx_indicator.adx_neg()
     except Exception as e:
         print(f"Error calculating ADX indicators: {e}")
-        # Columns are already initialized to NaN.
-    # --- END OF ADX BLOCK ---
+
+    # CCI (Commodity Channel Index) - Added this to the list of all_indicator_cols, so adding calculation here
+    try:
+        if not df_cleaned["High"].empty and not df_cleaned["Low"].empty and not df_cleaned["Close"].empty:
+            df_cleaned.loc[:, "CCI"] = ta.trend.cci(df_cleaned["High"], df_cleaned["Low"], df_cleaned["Close"], window=20, fillna=True)
+    except Exception as e:
+        print(f"Error calculating CCI indicator: {e}")
 
     return df_cleaned
 
@@ -1195,7 +1212,7 @@ def run_stock_scanner(
                 continue
 
             # Calculate indicators for the full historical data
-            df_calculated = calculate_indicators(df_hist.copy())
+            df_calculated = (df_hist.copy())
             
             # Get Finviz data
             finviz_data = get_finviz_data(ticker)
