@@ -142,8 +142,8 @@ def calculate_indicators(df, is_intraday=False):
             "EMA21", "EMA50", "EMA200",
             'ichimoku_a', 'ichimoku_b', 'ichimoku_conversion_line', 'ichimoku_base_line',
             'psar', "BB_upper", "BB_lower", "BB_mavg", "RSI", "MACD", "MACD_Signal",
-            "MACD_Hist", "Stoch_K", "Stoch_D", "adx", "plus_di", "minus_di", "CCI", # Existing
-            "ROC" # ADD THIS LINE
+            "MACD_Hist", "Stoch_K", "Stoch_D", "adx", "plus_di", "minus_di", "CCI", "ROC", # Existing
+            "obv", "obv_ema" # ADD THESE TWO LINES
         ]
         for col in all_indicator_cols:
             if col not in df_processed.columns:
@@ -271,9 +271,13 @@ def calculate_indicators(df, is_intraday=False):
             df_cleaned.loc[:, "ROC"] = ta.momentum.roc(df_cleaned["Close"], window=14, fillna=True)
     except Exception as e:
         print(f"Error calculating ROC indicator: {e}")
-    # --- END OF ROC BLOCK ---
-
-    return df_cleaned
+    # OBV (On-Balance Volume) and OBV_EMA
+    try:
+        if not df_cleaned["Close"].empty and not df_cleaned["Volume"].empty:
+            df_cleaned.loc[:, "obv"] = ta.volume.on_balance_volume(df_cleaned["Close"], df_cleaned["Volume"], fillna=True)
+            df_cleaned.loc[:, "obv_ema"] = ta.trend.ema_indicator(df_cleaned["obv"], window=20, fillna=True) # EMA of OBV
+    except Exception as e:
+        print(f"Error calculating OBV indicators: {e}")
    
     return df_cleaned
 
