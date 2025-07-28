@@ -160,7 +160,8 @@ def calculate_indicators(df, is_intraday=False):
             "EMA21", "EMA50", "EMA200",
             'ichimoku_a', 'ichimoku_b', 'ichimoku_conversion_line', 'ichimoku_base_line',
             'psar', "BB_upper", "BB_lower", "BB_mavg", "RSI", "MACD", "MACD_Signal",
-            "MACD_Hist", "Stoch_K", "Stoch_D", "adx", "plus_di", "minus_di", "CCI"
+            "MACD_Hist", "Stoch_K", "Stoch_D", "adx", "plus_di", "minus_di", "CCI",
+            "ROC" # <--- ADD THIS LINE
         ]
         for col in all_indicator_cols:
             if col not in df_cleaned.columns:
@@ -175,7 +176,8 @@ def calculate_indicators(df, is_intraday=False):
         "EMA21", "EMA50", "EMA200",
         'ichimoku_a', 'ichimoku_b', 'ichimoku_conversion_line', 'ichimoku_base_line',
         'psar', "BB_upper", "BB_lower", "BB_mavg", "RSI", "MACD", "MACD_Signal",
-        "MACD_Hist", "Stoch_K", "Stoch_D", "adx", "plus_di", "minus_di", "CCI"
+        "MACD_Hist", "Stoch_K", "Stoch_D", "adx", "plus_di", "minus_di", "CCI",
+        "ROC" # <--- ADD THIS LINE
     ]
     for col in all_indicator_cols:
         if col not in df_cleaned.columns: # Only add if not already present
@@ -263,7 +265,16 @@ def calculate_indicators(df, is_intraday=False):
             df_cleaned.loc[:, "CCI"] = ta.trend.cci(df_cleaned["High"], df_cleaned["Low"], df_cleaned["Close"], window=20, fillna=True)
     except Exception as e:
         print(f"Error calculating CCI indicator: {e}")
+   # ROC (Rate of Change)
+    try:
+        if not df_cleaned["Close"].empty:
+            df_cleaned.loc[:, "ROC"] = ta.momentum.roc(df_cleaned["Close"], window=14, fillna=True)
+    except Exception as e:
+        print(f"Error calculating ROC indicator: {e}")
+    # --- END OF ROC BLOCK ---
 
+    return df_cleaned
+   
     return df_cleaned
 
 # === Signal Generation ===
