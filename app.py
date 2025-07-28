@@ -378,10 +378,9 @@ if analyze_button and ticker:
     with tabs[6]: # 📚 Glossary
         st.markdown("### 📚 Glossary")
         st.info("The glossary content will be displayed here.") # Placeholder for actual glossary content
-
 elif run_scanner_button:
-    st.header("⚡ Stock Scanner Results")
-    with st.spinner(f"Running scanner for {len(scanner_ticker_list)} tickers with '{selected_trading_style}' style..."):
+st.header("⚡ Stock Scanner Results")
+with st.spinner(f"Running scanner for {len(scanner_ticker_list)} tickers with '{selected_trading_style}' style..."):
         # Pass all necessary parameters to the scanner function
         scanner_results_df = run_stock_scanner(
             scanner_ticker_list,
@@ -397,5 +396,4 @@ elif run_scanner_button:
             st.info("No qualifying stocks found based on your criteria.")
             
 else:
-    st.info("Enter a stock ticker in the sidebar and click 'Analyze Ticker' to begin analysis, or configure and run the 'Stock Scanner'.")
-
+st.info("Enter a stock ticker in the sidebar and click 'Analyze Ticker' to begin analysis, or configure and run the 'Stock Scanner'.")
