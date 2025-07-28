@@ -41,6 +41,13 @@ from display_components import (
 st.set_page_config(page_title="Aatif's AI Trading Hub", layout="wide", initial_sidebar_state="expanded")
 st.title("🚀 Aatif's AI-Powered Trading Hub")
 
+# --- Main Analysis Button ---
+analyze_button = st.sidebar.button("Analyze Ticker")
+clear_cache_button = st.sidebar.button("Clear Cache & Refresh Data")
+
+if clear_cache_button:
+    st.cache_data.clear()
+    st.rerun()
 # === Constants and Configuration ===
 LOG_FILE = "trade_log.csv"
 
@@ -153,15 +160,6 @@ st.sidebar.markdown("**Volatility & Other Indicators**")
 st.session_state.indicator_selection["Bollinger Bands"] = st.sidebar.checkbox("Bollinger Bands", value=st.session_state.indicator_selection["Bollinger Bands"])
 st.session_state.indicator_selection["VWAP"] = st.sidebar.checkbox("VWAP (Volume Weighted Average Price) - Intraday Only", value=st.session_state.indicator_selection["VWAP"])
 st.session_state.indicator_selection["Pivot Points"] = st.sidebar.checkbox("Pivot Points (Support/Resistance)", value=st.session_state.indicator_selection["Pivot Points"])
-
-
-# --- Main Analysis Button ---
-analyze_button = st.sidebar.button("Analyze Ticker")
-clear_cache_button = st.sidebar.button("Clear Cache & Refresh Data")
-
-if clear_cache_button:
-    st.cache_data.clear()
-    st.rerun()
 
 # --- Stock Scanner Section ---
 st.sidebar.markdown("---")
