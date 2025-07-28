@@ -10,12 +10,14 @@ import numpy as np
 from datetime import datetime, timedelta
 import pytz # Import pytz for timezone handling
 
-# Import functions from utils.py
+# ... (other imports and global variables like FINVIZ_RECOM_QUALITATIVE_MAP, EXPERT_RATING_MAP) ...
+
+# Import functions from utils.py (ensure calculate_indicators is imported)
 from utils import (
     backtest_strategy, calculate_indicators, generate_signals_for_row,
     suggest_options_strategy, get_options_chain, get_data, get_finviz_data,
     calculate_pivot_points, get_moneyness, analyze_options_chain,
-    generate_directional_trade_plan, get_indicator_summary_text
+    generate_directional_trade_plan, get_indicator_summary_text # Ensure this is up-to-date
 )
 
 # Mapping for Finviz recommendation numbers to qualitative descriptions
@@ -46,9 +48,34 @@ EXPERT_RATING_MAP = {
 def display_technical_analysis_tab(ticker, df_calculated, is_intraday, indicator_selection):
     st.markdown("### 📊 Technical Analysis & Chart")
 
-    # Filter out NaN rows only if they impact plotting.
-    # We rely on calculate_indicators to fill NaNs if data is insufficient.
-    # Here, we mostly check for all-NaN columns before adding plots.
+    if df_calculated.empty:
+        st.info("No data available to display technical analysis.")
+        return
+
+    # Ensure the DataFrame index is a DatetimeIndex, coercing errors
+    df_calculated.index = pd.to_datetime(df_calculated.index, errors='coerce')
+    df_calculated = df_calculated[df_calculated.index.notna()]
+
+    if df_calculated.empty:
+        st.info("No valid date data in the DataFrame index after cleaning. Cannot display chart.")
+        return
+
+    # --- FIX START: Standardize to UTC for robust comparison ---
+    # Convert DataFrame index to UTC if it's timezone-aware, or localize then convert if naive
+    if df_calculated.index.tz is not None:
+        df_calculated.index = df_calculated.index.tz_convert('UTC')
+    else:
+        # If the index is naive, assume it's in a local timezone (e.g., 'America/New_York' from yfinance)
+        try:
+            df_calculated.index = df_calculated.index.tz_localize('America/New_York', errors='coerce').tz_convert('UTC')
+        except pytz.exceptions.NonExistentTimeError:
+            st.warning("Could not localize DataFrame index to 'America/New_York' for UTC conversion. Proceeding with existing timezone or naive index.", icon="⚠️")
+            if df_calculated.index.tz is None: # If still naive after failed localization attempt
+                df_calculated.index = df_calculated.index.tz_localize('UTC', errors='coerce') # Treat as UTC naive if no other info
+
+    current_time_utc = pd.Timestamp.now(tz='UTC')
+    df_calculated = df_calculated[df_calculated.index <= current_time_utc]
+    # --- FIX END ---
 
     mc = mpf.make_marketcolors(
         up='green', down='red',
@@ -60,21 +87,56 @@ def display_technical_analysis_tab(ticker, df_calculated, is_intraday, indicator
     s = mpf.make_mpf_style(
         base_mpf_style='yahoo',
         marketcolors=mc,
-        figscale=1.5 # Adjusted for better default size
+        figscale=1.5
     )
 
     add_plots = []
-    # fig_panels will store the panel *numbers* (1, 2, 3...) for each indicator that gets its own subplot
-    fig_panels = []
-    # current_panel_index keeps track of the next available panel number for new indicator subplots
     current_panel_index = 0 # Panel 0 is reserved for the main OHLCV chart + Volume
 
     # --- Add Indicator Plots (only if selected and data is not all NaN) ---
 
-    # MACD
+    # EMAs (always on main panel 0)
+    if indicator_selection.get("EMA Trend"):
+        if not df_calculated['EMA21'].dropna().empty and \
+           not df_calculated['EMA50'].dropna().empty and \
+           not df_calculated['EMA200'].dropna().empty:
+            add_plots.append(mpf.make_addplot(df_calculated['EMA21'], color='blue', panel=0, width=0.7, secondary_y=False))
+            add_plots.append(mpf.make_addplot(df_calculated['EMA50'], color='orange', panel=0, width=0.7, secondary_y=False))
+            add_plots.append(mpf.make_addplot(df_calculated['EMA200'], color='purple', panel=0, width=0.7, secondary_y=False))
+
+    # Ichimoku Cloud (always on main panel 0)
+    if indicator_selection.get("Ichimoku Cloud"):
+        if not df_calculated['ichimoku_a'].dropna().empty and \
+           not df_calculated['ichimoku_b'].dropna().empty and \
+           not df_calculated['ichimoku_conversion_line'].dropna().empty and \
+           not df_calculated['ichimoku_base_line'].dropna().empty:
+            add_plots.append(mpf.make_addplot(df_calculated['ichimoku_a'], color='green', panel=0, width=0.7, secondary_y=False))
+            add_plots.append(mpf.make_addplot(df_calculated['ichimoku_b'], color='red', panel=0, width=0.7, secondary_y=False))
+            add_plots.append(mpf.make_addplot(df_calculated['ichimoku_conversion_line'], color='cyan', panel=0, width=0.7, secondary_y=False))
+            add_plots.append(mpf.make_addplot(df_calculated['ichimoku_base_line'], color='magenta', panel=0, width=0.7, secondary_y=False))
+
+    # Parabolic SAR (always on main panel 0)
+    if indicator_selection.get("Parabolic SAR"):
+        if not df_calculated['psar'].dropna().empty:
+            add_plots.append(mpf.make_addplot(df_calculated['psar'], type='scatter', marker='.', markersize=50, color='lime', panel=0, secondary_y=False))
+
+    # Bollinger Bands (always on main panel 0)
+    if indicator_selection.get("Bollinger Bands"):
+        if not df_calculated['BB_upper'].dropna().empty and \
+           not df_calculated['BB_lower'].dropna().empty and \
+           not df_calculated['BB_mavg'].dropna().empty:
+            add_plots.append(mpf.make_addplot(df_calculated['BB_upper'], color='gray', panel=0, width=0.7, secondary_y=False))
+            add_plots.append(mpf.make_addplot(df_calculated['BB_lower'], color='gray', panel=0, width=0.7, secondary_y=False))
+            add_plots.append(mpf.make_addplot(df_calculated['BB_mavg'], color='blue', panel=0, width=0.7, secondary_y=False))
+
+    # VWAP (if intraday, always on main panel 0)
+    if is_intraday and indicator_selection.get("VWAP"):
+        if 'VWAP' in df_calculated.columns and not df_calculated['VWAP'].dropna().empty:
+            add_plots.append(mpf.make_addplot(df_calculated['VWAP'], color='darkred', panel=0, width=1.0, secondary_y=False))
+
+
+    # MACD (separate panel)
     if indicator_selection.get("MACD"):
-        # Check if MACD data is actually present (not all NaN) before adding panel and plots
-        # Ensure correct casing ('MACD', 'MACD_Signal', 'MACD_Hist')
         if not df_calculated['MACD'].dropna().empty and \
            not df_calculated['MACD_Signal'].dropna().empty and \
            not df_calculated['MACD_Hist'].dropna().empty:
@@ -84,31 +146,26 @@ def display_technical_analysis_tab(ticker, df_calculated, is_intraday, indicator
                 mpf.make_addplot(df_calculated['MACD_Signal'], panel=current_panel_index, color='blue', secondary_y=False, width=0.7),
                 mpf.make_addplot(df_calculated['MACD_Hist'], panel=current_panel_index, type='bar', color='green', secondary_y=False, width=0.7)
             ])
-            fig_panels.append(current_panel_index) # Add this panel to fig_panels only if plots were added
 
-    # RSI
+    # RSI (separate panel)
     if indicator_selection.get("RSI"):
         if not df_calculated['RSI'].dropna().empty:
             current_panel_index += 1
             add_plots.append(mpf.make_addplot(df_calculated['RSI'], panel=current_panel_index, color='purple', secondary_y=False, width=0.7))
             add_plots.append(mpf.make_addplot(pd.Series(70, index=df_calculated.index), panel=current_panel_index, color='gray', linestyle=':', secondary_y=False, width=0.7))
             add_plots.append(mpf.make_addplot(pd.Series(30, index=df_calculated.index), panel=current_panel_index, color='gray', linestyle=':', secondary_y=False, width=0.7))
-            fig_panels.append(current_panel_index)
 
-    # Stochastic Oscillator
+    # Stochastic Oscillator (separate panel)
     if indicator_selection.get("Stoch"):
-        # Ensure correct casing ('Stoch_K', 'Stoch_D')
         if not df_calculated['Stoch_K'].dropna().empty and not df_calculated['Stoch_D'].dropna().empty:
             current_panel_index += 1
             add_plots.append(mpf.make_addplot(df_calculated['Stoch_K'], panel=current_panel_index, color='magenta', secondary_y=False, width=0.7))
             add_plots.append(mpf.make_addplot(df_calculated['Stoch_D'], panel=current_panel_index, color='cyan', secondary_y=False, width=0.7))
             add_plots.append(mpf.make_addplot(pd.Series(80, index=df_calculated.index), panel=current_panel_index, color='gray', linestyle=':', secondary_y=False, width=0.7))
             add_plots.append(mpf.make_addplot(pd.Series(20, index=df_calculated.index), panel=current_panel_index, color='gray', linestyle=':', secondary_y=False, width=0.7))
-            fig_panels.append(current_panel_index)
 
-    # ADX
+    # ADX (separate panel)
     if indicator_selection.get("ADX"):
-        # Ensure correct casing ('adx', 'plus_di', 'minus_di')
         if not df_calculated['adx'].dropna().empty and \
            not df_calculated['plus_di'].dropna().empty and \
            not df_calculated['minus_di'].dropna().empty:
@@ -116,50 +173,45 @@ def display_technical_analysis_tab(ticker, df_calculated, is_intraday, indicator
             add_plots.append(mpf.make_addplot(df_calculated['adx'], panel=current_panel_index, color='red', secondary_y=False, width=0.7))
             add_plots.append(mpf.make_addplot(df_calculated['plus_di'], panel=current_panel_index, color='green', secondary_y=False, width=0.7))
             add_plots.append(mpf.make_addplot(df_calculated['minus_di'], panel=current_panel_index, color='orange', secondary_y=False, width=0.7))
-            add_plots.append(mpf.make_addplot(pd.Series(25, index=df_calculated.index), panel=current_panel_index, color='gray', linestyle=':', secondary_y=False, width=0.7)) # ADX threshold line
-            fig_panels.append(current_panel_index)
+            add_plots.append(mpf.make_addplot(pd.Series(25, index=df_calculated.index), panel=current_panel_index, color='gray', linestyle=':', secondary_y=False, width=0.7))
 
-    # CCI
+    # CCI (separate panel)
     if indicator_selection.get("CCI"):
         if not df_calculated['CCI'].dropna().empty:
             current_panel_index += 1
             add_plots.append(mpf.make_addplot(df_calculated['CCI'], panel=current_panel_index, color='brown', secondary_y=False, width=0.7))
             add_plots.append(mpf.make_addplot(pd.Series(100, index=df_calculated.index), panel=current_panel_index, color='gray', linestyle=':', secondary_y=False, width=0.7))
             add_plots.append(mpf.make_addplot(pd.Series(-100, index=df_calculated.index), panel=current_panel_index, color='gray', linestyle=':', secondary_y=False, width=0.7))
-            fig_panels.append(current_panel_index)
 
-    # ROC
+    # ROC (separate panel)
     if indicator_selection.get("ROC"):
         if not df_calculated['ROC'].dropna().empty:
             current_panel_index += 1
             add_plots.append(mpf.make_addplot(df_calculated['ROC'], panel=current_panel_index, color='darkgreen', secondary_y=False, width=0.7))
-            add_plots.append(mpf.make_addplot(pd.Series(0, index=df_calculated.index), panel=current_panel_index, color='gray', linestyle=':', secondary_y=False, width=0.7)) # Zero line for ROC
-            fig_panels.append(current_panel_index)
+            add_plots.append(mpf.make_addplot(pd.Series(0, index=df_calculated.index), panel=current_panel_index, color='gray', linestyle=':', secondary_y=False, width=0.7))
 
-    # OBV
+    # OBV (separate panel)
     if indicator_selection.get("OBV"):
-        # Ensure correct casing ('obv', 'obv_ema')
         if not df_calculated['obv'].dropna().empty and not df_calculated['obv_ema'].dropna().empty:
             current_panel_index += 1
             add_plots.append(mpf.make_addplot(df_calculated['obv'], panel=current_panel_index, color='blue', secondary_y=False, width=0.7))
             add_plots.append(mpf.make_addplot(df_calculated['obv_ema'], panel=current_panel_index, color='orange', secondary_y=False, width=0.7))
-            fig_panels.append(current_panel_index)
 
-    # --- Construct panel_ratios and panels list for mpf.plot ---
-    # The main chart (OHLCV + Volume) is always panel 0.
-    # We assign it a larger ratio (e.g., 3) and other indicator panels a smaller ratio (e.g., 1).
 
-    panel_ratios_list = [3] # Ratio for the main OHLCV + Volume chart (panel 0)
-    panels_list = [0]       # List of panel indices to plot
+    # --- Construct panels_list and panel_ratios_list for mpf.plot ---
+    # Get all unique panel numbers used in add_plots (including 0 for the main chart)
+    all_panels_in_addplots = [ap.panel for ap in add_plots]
+    
+    # The panels list must include 0 for the main chart, plus any other unique panels from add_plots
+    panels_list = sorted(list(set([0] + all_panels_in_addplots)))
 
-    # Append ratios and panel indices for each additional indicator panel
-    for panel_num in fig_panels:
-        panel_ratios_list.append(1) # Add ratio 1 for each indicator subplot
-        panels_list.append(panel_num) # Add the panel number
+    # The panel_ratios_list must have the same length as panels_list
+    # Give panel 0 (main chart + volume) a larger ratio (e.g., 3)
+    # Give all other indicator panels a smaller ratio (e.g., 1)
+    panel_ratios_list = [3] + [1] * (len(panels_list) - 1)
 
     # Adjust figure size dynamically based on the number of panels
-    # Base height + 2 inches for each additional panel
-    figure_height = 8 + len(fig_panels) * 2
+    figure_height = 8 + len(panels_list) * 2 # Base height + 2 inches for each panel
 
     # --- Generate the Plot ---
     try:
@@ -169,35 +221,33 @@ def display_technical_analysis_tab(ticker, df_calculated, is_intraday, indicator
             style=s,
             title=f"Technical Analysis for {ticker}",
             ylabel='Price',
-            addplot=add_plots if add_plots else None, # Pass add_plots only if not empty
-            panel_ratios=panel_ratios_list, # Use the dynamically generated panel_ratios
-            # panel_positions is usually automatically inferred if panels are correctly assigned to addplots
-            # but sometimes explicit definition is needed if complex layouts.
-            # For multiple panels stacked vertically, this is often simpler:
-            # panel_positions=[(i,0,1,1) for i in range(len(panels_list))] # No, this generates error if not carefully used
-            figscale=1.2, # Keep figscale, but dynamic figsize is better
-            figsize=(12, figure_height), # Dynamic figure size
+            addplot=add_plots if add_plots else None,
+            panel_ratios=panel_ratios_list,
+            figscale=1.2,
+            figsize=(12, figure_height),
             volume=True,
-            volume_panel=0, # Volume remains on the main chart panel
+            volume_panel=0,
             returnfig=True,
             panels=panels_list # Explicitly pass the list of panel indices to use
         )
         st.pyplot(fig)
-        plt.close(fig) # Close the plot to prevent memory issues
+        plt.close(fig)
 
     except Exception as e:
         st.warning(f"⚠️ Could not render chart. Please check data and indicator selections. Error: {e}")
-        st.exception(e) # Display full traceback for debugging
+        st.exception(e)
         if "panel_ratios" in str(e) or "num panels" in str(e):
-            st.error(f"Panel Configuration Error: len(panel_ratios)={len(panel_ratios_list)} but actual number of panels (including main+volume) detected by mplfinance is {len(panels_list)}.")
-            st.info("This often means some indicator data is all NaN, preventing it from being plotted, but its panel 'slot' was still reserved.")
-            st.info("Please verify the data in your DataFrame columns for the selected indicators. If data is sparse, try a wider date range.")
+            st.error(f"Panel Configuration Error: Determined panel_ratios_list length: {len(panel_ratios_list)}, determined panels_list length: {len(panels_list)}. Error details: {e}")
+            st.info("This indicates a mismatch between the number of panels mplfinance expects and what it can actually plot. This often happens if an indicator's data for the current view is entirely NaN after internal mplfinance filtering.")
+            st.info("Please verify the data in your DataFrame columns for the selected indicators, especially the latest values. If data is sparse, try a wider date range.")
 
-    # ... (rest of the function, like displaying signals, pivot points, etc.)
-    # Note: The indicator summary text function might also need the updated casing for indicator names.
+    # ... (rest of the display_technical_analysis_tab function for Indicator Summary, Pivot Points, Trade Signals, Backtesting, Directional Trade Plan) ...
+
+    # Indicator Summary
     if not df_calculated.empty:
         st.markdown("---")
         st.subheader("💡 Indicator Summary")
+        # Ensure get_indicator_summary_text can handle the latest_row directly
         summary_text = get_indicator_summary_text(df_calculated.iloc[-1], indicator_selection)
         st.write(summary_text)
 
@@ -235,6 +285,7 @@ def display_technical_analysis_tab(ticker, df_calculated, is_intraday, indicator
     st.markdown("---")
     st.subheader("📈 Strategy Backtesting")
 
+    # Assuming backtest_strategy is defined in utils.py and handles indicator_selection
     backtest_data = backtest_strategy(df_calculated.copy(), indicator_selection)
 
     if backtest_data:
@@ -296,7 +347,6 @@ def display_technical_analysis_tab(ticker, df_calculated, is_intraday, indicator
         except Exception as e:
             st.error(f"An error occurred while generating the trade plan: {e}")
             st.exception(e) # For debugging
-
 
     # Load existing log
     if os.path.exists(log_file):
