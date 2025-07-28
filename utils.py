@@ -126,86 +126,114 @@ def get_vix_data(start_date, end_date):
         return None
 
 # === Indicator Calculation ===
+
 def calculate_indicators(df, is_intraday=False):
     """Calculates various technical indicators for a given DataFrame."""
     required_cols = ['Open', 'High', 'Low', 'Close', 'Volume']
+
+    # Initial check for required columns
     if not all(col in df.columns for col in required_cols):
+        print("Warning: Missing required columns for indicator calculation. Returning original DataFrame.")
+        # Ensure EMA columns are added with NaN even if initial data is incomplete
+        for col in ["EMA21", "EMA50", "EMA200", 'ichimoku_a', 'ichimoku_b',
+                    'ichimoku_conversion_line', 'ichimoku_base_line', 'psar']:
+            if col not in df.columns:
+                df.loc[:, col] = np.nan
         return df
+
     df_cleaned = df.dropna(subset=required_cols).copy()
-    if df_cleaned.empty: return df_cleaned
-    
-  # EMAs
-    try:
-        df_cleaned.loc[:, "EMA21"] = ta.trend.ema_indicator(df_cleaned["Close"], 21, fillna=True)
-        df_cleaned.loc[:, "EMA50"] = ta.trend.ema_indicator(df_cleaned["Close"], 50, fillna=True)
-        df_cleaned.loc[:, "EMA200"] = ta.trend.ema_indicator(df_cleaned["Close"], 200, fillna=True)
-    except Exception as e:
-        # You can add more sophisticated logging here if needed, e.g., using Python's logging module
-        # For simplicity in utils.py, printing to console is an option for debugging
-        print(f"Error calculating EMA indicators: {e}") 
-        # Ensure columns exist even if calculation fails
-        for col in ["EMA21", "EMA50", "EMA200"]:
+
+    if df_cleaned.empty:
+        print("Warning: DataFrame is empty after dropping NA values. Returning empty DataFrame.")
+        # Ensure EMA columns are added with NaN even if DataFrame is empty
+        for col in ["EMA21", "EMA50", "EMA200", 'ichimoku_a', 'ichimoku_b',
+                    'ichimoku_conversion_line', 'ichimoku_base_line', 'psar']:
             if col not in df_cleaned.columns:
-                df_cleaned.loc[:, col] = np.nan # Initialize with NaN to prevent KeyError
-    
-    
+                df_cleaned.loc[:, col] = np.nan
+        return df_cleaned
+
+    # Initialize all indicator columns to NaN to ensure they always exist
+    for col in ["EMA21", "EMA50", "EMA200", 'ichimoku_a', 'ichimoku_b',
+                'ichimoku_conversion_line', 'ichimoku_base_line', 'psar']:
+        df_cleaned.loc[:, col] = np.nan
+
+    # EMAs
+    try:
+        if not df_cleaned["Close"].empty:
+            df_cleaned.loc[:, "EMA21"] = ta.trend.ema_indicator(df_cleaned["Close"], 21, fillna=True)
+            df_cleaned.loc[:, "EMA50"] = ta.trend.ema_indicator(df_cleaned["Close"], 50, fillna=True)
+            df_cleaned.loc[:, "EMA200"] = ta.trend.ema_indicator(df_cleaned["Close"], 200, fillna=True)
+    except Exception as e:
+        print(f"Error calculating EMA indicators: {e}")
+        # Columns are already initialized to NaN, so no further action needed for existence here.
+
     # Ichimoku
-    df_cleaned.loc[:, 'ichimoku_a'] = ta.trend.ichimoku_a(df_cleaned['High'], df_cleaned['Low'], fillna=True)
-    df_cleaned.loc[:, 'ichimoku_b'] = ta.trend.ichimoku_b(df_cleaned['High'], df_cleaned['Low'], fillna=True)
-    # Tenkan-sen (Conversion Line) and Kijun-sen (Base Line) are also part of Ichimoku
-    df_cleaned.loc[:, 'ichimoku_conversion_line'] = ta.trend.ichimoku_conversion_line(df_cleaned['High'], df_cleaned['Low'], fillna=True)
-    df_cleaned.loc[:, 'ichimoku_base_line'] = ta.trend.ichimoku_base_line(df_cleaned['High'], df_cleaned['Low'], fillna=True)
+    try:
+        if not df_cleaned['High'].empty and not df_cleaned['Low'].empty and not df_cleaned['Close'].empty:
+            df_cleaned.loc[:, 'ichimoku_a'] = ta.trend.ichimoku_a(df_cleaned['High'], df_cleaned['Low'], fillna=True)
+            df_cleaned.loc[:, 'ichimoku_b'] = ta.trend.ichimoku_b(df_cleaned['High'], df_cleaned['Low'], fillna=True)
+            df_cleaned.loc[:, 'ichimoku_conversion_line'] = ta.trend.ichimoku_conversion_line(df_cleaned['High'], df_cleaned['Low'], fillna=True)
+            df_cleaned.loc[:, 'ichimoku_base_line'] = ta.trend.ichimoku_base_line(df_cleaned['High'], df_cleaned['Low'], fillna=True)
+    except Exception as e:
+        print(f"Error calculating Ichimoku indicators: {e}")
+        # Columns are already initialized to NaN.
 
-    # Other indicators
-    df_cleaned.loc[:, 'psar'] = ta.trend.PSARIndicator(df_cleaned['High'], df_cleaned['Low'], df_cleaned['Close'], fillna=True).psar()
-    
-    # ADX requires +DI and -DI
-    adx_indicator = ta.trend.ADXIndicator(df_cleaned['High'], df_cleaned['Low'], df_cleaned['Close'], fillna=True)
-    df_cleaned.loc[:, 'adx'] = adx_indicator.adx()
-    df_cleaned.loc[:, 'plus_di'] = adx_indicator.adx_pos()
-    df_cleaned.loc[:, 'minus_di'] = adx_indicator.adx_neg()
+    # PSAR
+    try:
+        if not df_cleaned['High'].empty and not df_cleaned['Low'].empty and not df_cleaned['Close'].empty:
+            df_cleaned.loc[:, 'psar'] = ta.trend.PSARIndicator(df_cleaned['High'], df_cleaned['Low'], df_cleaned['Close'], fillna=True).psar()
+    except Exception as e:
+        print(f"Error calculating PSAR indicator: {e}")
+        # Column is already initialized to NaN.
 
-    df_cleaned.loc[:, "RSI"] = ta.momentum.RSIIndicator(df_cleaned["Close"], fillna=True).rsi()
-    
-    stoch_indicator = ta.momentum.StochasticOscillator(df_cleaned["High"], df_cleaned["Low"], df_cleaned["Close"], fillna=True)
-    df_cleaned.loc[:, "stoch_k"] = stoch_indicator.stoch()
-    df_cleaned.loc[:, "stoch_d"] = stoch_indicator.stoch_signal()
-    
-    macd_indicator = ta.trend.MACD(df_cleaned["Close"], fillna=True)
-    df_cleaned.loc[:, "macd"] = macd_indicator.macd()
-    df_cleaned.loc[:, "macd_signal"] = macd_indicator.macd_signal()
-    df_cleaned.loc[:, "macd_diff"] = macd_indicator.macd_diff() # MACD Histogram
-    
-    bollinger_indicator = ta.volatility.BollingerBands(df_cleaned["Close"], fillna=True)
-    df_cleaned.loc[:, "BB_high"] = bollinger_indicator.bollinger_hband()
-    df_cleaned.loc[:, "BB_low"] = bollinger_indicator.bollinger_lband()
-    df_cleaned.loc[:, "BB_mid"] = bollinger_indicator.bollinger_mavg()
-    df_cleaned.loc[:, "BB_width"] = bollinger_indicator.bollinger_wband()
+    # Bollinger Bands
+    try:
+        if not df_cleaned["Close"].empty:
+            bollinger_bands = ta.volatility.BollingerBands(df_cleaned["Close"], window=20, window_dev=2, fillna=True)
+            df_cleaned.loc[:, "BB_upper"] = bollinger_bands.bollinger_hband()
+            df_cleaned.loc[:, "BB_lower"] = bollinger_bands.bollinger_lband()
+            df_cleaned.loc[:, "BB_mavg"] = bollinger_bands.bollinger_mavg()
+    except Exception as e:
+        print(f"Error calculating Bollinger Bands: {e}")
+        for col in ["BB_upper", "BB_lower", "BB_mavg"]:
+            if col not in df_cleaned.columns:
+                df_cleaned.loc[:, col] = np.nan
 
-    df_cleaned.loc[:, "Volume_MA"] = df_cleaned["Volume"].rolling(window=20).mean() # Example: 20-period rolling mean of Volume
-    
-    df_cleaned.loc[:, "CCI"] = ta.trend.CCIIndicator(df_cleaned["High"], df_cleaned["Low"], df_cleaned["Close"], fillna=True).cci()
-    df_cleaned.loc[:, "ROC"] = ta.momentum.ROCIndicator(df_cleaned["Close"], fillna=True).roc()
-    
-    obv_indicator = ta.volume.OnBalanceVolumeIndicator(df_cleaned["Close"], df_cleaned["Volume"], fillna=True)
-    df_cleaned.loc[:, "obv"] = obv_indicator.on_balance_volume()
-    df_cleaned.loc[:, "obv_ema"] = ta.trend.ema_indicator(df_cleaned["obv"], window=20, fillna=True) # EMA of OBV for trend
+    # RSI
+    try:
+        if not df_cleaned["Close"].empty:
+            df_cleaned.loc[:, "RSI"] = ta.momentum.rsi(df_cleaned["Close"], window=14, fillna=True)
+    except Exception as e:
+        print(f"Error calculating RSI: {e}")
+        if "RSI" not in df_cleaned.columns:
+            df_cleaned.loc[:, "RSI"] = np.nan
 
-    # ATR (Average True Range)
-    df_cleaned.loc[:, "ATR"] = ta.volatility.AverageTrueRange(df_cleaned["High"], df_cleaned["Low"], df_cleaned["Close"], fillna=True).average_true_range()
+    # MACD
+    try:
+        if not df_cleaned["Close"].empty:
+            macd = ta.trend.MACD(df_cleaned["Close"], window_fast=12, window_slow=26, window_sign=9, fillna=True)
+            df_cleaned.loc[:, "MACD"] = macd.macd()
+            df_cleaned.loc[:, "MACD_Signal"] = macd.macd_signal()
+            df_cleaned.loc[:, "MACD_Hist"] = macd.macd_diff()
+    except Exception as e:
+        print(f"Error calculating MACD: {e}")
+        for col in ["MACD", "MACD_Signal", "MACD_Hist"]:
+            if col not in df_cleaned.columns:
+                df_cleaned.loc[:, col] = np.nan
 
+    # Stochastic Oscillator
+    try:
+        if not df_cleaned["High"].empty and not df_cleaned["Low"].empty and not df_cleaned["Close"].empty:
+            stoch = ta.momentum.StochasticOscillator(df_cleaned["High"], df_cleaned["Low"], df_cleaned["Close"], window=14, smooth_window=3, fillna=True)
+            df_cleaned.loc[:, "Stoch_K"] = stoch.stoch()
+            df_cleaned.loc[:, "Stoch_D"] = stoch.stoch_signal()
+    except Exception as e:
+        print(f"Error calculating Stochastic Oscillator: {e}")
+        for col in ["Stoch_K", "Stoch_D"]:
+            if col not in df_cleaned.columns:
+                df_cleaned.loc[:, col] = np.nan
 
-    if is_intraday:
-        # VWAP calculation for intraday. Ensure it handles potential division by zero for initial rows.
-        cumulative_volume = df_cleaned['Volume'].cumsum()
-        cumulative_vwap_numerator = (df_cleaned['Volume'] * (df_cleaned['High'] + df_cleaned['Low'] + df_cleaned['Close']) / 3).cumsum()
-        df_cleaned.loc[:, "VWAP"] = cumulative_vwap_numerator / cumulative_volume
-        df_cleaned.loc[cumulative_volume == 0, "VWAP"] = np.nan # Handle division by zero
-    else:
-        df_cleaned.loc[:, "VWAP"] = np.nan # Not applicable for daily/weekly
-
-    return df_cleaned.dropna() # Drop any remaining NaNs after indicator calculation
-
+    return df_cleaned
 
 # === Signal Generation ===
 def generate_signals_for_row(row_data):
