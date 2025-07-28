@@ -513,7 +513,7 @@ def display_economic_sentiment_tab(economic_score, investor_sentiment_score, new
     st.subheader("Key Economic Indicators")
     
     if latest_gdp is not None and not latest_gdp.empty:
-        st.write(f"**Latest GDP Growth:** {latest_gdp.iloc[-1]:.2f}%" (as of {latest_gdp.index[-1].strftime('%Y-%m-%d')})")
+        st.write(f"**Latest GDP Growth:** {latest_gdp.iloc[-1]:.2f}% (as of {latest_gdp.index[-1].strftime('%Y-%m-%d')})")
     else:
         st.info("GDP data not available.")
 
