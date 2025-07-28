@@ -374,26 +374,35 @@ if analyze_button and ticker:
                 st.markdown(f"- [{headline['title']}]({headline['link']}) ({headline['date']})")
         else:
             st.info("No recent news headlines found.")
-
-    with tabs[6]: # 📚 Glossary
-        st.markdown("### 📚 Glossary")
-        st.info("The glossary content will be displayed here.") # Placeholder for actual glossary content
-        elif run_scanner_button:
-        st.header("⚡ Stock Scanner Results")
-    with st.spinner(f"Running scanner for {len(scanner_ticker_list)} tickers with '{selected_trading_style}' style..."):
-        # Pass all necessary parameters to the scanner function
-        scanner_results_df = run_stock_scanner(
-            scanner_ticker_list,
-            selected_trading_style,
-            min_scanner_confidence,
-            st.session_state.indicator_selection, # Pass the full selection dict
-            normalized_weights # Pass the normalized weights
-        )
-
-        if not scanner_results_df.empty:
-            display_scanner_tab(scanner_results_df)
-        else:
-            st.info("No qualifying stocks found based on your criteria.")
             
-        else:
+    with tabs[6]: # 📚 Glossary
+            st.markdown("### 📚 Glossary")
+            st.info("The glossary content will be displayed here.") # Placeholder for actual glossary content
+
+    # This 'elif' and 'else' block needs to be at the same indentation level
+    # as the 'if ticker:' block, or wherever you handle the main application flow.
+    # It should NOT be inside any 'with tabs[X]:' block.
+    elif run_scanner_button: # <--- UNINDENT THIS LINE
+        st.header("⚡ Stock Scanner Results")
+        with st.spinner(f"Running scanner for {len(scanner_ticker_list)} tickers with '{selected_trading_style}' style..."):
+            # Pass all necessary parameters to the scanner function
+            scanner_results_df = run_stock_scanner(
+                scanner_ticker_list,
+                selected_trading_style,
+                min_scanner_confidence,
+                st.session_state.indicator_selection, # Pass the full selection dict
+                normalized_weights # Pass the normalized weights
+            )
+
+            if not scanner_results_df.empty:
+                display_scanner_tab(scanner_results_df)
+            else:
+                st.info("No qualifying stocks found based on your criteria.")
+                
+    else: # <--- UNINDENT THIS LINE to match 'if ticker:' or 'elif run_scanner_button:'
         st.info("Enter a stock ticker in the sidebar and click 'Analyze Ticker' to begin analysis, or configure and run the 'Stock Scanner'.")
+
+
+if __name__ == "__main__":
+    main()
+   
