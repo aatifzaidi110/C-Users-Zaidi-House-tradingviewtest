@@ -135,35 +135,31 @@ def calculate_indicators(df, is_intraday=False):
     # Prepare a DataFrame for cleaning, or use original if already bad
     df_processed = df.copy()
 
+    # Define all possible indicator columns to ensure they are always present, even if NaN
+    all_indicator_cols = [
+        "EMA21", "EMA50", "EMA200",
+        'ichimoku_a', 'ichimoku_b', 'ichimoku_conversion_line', 'ichimoku_base_line',
+        'psar', "BB_upper", "BB_lower", "BB_mavg", "RSI", "MACD", "MACD_Signal",
+        "MACD_Hist", "Stoch_K", "Stoch_D", "adx", "plus_di", "minus_di", "CCI", "ROC",
+        "obv", "obv_ema" # Ensure OBV and OBV_EMA are included here
+    ]
+
     if not all(col in df_processed.columns for col in required_cols):
-        print("Warning: Missing required columns for indicator calculation. Attempting to add missing indicator columns with NaN.")
+        print("Warning: Missing essential OHLCV columns for indicator calculation. Attempting to add missing indicator columns with NaN.")
         # Ensure all indicator columns are added with NaN even if initial data is incomplete
-        all_indicator_cols = [
-            "EMA21", "EMA50", "EMA200",
-            'ichimoku_a', 'ichimoku_b', 'ichimoku_conversion_line', 'ichimoku_base_line',
-            'psar', "BB_upper", "BB_lower", "BB_mavg", "RSI", "MACD", "MACD_Signal",
-            "MACD_Hist", "Stoch_K", "Stoch_D", "adx", "plus_di", "minus_di", "CCI", "ROC", # Existing
-            "obv", "obv_ema" # ADD THESE TWO LINES
-        ]
         for col in all_indicator_cols:
             if col not in df_processed.columns:
                 df_processed.loc[:, col] = np.nan
         # If essential columns are missing, we can't calculate anything meaningful. Return with NaNs.
-        return df_processed.set_index(df.index) # Ensure index is preserved if coming from yf
+        # Ensure index is preserved if coming from yf
+        return df_processed.set_index(df.index) if not df.index.empty else df_processed
 
     df_cleaned = df_processed.dropna(subset=required_cols).copy()
 
     if df_cleaned.empty:
         print("Warning: DataFrame is empty after dropping NA values. Attempting to add missing indicator columns with NaN.")
         # Ensure all indicator columns are added with NaN even if DataFrame is empty after dropna
-        all_indicator_cols = [
-            "EMA21", "EMA50", "EMA200",
-            'ichimoku_a', 'ichimoku_b', 'ichimoku_conversion_line', 'ichimoku_base_line',
-            'psar', "BB_upper", "BB_lower", "BB_mavg", "RSI", "MACD", "MACD_Signal",
-            "MACD_Hist", "Stoch_K", "Stoch_D", "adx", "plus_di", "minus_di", "CCI",
-            "ROC" # <--- ADD THIS LINE
-        ]
-        for col in all_indicator_cols:
+        for col in all_indicator_cols: # Use the full list here as well
             if col not in df_cleaned.columns:
                 df_cleaned.loc[:, col] = np.nan
         return df_cleaned # Return the empty DataFrame with expected columns
@@ -172,14 +168,8 @@ def calculate_indicators(df, is_intraday=False):
 
 
     # --- Initialize all indicator columns to NaN to ensure they always exist before calculation attempts ---
-    all_indicator_cols = [
-        "EMA21", "EMA50", "EMA200",
-        'ichimoku_a', 'ichimoku_b', 'ichimoku_conversion_line', 'ichimoku_base_line',
-        'psar', "BB_upper", "BB_lower", "BB_mavg", "RSI", "MACD", "MACD_Signal",
-        "MACD_Hist", "Stoch_K", "Stoch_D", "adx", "plus_di", "minus_di", "CCI",
-        "ROC" # <--- ADD THIS LINE
-    ]
-    for col in all_indicator_cols:
+    # This step is crucial if data might not be complete for all indicator calculations
+    for col in all_indicator_cols: # Use the full list here too
         if col not in df_cleaned.columns: # Only add if not already present
              df_cleaned.loc[:, col] = np.nan
         # Otherwise, existing (NaN or otherwise) values will be overwritten by calculations below
@@ -259,18 +249,20 @@ def calculate_indicators(df, is_intraday=False):
     except Exception as e:
         print(f"Error calculating ADX indicators: {e}")
 
-    # CCI (Commodity Channel Index) - Added this to the list of all_indicator_cols, so adding calculation here
+    # CCI (Commodity Channel Index)
     try:
         if not df_cleaned["High"].empty and not df_cleaned["Low"].empty and not df_cleaned["Close"].empty:
             df_cleaned.loc[:, "CCI"] = ta.trend.cci(df_cleaned["High"], df_cleaned["Low"], df_cleaned["Close"], window=20, fillna=True)
     except Exception as e:
         print(f"Error calculating CCI indicator: {e}")
-   # ROC (Rate of Change)
+
+    # ROC (Rate of Change)
     try:
         if not df_cleaned["Close"].empty:
             df_cleaned.loc[:, "ROC"] = ta.momentum.roc(df_cleaned["Close"], window=14, fillna=True)
     except Exception as e:
         print(f"Error calculating ROC indicator: {e}")
+
     # OBV (On-Balance Volume) and OBV_EMA
     try:
         if not df_cleaned["Close"].empty and not df_cleaned["Volume"].empty:
@@ -278,9 +270,9 @@ def calculate_indicators(df, is_intraday=False):
             df_cleaned.loc[:, "obv_ema"] = ta.trend.ema_indicator(df_cleaned["obv"], window=20, fillna=True) # EMA of OBV
     except Exception as e:
         print(f"Error calculating OBV indicators: {e}")
-   
-    return df_cleaned
 
+
+    return df_cleaned
 # === Signal Generation ===
 def generate_signals_for_row(row_data):
     """Generates bullish and bearish signals for a single row of data."""
