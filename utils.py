@@ -126,7 +126,6 @@ def get_vix_data(start_date, end_date):
         return None
 
 # === Indicator Calculation ===
-
 def calculate_indicators(df, is_intraday=False):
     """Calculates various technical indicators for a given DataFrame."""
     required_cols = ['Open', 'High', 'Low', 'Close', 'Volume']
@@ -136,7 +135,9 @@ def calculate_indicators(df, is_intraday=False):
         print("Warning: Missing required columns for indicator calculation. Returning original DataFrame.")
         # Ensure EMA columns are added with NaN even if initial data is incomplete
         for col in ["EMA21", "EMA50", "EMA200", 'ichimoku_a', 'ichimoku_b',
-                    'ichimoku_conversion_line', 'ichimoku_base_line', 'psar']:
+                    'ichimoku_conversion_line', 'ichimoku_base_line', 'psar',
+                    "BB_upper", "BB_lower", "BB_mavg", "RSI", "MACD",
+                    "MACD_Signal", "MACD_Hist", "Stoch_K", "Stoch_D"]:
             if col not in df.columns:
                 df.loc[:, col] = np.nan
         return df
@@ -147,14 +148,18 @@ def calculate_indicators(df, is_intraday=False):
         print("Warning: DataFrame is empty after dropping NA values. Returning empty DataFrame.")
         # Ensure EMA columns are added with NaN even if DataFrame is empty
         for col in ["EMA21", "EMA50", "EMA200", 'ichimoku_a', 'ichimoku_b',
-                    'ichimoku_conversion_line', 'ichimoku_base_line', 'psar']:
+                    'ichimoku_conversion_line', 'ichimoku_base_line', 'psar',
+                    "BB_upper", "BB_lower", "BB_mavg", "RSI", "MACD",
+                    "MACD_Signal", "MACD_Hist", "Stoch_K", "Stoch_D"]:
             if col not in df_cleaned.columns:
                 df_cleaned.loc[:, col] = np.nan
         return df_cleaned
 
     # Initialize all indicator columns to NaN to ensure they always exist
     for col in ["EMA21", "EMA50", "EMA200", 'ichimoku_a', 'ichimoku_b',
-                'ichimoku_conversion_line', 'ichimoku_base_line', 'psar']:
+                'ichimoku_conversion_line', 'ichimoku_base_line', 'psar',
+                "BB_upper", "BB_lower", "BB_mavg", "RSI", "MACD",
+                "MACD_Signal", "MACD_Hist", "Stoch_K", "Stoch_D"]:
         df_cleaned.loc[:, col] = np.nan
 
     # EMAs
@@ -195,9 +200,7 @@ def calculate_indicators(df, is_intraday=False):
             df_cleaned.loc[:, "BB_mavg"] = bollinger_bands.bollinger_mavg()
     except Exception as e:
         print(f"Error calculating Bollinger Bands: {e}")
-        for col in ["BB_upper", "BB_lower", "BB_mavg"]:
-            if col not in df_cleaned.columns:
-                df_cleaned.loc[:, col] = np.nan
+        # Columns are already initialized to NaN.
 
     # RSI
     try:
@@ -205,8 +208,7 @@ def calculate_indicators(df, is_intraday=False):
             df_cleaned.loc[:, "RSI"] = ta.momentum.rsi(df_cleaned["Close"], window=14, fillna=True)
     except Exception as e:
         print(f"Error calculating RSI: {e}")
-        if "RSI" not in df_cleaned.columns:
-            df_cleaned.loc[:, "RSI"] = np.nan
+        # Column is already initialized to NaN.
 
     # MACD
     try:
@@ -217,9 +219,7 @@ def calculate_indicators(df, is_intraday=False):
             df_cleaned.loc[:, "MACD_Hist"] = macd.macd_diff()
     except Exception as e:
         print(f"Error calculating MACD: {e}")
-        for col in ["MACD", "MACD_Signal", "MACD_Hist"]:
-            if col not in df_cleaned.columns:
-                df_cleaned.loc[:, col] = np.nan
+        # Columns are already initialized to NaN.
 
     # Stochastic Oscillator
     try:
@@ -229,9 +229,7 @@ def calculate_indicators(df, is_intraday=False):
             df_cleaned.loc[:, "Stoch_D"] = stoch.stoch_signal()
     except Exception as e:
         print(f"Error calculating Stochastic Oscillator: {e}")
-        for col in ["Stoch_K", "Stoch_D"]:
-            if col not in df_cleaned.columns:
-                df_cleaned.loc[:, col] = np.nan
+        # Columns are already initialized to NaN.
 
     return df_cleaned
 
