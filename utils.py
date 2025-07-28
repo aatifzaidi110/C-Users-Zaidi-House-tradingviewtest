@@ -134,13 +134,15 @@ def calculate_indicators(df, is_intraday=False):
     df_cleaned = df.dropna(subset=required_cols).copy()
     if df_cleaned.empty: return df_cleaned
     
-    # EMAs
+   # EMAs
     try:
         df_cleaned.loc[:, "EMA21"] = ta.trend.ema_indicator(df_cleaned["Close"], 21, fillna=True)
         df_cleaned.loc[:, "EMA50"] = ta.trend.ema_indicator(df_cleaned["Close"], 50, fillna=True)
         df_cleaned.loc[:, "EMA200"] = ta.trend.ema_indicator(df_cleaned["Close"], 200, fillna=True)
     except Exception as e:
-        st.warning(f"Error calculating EMA indicators: {e}")
+        # st.warning is not available in utils.py directly, you might log this or pass a message back
+        # For simplicity in utils.py, you can print a debug message
+        print(f"Error calculating EMA indicators: {e}")
         # Ensure columns exist even if calculation fails
         for col in ["EMA21", "EMA50", "EMA200"]:
             if col not in df_cleaned.columns:
