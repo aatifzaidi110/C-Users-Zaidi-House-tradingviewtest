@@ -523,7 +523,7 @@ def display_economic_sentiment_tab(economic_score, investor_sentiment_score, new
         st.info("CPI data not available.")
 
     if latest_unemployment is not None and not latest_unemployment.empty:
-        st.write(f"**Latest Unemployment Rate:** {latest_unemployment.iloc[-1]:.2f}%" (as of {latest_unemployment.index[-1].strftime('%Y-%m-%d')})")
+        st.write(f"**Latest Unemployment Rate:** {latest_unemployment.iloc[-1]:.2f}% (as of {latest_unemployment.index[-1].strftime('%Y-%m-%d')})")
     else:
         st.info("Unemployment data not available.")
 
