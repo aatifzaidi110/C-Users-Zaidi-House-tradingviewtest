@@ -336,7 +336,7 @@ if analyze_button and ticker:
         else:
             st.info("No data to generate a trade plan.")
 
-with tabs[5]: # 🌍 Economic & Sentiment
+    with tabs[5]: # 🌍 Economic & Sentiment
         # Display Economic Data
         display_economic_data_tab(
             ticker, # Assuming ticker is available
@@ -375,16 +375,16 @@ with tabs[5]: # 🌍 Economic & Sentiment
         else:
             st.info("No recent news headlines found.")
             
-with tabs[6]: # 📚 Glossary
-    st.markdown("### 📚 Glossary")
-    st.info("The glossary content will be displayed here.") # Placeholder for actual glossary content
+    with tabs[6]: # 📚 Glossary
+        st.markdown("### 📚 Glossary")
+        st.info("The glossary content will be displayed here.") # Placeholder for actual glossary content
 
-# This 'elif' and 'else' block needs to be at the same indentation level
-# as the 'if ticker:' block, or wherever you handle the main application flow.
-# It should NOT be inside any 'with tabs[X]:' block.
-elif run_scanner_button: # <--- UNINDENT THIS LINE
-    st.header("⚡ Stock Scanner Results")
-    with st.spinner(f"Running scanner for {len(scanner_ticker_list)} tickers with '{selected_trading_style}' style..."):
+    # This 'elif' and 'else' block needs to be at the same indentation level
+    # as the 'if ticker:' block, or wherever you handle the main application flow.
+    # It should NOT be inside any 'with tabs[X]:' block.
+    elif run_scanner_button: # <--- UNINDENT THIS LINE
+        st.header("⚡ Stock Scanner Results")
+        with st.spinner(f"Running scanner for {len(scanner_ticker_list)} tickers with '{selected_trading_style}' style..."):
             # Pass all necessary parameters to the scanner function
             scanner_results_df = run_stock_scanner(
                 scanner_ticker_list,
