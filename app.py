@@ -5,7 +5,7 @@ import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt # Needed for plt.close() in display_components
 import yfinance as yf # Keep this import here for direct yf usage if any, though it's also in utils
-from datetime import datetime, timedelta # ADDED THIS LINE: Import the datetime module
+from datetime import datetime, date, timedelta # ADDED THIS LINE: Import the datetime module
 
 print("Current working directory:", os.getcwd())
 print("Directory contents:", os.listdir())
@@ -202,8 +202,8 @@ if analyze_button and ticker:
         finviz_data = get_finviz_data(ticker)
         
         # Get economic and investor sentiment data
-        today = datetime.date.today() # Corrected line
-        one_year_ago = today - datetime.timedelta(days=365)
+        today = date.today() # Using 'date' directly as it's imported
+        one_year_ago = today - timedelta(days=365) # Using 'timedelta' directly as it's imported
 
         latest_gdp = get_economic_data_fred('GDP', one_year_ago.strftime('%Y-%m-%d'), today.strftime('%Y-%m-%d'))
         latest_cpi = get_economic_data_fred('CPIAUCSL', one_year_ago.strftime('%Y-%m-%d'), today.strftime('%Y-%m-%d'))
