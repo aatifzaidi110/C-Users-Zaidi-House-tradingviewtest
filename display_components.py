@@ -44,348 +44,259 @@ EXPERT_RATING_MAP = {
 # --- Display Functions for Tabs ---
 
 def display_technical_analysis_tab(ticker, df_calculated, is_intraday, indicator_selection):
-    """
-    Displays the technical analysis tab with a candlestick chart and indicator plots.
-    """
-    st.markdown(f"### 📊 Technical Analysis for {ticker}")
+    st.markdown("### 📊 Technical Analysis & Chart")
 
-    if df_calculated.empty:
-        st.info("No data available to display technical analysis.")
-        return
+    # Filter out NaN rows only if they impact plotting.
+    # We rely on calculate_indicators to fill NaNs if data is insufficient.
+    # Here, we mostly check for all-NaN columns before adding plots.
 
-    # Ensure the DataFrame index is a DatetimeIndex, coercing errors
-    # This handles cases where the index might be 'object' dtype but contains strings
-    # that look like dates, or where the conversion might fail for some entries.
-    df_calculated.index = pd.to_datetime(df_calculated.index, errors='coerce')
-    # Remove any rows where the date conversion failed (index became NaT)
-    df_calculated = df_calculated[df_calculated.index.notna()]
-    
-    if df_calculated.empty: # Check if it became empty after cleaning
-        st.info("No valid date data in the DataFrame index after cleaning. Cannot display chart.")
-        return
+    mc = mpf.make_marketcolors(
+        up='green', down='red',
+        edge='inherit',
+        wick='inherit',
+        volume='in',
+        ohlc='i'
+    )
+    s = mpf.make_mpf_style(
+        base_mpf_style='yahoo',
+        marketcolors=mc,
+        figscale=1.5 # Adjusted for better default size
+    )
 
-    # --- FIX START: Standardize to UTC for robust comparison ---
-    # Convert DataFrame index to UTC if it's timezone-aware, or localize then convert if naive
-    if df_calculated.index.tz is not None:
-        df_calculated.index = df_calculated.index.tz_convert('UTC')
-    else:
-        # If the index is naive, assume it's in a local timezone (e.g., 'America/New_York' from yfinance)
-        # and then convert to UTC. You might need to adjust this 'America/New_York' if your data source
-        # is consistently in a different timezone and is naive.
-        try:
-            df_calculated.index = df_calculated.index.tz_localize('America/New_York', errors='coerce').tz_convert('UTC')
-        except pytz.exceptions.NonExistentTimeError:
-            # Handle cases where localization might fail due to DST gaps, etc.
-            # Fallback to just converting to UTC if already localized, or leave naive if problematic
-            st.warning("Could not localize DataFrame index to 'America/New_York' for UTC conversion. Proceeding with existing timezone or naive index.", icon="⚠️")
-            if df_calculated.index.tz is None: # If still naive after failed localization attempt
-                 df_calculated.index = df_calculated.index.tz_localize('UTC', errors='coerce') # Treat as UTC naive if no other info
-
-    # Create a timezone-aware timestamp in UTC for comparison
-    current_time_utc = pd.Timestamp.now(tz='UTC')
-
-    # Filter out future dates if any (e.g., from some data sources)
-    df_calculated = df_calculated[df_calculated.index <= current_time_utc]
-    # --- FIX END ---
-
-    # Create subplots for the chart and indicators
     add_plots = []
-    if indicator_selection.get("EMA Trend"):
-        add_plots.append(mpf.make_addplot(df_calculated['EMA21'], color='blue', panel=0, width=0.7, secondary_y=False))
-        add_plots.append(mpf.make_addplot(df_calculated['EMA50'], color='orange', panel=0, width=0.7, secondary_y=False))
-        add_plots.append(mpf.make_addplot(df_calculated['EMA200'], color='purple', panel=0, width=0.7, secondary_y=False))
-    
-    if indicator_selection.get("Ichimoku Cloud"):
-        # Ichimoku cloud fills
-        add_plots.append(mpf.make_addplot(df_calculated['ichimoku_a'], color='green', panel=0, width=0.7, secondary_y=False))
-        add_plots.append(mpf.make_addplot(df_calculated['ichimoku_b'], color='red', panel=0, width=0.7, secondary_y=False))
-        # Fill between ichimoku_a and ichimoku_b for the cloud
-        # mplfinance does not directly support fill_between, so we might need a workaround or just plot lines.
-        # For simplicity, we'll just plot the lines.
-        add_plots.append(mpf.make_addplot(df_calculated['ichimoku_conversion_line'], color='cyan', panel=0, width=0.7, secondary_y=False))
-        add_plots.append(mpf.make_addplot(df_calculated['ichimoku_base_line'], color='magenta', panel=0, width=0.7, secondary_y=False))
-
-    if indicator_selection.get("Parabolic SAR"):
-        add_plots.append(mpf.make_addplot(df_calculated['psar'], type='scatter', marker='.', markersize=50, color='lime', panel=0, secondary_y=False))
-
-    # Add Bollinger Bands to the main panel
-    if indicator_selection.get("Bollinger Bands"):
-        add_plots.append(mpf.make_addplot(df_calculated['BB_high'], color='gray', panel=0, width=0.7, secondary_y=False))
-        add_plots.append(mpf.make_addplot(df_calculated['BB_low'], color='gray', panel=0, width=0.7, secondary_y=False))
-        add_plots.append(mpf.make_addplot(df_calculated['BB_mid'], color='blue', panel=0, width=0.7, secondary_y=False))
-
-    # Add VWAP to the main panel (if intraday)
-    if is_intraday and indicator_selection.get("VWAP"):
-        add_plots.append(mpf.make_addplot(df_calculated['VWAP'], color='darkred', panel=0, width=1.0, secondary_y=False))
-
-
-    # Setup subplots for other indicators
+    # fig_panels will store the panel *numbers* (1, 2, 3...) for each indicator that gets its own subplot
     fig_panels = []
-    if indicator_selection.get("RSI Momentum"):
-        fig_panels.append(1) # RSI
-        add_plots.append(mpf.make_addplot(df_calculated['RSI'], panel=1, color='purple', ylabel='RSI'))
-        add_plots.append(mpf.make_addplot(pd.Series(70, index=df_calculated.index), panel=1, color='red', width=0.5, linestyle='--', secondary_y=False))
-        add_plots.append(mpf.make_addplot(pd.Series(30, index=df_calculated.index), panel=1, color='green', width=0.5, linestyle='--', secondary_y=False))
-    
-    if indicator_selection.get("Stochastic"):
-        fig_panels.append(len(fig_panels)) # Stochastic
-        add_plots.append(mpf.make_addplot(df_calculated['Stoch_K'], panel=len(fig_panels)-1, color='blue', ylabel='Stoch %K'))
-        add_plots.append(mpf.make_addplot(df_calculated['Stoch_D'], panel=len(fig_panels)-1, color='orange', ylabel='Stoch %D'))
-        add_plots.append(mpf.make_addplot(pd.Series(80, index=df_calculated.index), panel=len(fig_panels)-1, color='red', width=0.5, linestyle='--', secondary_y=False))
-        add_plots.append(mpf.make_addplot(pd.Series(20, index=df_calculated.index), panel=len(fig_panels)-1, color='green', width=0.5, linestyle='--', secondary_y=False))
+    # current_panel_index keeps track of the next available panel number for new indicator subplots
+    current_panel_index = 0 # Panel 0 is reserved for the main OHLCV chart + Volume
 
-  
+    # --- Add Indicator Plots (only if selected and data is not all NaN) ---
+
+    # MACD
     if indicator_selection.get("MACD"):
-        fig_panels.append(len(fig_panels)) # MACD
-        add_plots.append(mpf.make_addplot(df_calculated['MACD'], panel=len(fig_panels)-1, color='blue',ylabel='MACD', width=0.7))
-        add_plots.append(mpf.make_addplot(df_calculated['MACD_Signal'], panel=len(fig_panels)-1, color='orange',ylabel='Signal', width=0.7))
-        # MACD Histogram
-        colors = ['red' if val < 0 else 'green' for val in df_calculated['MACD_Hist']] # Corrected casing here
-        add_plots.append(mpf.make_addplot(df_calculated['MACD_Hist'], type='bar', panel=len(fig_panels)-1, color=colors, ylabel='Histogram', width=0.7))
+        # Check if MACD data is actually present (not all NaN) before adding panel and plots
+        # Ensure correct casing ('MACD', 'MACD_Signal', 'MACD_Hist')
+        if not df_calculated['MACD'].dropna().empty and \
+           not df_calculated['MACD_Signal'].dropna().empty and \
+           not df_calculated['MACD_Hist'].dropna().empty:
+            current_panel_index += 1 # Increment for a new panel
+            add_plots.extend([
+                mpf.make_addplot(df_calculated['MACD'], panel=current_panel_index, color='red', secondary_y=False, width=0.7),
+                mpf.make_addplot(df_calculated['MACD_Signal'], panel=current_panel_index, color='blue', secondary_y=False, width=0.7),
+                mpf.make_addplot(df_calculated['MACD_Hist'], panel=current_panel_index, type='bar', color='green', secondary_y=False, width=0.7)
+            ])
+            fig_panels.append(current_panel_index) # Add this panel to fig_panels only if plots were added
 
+    # RSI
+    if indicator_selection.get("RSI"):
+        if not df_calculated['RSI'].dropna().empty:
+            current_panel_index += 1
+            add_plots.append(mpf.make_addplot(df_calculated['RSI'], panel=current_panel_index, color='purple', secondary_y=False, width=0.7))
+            add_plots.append(mpf.make_addplot(pd.Series(70, index=df_calculated.index), panel=current_panel_index, color='gray', linestyle=':', secondary_y=False, width=0.7))
+            add_plots.append(mpf.make_addplot(pd.Series(30, index=df_calculated.index), panel=current_panel_index, color='gray', linestyle=':', secondary_y=False, width=0.7))
+            fig_panels.append(current_panel_index)
 
+    # Stochastic Oscillator
+    if indicator_selection.get("Stoch"):
+        # Ensure correct casing ('Stoch_K', 'Stoch_D')
+        if not df_calculated['Stoch_K'].dropna().empty and not df_calculated['Stoch_D'].dropna().empty:
+            current_panel_index += 1
+            add_plots.append(mpf.make_addplot(df_calculated['Stoch_K'], panel=current_panel_index, color='magenta', secondary_y=False, width=0.7))
+            add_plots.append(mpf.make_addplot(df_calculated['Stoch_D'], panel=current_panel_index, color='cyan', secondary_y=False, width=0.7))
+            add_plots.append(mpf.make_addplot(pd.Series(80, index=df_calculated.index), panel=current_panel_index, color='gray', linestyle=':', secondary_y=False, width=0.7))
+            add_plots.append(mpf.make_addplot(pd.Series(20, index=df_calculated.index), panel=current_panel_index, color='gray', linestyle=':', secondary_y=False, width=0.7))
+            fig_panels.append(current_panel_index)
+
+    # ADX
     if indicator_selection.get("ADX"):
-        fig_panels.append(len(fig_panels)) # ADX
-        add_plots.append(mpf.make_addplot(df_calculated['adx'], panel=len(fig_panels)-1, color='blue', ylabel='ADX'))
-        add_plots.append(mpf.make_addplot(df_calculated['plus_di'], panel=len(fig_panels)-1, color='green'))
-        add_plots.append(mpf.make_addplot(df_calculated['minus_di'], panel=len(fig_panels)-1, color='red'))
-        add_plots.append(mpf.make_addplot(pd.Series(25, index=df_calculated.index), panel=len(fig_panels)-1, color='gray', width=0.5, linestyle='--', secondary_y=False))
+        # Ensure correct casing ('adx', 'plus_di', 'minus_di')
+        if not df_calculated['adx'].dropna().empty and \
+           not df_calculated['plus_di'].dropna().empty and \
+           not df_calculated['minus_di'].dropna().empty:
+            current_panel_index += 1
+            add_plots.append(mpf.make_addplot(df_calculated['adx'], panel=current_panel_index, color='red', secondary_y=False, width=0.7))
+            add_plots.append(mpf.make_addplot(df_calculated['plus_di'], panel=current_panel_index, color='green', secondary_y=False, width=0.7))
+            add_plots.append(mpf.make_addplot(df_calculated['minus_di'], panel=current_panel_index, color='orange', secondary_y=False, width=0.7))
+            add_plots.append(mpf.make_addplot(pd.Series(25, index=df_calculated.index), panel=current_panel_index, color='gray', linestyle=':', secondary_y=False, width=0.7)) # ADX threshold line
+            fig_panels.append(current_panel_index)
 
+    # CCI
     if indicator_selection.get("CCI"):
-        fig_panels.append(len(fig_panels)) # CCI
-        add_plots.append(mpf.make_addplot(df_calculated['CCI'], panel=len(fig_panels)-1, color='teal', ylabel='CCI'))
-        add_plots.append(mpf.make_addplot(pd.Series(100, index=df_calculated.index), panel=len(fig_panels)-1, color='red', width=0.5, linestyle='--', secondary_y=False))
-        add_plots.append(mpf.make_addplot(pd.Series(-100, index=df_calculated.index), panel=len(fig_panels)-1, color='green', width=0.5, linestyle='--', secondary_y=False))
+        if not df_calculated['CCI'].dropna().empty:
+            current_panel_index += 1
+            add_plots.append(mpf.make_addplot(df_calculated['CCI'], panel=current_panel_index, color='brown', secondary_y=False, width=0.7))
+            add_plots.append(mpf.make_addplot(pd.Series(100, index=df_calculated.index), panel=current_panel_index, color='gray', linestyle=':', secondary_y=False, width=0.7))
+            add_plots.append(mpf.make_addplot(pd.Series(-100, index=df_calculated.index), panel=current_panel_index, color='gray', linestyle=':', secondary_y=False, width=0.7))
+            fig_panels.append(current_panel_index)
 
+    # ROC
     if indicator_selection.get("ROC"):
-        fig_panels.append(len(fig_panels)) # ROC
-        add_plots.append(mpf.make_addplot(df_calculated['ROC'], panel=len(fig_panels)-1, color='brown', ylabel='ROC'))
-        add_plots.append(mpf.make_addplot(pd.Series(0, index=df_calculated.index), panel=len(fig_panels)-1, color='gray', width=0.5, linestyle='--', secondary_y=False))
+        if not df_calculated['ROC'].dropna().empty:
+            current_panel_index += 1
+            add_plots.append(mpf.make_addplot(df_calculated['ROC'], panel=current_panel_index, color='darkgreen', secondary_y=False, width=0.7))
+            add_plots.append(mpf.make_addplot(pd.Series(0, index=df_calculated.index), panel=current_panel_index, color='gray', linestyle=':', secondary_y=False, width=0.7)) # Zero line for ROC
+            fig_panels.append(current_panel_index)
 
+    # OBV
     if indicator_selection.get("OBV"):
-        fig_panels.append(len(fig_panels)) # OBV
-        add_plots.append(mpf.make_addplot(df_calculated['obv'], panel=len(fig_panels)-1, color='darkgreen', ylabel='OBV'))
-        add_plots.append(mpf.make_addplot(df_calculated['obv_ema'], panel=len(fig_panels)-1, color='orange', width=0.7, secondary_y=False))
+        # Ensure correct casing ('obv', 'obv_ema')
+        if not df_calculated['obv'].dropna().empty and not df_calculated['obv_ema'].dropna().empty:
+            current_panel_index += 1
+            add_plots.append(mpf.make_addplot(df_calculated['obv'], panel=current_panel_index, color='blue', secondary_y=False, width=0.7))
+            add_plots.append(mpf.make_addplot(df_calculated['obv_ema'], panel=current_panel_index, color='orange', secondary_y=False, width=0.7))
+            fig_panels.append(current_panel_index)
 
+    # --- Construct panel_ratios and panels list for mpf.plot ---
+    # The main chart (OHLCV + Volume) is always panel 0.
+    # We assign it a larger ratio (e.g., 3) and other indicator panels a smaller ratio (e.g., 1).
 
-    # Plotting
+    panel_ratios_list = [3] # Ratio for the main OHLCV + Volume chart (panel 0)
+    panels_list = [0]       # List of panel indices to plot
+
+    # Append ratios and panel indices for each additional indicator panel
+    for panel_num in fig_panels:
+        panel_ratios_list.append(1) # Add ratio 1 for each indicator subplot
+        panels_list.append(panel_num) # Add the panel number
+
+    # Adjust figure size dynamically based on the number of panels
+    # Base height + 2 inches for each additional panel
+    figure_height = 8 + len(fig_panels) * 2
+
+    # --- Generate the Plot ---
     try:
         fig, axlist = mpf.plot(
             df_calculated,
             type='candle',
-            style='yahoo', # You can choose other styles like 'binance', 'charles', 'yahoo'
-            title=f"{ticker} Candlestick Chart",
+            style=s,
+            title=f"Technical Analysis for {ticker}",
             ylabel='Price',
-            ylabel_lower='Volume',
+            addplot=add_plots if add_plots else None, # Pass add_plots only if not empty
+            panel_ratios=panel_ratios_list, # Use the dynamically generated panel_ratios
+            # panel_positions is usually automatically inferred if panels are correctly assigned to addplots
+            # but sometimes explicit definition is needed if complex layouts.
+            # For multiple panels stacked vertically, this is often simpler:
+            # panel_positions=[(i,0,1,1) for i in range(len(panels_list))] # No, this generates error if not carefully used
+            figscale=1.2, # Keep figscale, but dynamic figsize is better
+            figsize=(12, figure_height), # Dynamic figure size
             volume=True,
-            figscale=1.5, # Adjust figure size
-            addplot=add_plots,
-            panel_ratios=[6] + [2] * len(fig_panels), # Main chart taller, other panels shorter
-            returnfig=True
+            volume_panel=0, # Volume remains on the main chart panel
+            returnfig=True,
+            panels=panels_list # Explicitly pass the list of panel indices to use
         )
         st.pyplot(fig)
-        plt.close(fig) # Close the figure to prevent memory issues
+        plt.close(fig) # Close the plot to prevent memory issues
+
     except Exception as e:
-        st.warning(f"Could not render chart. Please check data and indicator selections. Error: {e}", icon="⚠️")
-        st.exception(e)
+        st.warning(f"⚠️ Could not render chart. Please check data and indicator selections. Error: {e}")
+        st.exception(e) # Display full traceback for debugging
+        if "panel_ratios" in str(e) or "num panels" in str(e):
+            st.error(f"Panel Configuration Error: len(panel_ratios)={len(panel_ratios_list)} but actual number of panels (including main+volume) detected by mplfinance is {len(panels_list)}.")
+            st.info("This often means some indicator data is all NaN, preventing it from being plotted, but its panel 'slot' was still reserved.")
+            st.info("Please verify the data in your DataFrame columns for the selected indicators. If data is sparse, try a wider date range.")
 
-    st.markdown("---")
-    st.markdown("### Latest Indicator Values")
+    # ... (rest of the function, like displaying signals, pivot points, etc.)
+    # Note: The indicator summary text function might also need the updated casing for indicator names.
     if not df_calculated.empty:
-        latest_row = df_calculated.iloc[-1]
-        st.write(latest_row.tail(20)) # Display last 20 columns of the latest row
-
-def display_options_analysis_tab(ticker, current_stock_price, expirations, trade_direction, overall_confidence):
-    """
-    Displays options analysis, including chain data and suggested strategies.
-    """
-    st.markdown(f"### 📈 Options Analysis for {ticker}")
-
-    if not expirations:
-        st.info("No options data available for this ticker.")
-        return
-
-    selected_expiry = st.selectbox("Select Expiration Date", expirations)
-
-    if selected_expiry:
-        calls_df, puts_df = get_options_chain(ticker, selected_expiry)
-
-        if calls_df.empty and puts_df.empty:
-            st.warning(f"No options chain data found for {ticker} on {selected_expiry}.", icon="⚠️")
-            return
-
-        st.markdown("#### Call Options")
-        st.dataframe(calls_df)
-
-        st.markdown("#### Put Options")
-        st.dataframe(puts_df)
-
-        analysis_results = analyze_options_chain(calls_df, puts_df, current_stock_price)
-
-        st.markdown("#### Options Chain Summary")
-        col1, col2 = st.columns(2)
-        with col1:
-            st.subheader("Calls Summary")
-            st.write(f"Total Volume: {analysis_results['calls'].get('total_volume', 'N/A')}")
-            st.write(f"Total Open Interest: {analysis_results['calls'].get('total_open_interest', 'N/A')}")
-            st.write(f"Avg IV (ITM): {analysis_results['calls'].get('avg_iv_itm', 0):.2f}")
-            st.write(f"Avg IV (OTM): {analysis_results['calls'].get('avg_iv_otm', 0):.2f}")
-            st.write(f"Avg IV (ATM): {analysis_results['calls'].get('avg_iv_atm', 0):.2f}")
-        with col2:
-            st.subheader("Puts Summary")
-            st.write(f"Total Volume: {analysis_results['puts'].get('total_volume', 'N/A')}")
-            st.write(f"Total Open Interest: {analysis_results['puts'].get('total_open_interest', 'N/A')}")
-            st.write(f"Avg IV (ITM): {analysis_results['puts'].get('avg_iv_itm', 0):.2f}")
-            st.write(f"Avg IV (OTM): {analysis_results['puts'].get('avg_iv_otm', 0):.2f}")
-            st.write(f"Avg IV (ATM): {analysis_results['puts'].get('avg_iv_atm', 0):.2f}")
-
         st.markdown("---")
-        st.markdown("#### Suggested Options Strategy")
-        
-        # Pass the correct parameters to the suggestion function
-        suggested_strategy = suggest_options_strategy(
-            ticker,
-            overall_confidence,
-            current_stock_price,
-            expirations, # Pass all expirations, function will pick one
-            trade_direction
-        )
+        st.subheader("💡 Indicator Summary")
+        summary_text = get_indicator_summary_text(df_calculated.iloc[-1], indicator_selection)
+        st.write(summary_text)
 
-        if suggested_strategy['status'] == 'success':
-            st.success(suggested_strategy['message'])
-            st.write(f"**Strategy:** {suggested_strategy['Strategy']}")
-            st.write(f"**Direction:** {suggested_strategy['Direction']}")
-            st.write(f"**Expiration:** {suggested_strategy['Expiration']}")
-            
-            if suggested_strategy['Strategy'] == "Bull Call Spread":
-                st.write(f"**Buy Call:** Strike ${suggested_strategy['Buy Strike']:.2f}, Premium ${suggested_strategy['Contracts']['Buy']['lastPrice']:.2f}")
-                st.write(f"**Sell Call:** Strike ${suggested_strategy['Sell Strike']:.2f}, Premium ${suggested_strategy['Contracts']['Sell']['lastPrice']:.2f}")
-            elif suggested_strategy['Strategy'] == "Bear Put Spread":
-                st.write(f"**Buy Put:** Strike ${suggested_strategy['Buy Strike']:.2f}, Premium ${suggested_strategy['Contracts']['Buy']['lastPrice']:.2f}")
-                st.write(f"**Sell Put:** Strike ${suggested_strategy['Sell Strike']:.2f}, Premium ${suggested_strategy['Contracts']['Sell']['lastPrice']:.2f}")
-            
-            st.write(f"**Net Debit/Credit:** {suggested_strategy['Net Debit']}")
-            st.write(f"**Max Profit:** {suggested_strategy['Max Profit']}")
-            st.write(f"**Max Risk:** {suggested_strategy['Max Risk']}")
-            st.write(f"**Reward / Risk:** {suggested_strategy['Reward / Risk']}")
-            st.markdown(f"**Notes:** {suggested_strategy['Notes']}")
+    # Display Pivot Points
+    if 'Pivot (P)' in df_calculated.columns and not df_calculated['Pivot (P)'].empty:
+        last_pivot = df_calculated.iloc[-1]
+        st.markdown("---")
+        st.subheader("🎯 Pivot Points (Classic)")
+        st.write(f"**P:** {last_pivot.get('Pivot (P)', 'N/A'):.2f} | "
+                 f"**R1:** {last_pivot.get('R1', 'N/A'):.2f} | "
+                 f"**R2:** {last_pivot.get('R2', 'N/A'):.2f} | "
+                 f"**S1:** {last_pivot.get('S1', 'N/A'):.2f} | "
+                 f"**S2:** {last_pivot.get('S2', 'N/A'):.2f}")
 
-            # Optional: Plotting the payoff diagram (simplified)
-            st.markdown("##### Simplified Payoff Diagram")
-            plot_payoff_diagram(current_stock_price, suggested_strategy['option_legs_for_chart'])
-
+    # Display Trade Signals
+    if 'Trade Signal (Bullish)' in df_calculated.columns or 'Trade Signal (Bearish)' in df_calculated.columns:
+        last_row_signals = generate_signals_for_row(df_calculated.iloc[-1])
+        st.markdown("---")
+        st.subheader("🚦 Current Trade Signals")
+        if last_row_signals['bullish_signals']:
+            st.success("📈 Bullish Signals Detected:")
+            for signal, rationale in last_row_signals['bullish_signals'].items():
+                st.markdown(f"- **{signal}:** {rationale}")
         else:
-            st.info(suggested_strategy['message'])
+            st.info("No immediate bullish signals detected.")
 
-def plot_payoff_diagram(current_price, option_legs):
-    """
-    Plots a simplified payoff diagram for a given options strategy.
-    This is a basic representation and doesn't account for time decay, volatility changes etc.
-    """
-    if not option_legs:
-        st.info("No option legs to plot payoff diagram.")
-        return
+        if last_row_signals['bearish_signals']:
+            st.error("📉 Bearish Signals Detected:")
+            for signal, rationale in last_row_signals['bearish_signals'].items():
+                st.markdown(f"- **{signal}:** {rationale}")
+        else:
+            st.info("No immediate bearish signals detected.")
 
-    # Define a range of stock prices for the x-axis
-    price_range = np.linspace(current_price * 0.8, current_price * 1.2, 200)
-    payoff = np.zeros_like(price_range)
+    # Backtesting Section
+    st.markdown("---")
+    st.subheader("📈 Strategy Backtesting")
 
-    for leg in option_legs:
-        strike = leg['strike']
-        option_type = leg['type'] # 'call' or 'put'
-        action = leg['action'] # 'buy' or 'sell'
-        premium = leg['premium']
+    backtest_data = backtest_strategy(df_calculated.copy(), indicator_selection)
 
-        if option_type == 'call':
-            if action == 'buy':
-                payoff_leg = np.maximum(0, price_range - strike) - premium
-            else: # sell call
-                payoff_leg = -(np.maximum(0, price_range - strike) - premium)
-        else: # put
-            if action == 'buy':
-                payoff_leg = np.maximum(0, strike - price_range) - premium
-            else: # sell put
-                payoff_leg = -(np.maximum(0, strike - price_range) - premium)
-        
-        payoff += payoff_leg
+    if backtest_data:
+        total_trades = backtest_data.get('total_trades', 0)
+        winning_trades = backtest_data.get('winning_trades', 0)
+        losing_trades = backtest_data.get('losing_trades', 0)
+        win_rate = backtest_data.get('win_rate', 0.0)
+        total_profit = backtest_data.get('total_profit', 0.0)
+        avg_profit_per_trade = backtest_data.get('avg_profit_per_trade', 0.0)
+        cagr = backtest_data.get('cagr', 0.0)
+        max_drawdown = backtest_data.get('max_drawdown', 0.0)
 
-    fig, ax = plt.subplots(figsize=(10, 6))
-    ax.plot(price_range, payoff, label='Strategy Payoff')
-    ax.axhline(0, color='gray', linestyle='--', linewidth=0.8)
-    ax.axvline(current_price, color='red', linestyle=':', label='Current Price')
-    ax.set_title('Options Strategy Payoff Diagram')
-    ax.set_xlabel('Stock Price at Expiration')
-    ax.set_ylabel('Profit/Loss')
-    ax.grid(True, linestyle=':', alpha=0.7)
-    ax.legend()
-    st.pyplot(fig)
-    plt.close(fig)
+        st.write(f"**Total Trades:** {total_trades}")
+        st.write(f"**Winning Trades:** {winning_trades}")
+        st.write(f"**Losing Trades:** {losing_trades}")
+        st.write(f"**Win Rate:** {win_rate:.2f}%")
+        st.write(f"**Total Profit/Loss:** ${total_profit:.2f}")
+        st.write(f"**Average Profit/Loss per Trade:** ${avg_profit_per_trade:.2f}")
+        st.write(f"**CAGR (Compound Annual Growth Rate):** {cagr:.2f}%")
+        st.write(f"**Max Drawdown:** {max_drawdown:.2f}%")
 
+        # Display trade log
+        trade_log_df = backtest_data.get('trade_log', pd.DataFrame())
+        if not trade_log_df.empty:
+            st.markdown("---")
+            st.subheader("Detailed Trade Log")
+            st.dataframe(trade_log_df)
+        else:
+            st.info("No trades executed during backtesting period.")
+    else:
+        st.info("Backtesting data not available. Ensure sufficient data for indicators and signals.")
 
-def display_backtesting_tab(df_historical, indicator_selection):
-    """
-    Displays the backtesting interface and results.
-    """
-    st.markdown("### 🤖 Backtesting Strategy")
-    st.info("This section allows you to backtest a simple strategy based on selected indicators.")
+    # Directional Trade Plan
+    st.markdown("---")
+    st.subheader("🗺️ Directional Trade Plan (Based on Current Data)")
+    if not df_calculated.empty:
+        try:
+            last_row = df_calculated.iloc[-1]
+            trade_plan_result = generate_directional_trade_plan(last_row, indicator_selection)
 
-    # Backtesting parameters
-    st.subheader("Backtesting Parameters")
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        atr_multiplier = st.number_input("ATR Multiplier for Stop Loss", value=1.5, min_value=0.1, step=0.1)
-    with col2:
-        reward_risk_ratio = st.number_input("Reward/Risk Ratio for Take Profit", value=2.0, min_value=0.5, step=0.1)
-    with col3:
-        signal_threshold_percentage = st.slider("Min % of Selected Signals to Trigger", 0.0, 1.0, 0.7, 0.05)
-
-    trade_direction_bt = st.radio("Backtest Trade Direction", ["long", "short"])
-    exit_strategy_bt = st.radio("Exit Strategy", ["fixed_rr", "trailing_psar"], help="fixed_rr: Fixed Reward/Risk. trailing_psar: Uses Parabolic SAR as a trailing stop.")
-
-    if st.button("Run Backtest"):
-        if df_historical.empty:
-            st.warning("No historical data available for backtesting. Please analyze a ticker first.")
-            return
-
-        with st.spinner("Running backtest... This may take a moment."):
-            # Ensure indicators are calculated before backtesting
-            df_bt = calculate_indicators(df_historical.copy())
-            if df_bt.empty:
-                st.error("Not enough data to calculate indicators for backtesting.")
-                return
-
-            trades, performance = backtest_strategy(
-                df_bt,
-                indicator_selection, # Pass the full indicator selection
-                atr_multiplier,
-                reward_risk_ratio,
-                signal_threshold_percentage,
-                trade_direction_bt,
-                exit_strategy_bt
-            )
-
-            if "error" in performance:
-                st.error(f"Backtesting failed: {performance['error']}")
-                return
-
-            st.subheader("Backtest Results")
-            st.json(performance) # Display performance metrics as JSON for clarity
-
-            st.subheader("Trade Log (Sample)")
-            if trades:
-                df_trades = pd.DataFrame(trades)
-                st.dataframe(df_trades.head(10)) # Show first 10 trades
-                if len(df_trades) > 10:
-                    st.info(f"Showing first 10 of {len(df_trades)} trades. Full log available in the 'Trade Log' tab.")
+            if trade_plan_result:
+                st.write(f"**Direction:** {trade_plan_result.get('direction', 'N/A')}")
+                st.write(f"**Confidence Score:** {trade_plan_result.get('confidence_score', 'N/A'):.2f}%")
+                st.write(f"**Entry Zone:** ${trade_plan_result.get('entry_zone_start', 'N/A'):.2f} - ${trade_plan_result.get('entry_zone_end', 'N/A'):.2f}")
+                st.write(f"**Target Price:** ${trade_plan_result.get('target_price', 'N/A'):.2f}")
+                st.write(f"**Stop Loss:** ${trade_plan_result.get('stop_loss', 'N/A'):.2f}")
+                st.write(f"**Reward/Risk Ratio:** {trade_plan_result.get('reward_risk_ratio', 'N/A'):.1f}:1")
+                st.markdown("---")
+                st.write("**Key Rationale:**")
+                st.write(trade_plan_result.get('key_rationale', 'No specific rationale available.'))
+                st.write("**Detailed Entry Criteria:**")
+                for criteria in trade_plan_result.get('entry_criteria_details', []):
+                    st.markdown(f"- {criteria}")
+                st.write("**Detailed Exit Criteria:**")
+                for criteria in trade_plan_result.get('exit_criteria_details', []):
+                    st.markdown(f"- {criteria}")
             else:
-                st.info("No trades were executed based on the specified strategy and parameters.")
+                st.info("Could not generate a directional trade plan. Ensure sufficient data and valid indicator selections.")
+        except Exception as e:
+            st.error(f"An error occurred while generating the trade plan: {e}")
+            st.exception(e) # For debugging
 
-
-def display_trade_log_tab(log_file, ticker, timeframe, overall_confidence, current_price, prev_close, trade_direction):
-    """
-    Displays the trade log and allows adding new entries.
-    """
-    st.markdown("### 📝 Trade Log")
 
     # Load existing log
     if os.path.exists(log_file):
