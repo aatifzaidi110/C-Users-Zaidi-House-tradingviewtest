@@ -518,7 +518,7 @@ def display_economic_sentiment_tab(economic_score, investor_sentiment_score, new
         st.info("GDP data not available.")
 
     if latest_cpi is not None and not latest_cpi.empty:
-        st.write(f"**Latest CPI (Inflation):** {latest_cpi.iloc[-1]:.2f}" (as of {latest_cpi.index[-1].strftime('%Y-%m-%d')})")
+        st.write(f"**Latest CPI (Inflation):** {latest_cpi.iloc[-1]:.2f} (as of {latest_cpi.index[-1].strftime('%Y-%m-%d')})")
     else:
         st.info("CPI data not available.")
 
