@@ -336,7 +336,7 @@ if analyze_button and ticker:
         else:
             st.info("No data to generate a trade plan.")
 
- with tabs[5]: # 🌍 Economic & Sentiment
+with tabs[5]: # 🌍 Economic & Sentiment
         # Display Economic Data
         display_economic_data_tab(
             ticker, # Assuming ticker is available
@@ -396,10 +396,10 @@ with st.spinner(f"Running scanner for {len(scanner_ticker_list)} tickers with '{
 
             if not scanner_results_df.empty:
                 display_scanner_tab(scanner_results_df)
-            else:
-                st.info("No qualifying stocks found based on your criteria.")
+    else:
+st.info("No qualifying stocks found based on your criteria.")
                 
-    else: # <--- UNINDENT THIS LINE to match 'if ticker:' or 'elif run_scanner_button:'
+else: # <--- UNINDENT THIS LINE to match 'if ticker:' or 'elif run_scanner_button:'
 st.info("Enter a stock ticker in the sidebar and click 'Analyze Ticker' to begin analysis, or configure and run the 'Stock Scanner'.")
 
 
