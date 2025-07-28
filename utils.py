@@ -142,7 +142,8 @@ def calculate_indicators(df, is_intraday=False):
             "EMA21", "EMA50", "EMA200",
             'ichimoku_a', 'ichimoku_b', 'ichimoku_conversion_line', 'ichimoku_base_line',
             'psar', "BB_upper", "BB_lower", "BB_mavg", "RSI", "MACD", "MACD_Signal",
-            "MACD_Hist", "Stoch_K", "Stoch_D", "adx", "plus_di", "minus_di", "CCI"
+            "MACD_Hist", "Stoch_K", "Stoch_D", "adx", "plus_di", "minus_di", "CCI", # Existing
+            "ROC" # ADD THIS LINE
         ]
         for col in all_indicator_cols:
             if col not in df_processed.columns:
