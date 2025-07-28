@@ -130,14 +130,15 @@ def calculate_indicators(df, is_intraday=False):
     """Calculates various technical indicators for a given DataFrame."""
     required_cols = ['Open', 'High', 'Low', 'Close', 'Volume']
 
-    # Initial check for required columns
+     # Initial check for required columns
     if not all(col in df.columns for col in required_cols):
         print("Warning: Missing required columns for indicator calculation. Returning original DataFrame.")
-        # Ensure EMA columns are added with NaN even if initial data is incomplete
+        # Ensure indicator columns are added with NaN even if initial data is incomplete
         for col in ["EMA21", "EMA50", "EMA200", 'ichimoku_a', 'ichimoku_b',
                     'ichimoku_conversion_line', 'ichimoku_base_line', 'psar',
                     "BB_upper", "BB_lower", "BB_mavg", "RSI", "MACD",
-                    "MACD_Signal", "MACD_Hist", "Stoch_K", "Stoch_D"]:
+                    "MACD_Signal", "MACD_Hist", "Stoch_K", "Stoch_D", # Existing
+                    "adx", "plus_di", "minus_di"]: # <-- Make sure these are ADDED here
             if col not in df.columns:
                 df.loc[:, col] = np.nan
         return df
@@ -230,6 +231,20 @@ def calculate_indicators(df, is_intraday=False):
     except Exception as e:
         print(f"Error calculating Stochastic Oscillator: {e}")
         # Columns are already initialized to NaN.
+
+    return df_cleaned
+
+     # ADX (Average Directional Index)
+    try:
+        if not df_cleaned["High"].empty and not df_cleaned["Low"].empty and not df_cleaned["Close"].empty:
+            adx_indicator = ta.trend.ADXIndicator(df_cleaned["High"], df_cleaned["Low"], df_cleaned["Close"], window=14, fillna=True)
+            df_cleaned.loc[:, "adx"] = adx_indicator.adx()
+            df_cleaned.loc[:, "plus_di"] = adx_indicator.adx_pos()
+            df_cleaned.loc[:, "minus_di"] = adx_indicator.adx_neg()
+    except Exception as e:
+        print(f"Error calculating ADX indicators: {e}")
+        # Columns are already initialized to NaN.
+    # --- END OF ADX BLOCK ---
 
     return df_cleaned
 
