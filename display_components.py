@@ -129,8 +129,8 @@ def display_technical_analysis_tab(ticker, df_calculated, is_intraday, indicator
     
     if indicator_selection.get("Stochastic"):
         fig_panels.append(len(fig_panels)) # Stochastic
-        add_plots.append(mpf.make_addplot(df_calculated['stoch_k'], panel=len(fig_panels)-1, color='blue', ylabel='Stoch %K'))
-        add_plots.append(mpf.make_addplot(df_calculated['stoch_d'], panel=len(fig_panels)-1, color='orange', ylabel='Stoch %D'))
+        add_plots.append(mpf.make_addplot(df_calculated['Stoch_K'], panel=len(fig_panels)-1, color='blue', ylabel='Stoch %K'))
+        add_plots.append(mpf.make_addplot(df_calculated['Stoch_D'], panel=len(fig_panels)-1, color='orange', ylabel='Stoch %D'))
         add_plots.append(mpf.make_addplot(pd.Series(80, index=df_calculated.index), panel=len(fig_panels)-1, color='red', width=0.5, linestyle='--', secondary_y=False))
         add_plots.append(mpf.make_addplot(pd.Series(20, index=df_calculated.index), panel=len(fig_panels)-1, color='green', width=0.5, linestyle='--', secondary_y=False))
 
@@ -952,7 +952,7 @@ def display_main_analysis_tab(ticker, df, info, params, selection, overall_confi
                 st.markdown(format_indicator_display("RSI Momentum", last.get("RSI"), bullish_signals.get("RSI Momentum", False), bearish_signals.get("RSI Momentum", False), selection.get("RSI Momentum")))
 
             if selection.get("Stochastic"):
-                st.markdown(format_indicator_display("Stochastic Oscillator", last.get("stoch_k"), bullish_signals.get("Stochastic", False), bearish_signals.get("Stochastic", False), selection.get("Stochastic")))
+                st.markdown(format_indicator_display("Stochastic Oscillator", last.get(""), bullish_signals.get("Stochastic", False), bearish_signals.get("Stochastic", False), selection.get("Stochastic")))
 
             if selection.get("CCI"):
                 st.markdown(format_indicator_display("CCI", last.get("CCI"), bullish_signals.get("CCI", False), bearish_signals.get("CCI", False), selection.get("CCI")))
