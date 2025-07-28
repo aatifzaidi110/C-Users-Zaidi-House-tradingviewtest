@@ -10,7 +10,6 @@ import pandas_datareader as pdr
 import numpy as np
 import ta
 import requests
-import datetime
 from bs4 import BeautifulSoup
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 from datetime import datetime, timedelta
@@ -1127,7 +1126,7 @@ def run_stock_scanner(
     """
     scanned_results = []
     today = datetime.today()
-    one_year_ago = today - datetime.timedelta(days=365) # For historical data context
+    one_year_ago = today - timedelta(days=365) # Use timedelta directly r historical data context
 
     for ticker in ticker_list:
         try:
