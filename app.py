@@ -120,6 +120,8 @@ is_intraday = interval in ["1m", "2m", "5m", "15m", "30m", "60m", "90m", "1h"]
 start_date = datetime.today() - timedelta(days=days)
 end_date = datetime.today()
 
+selected_timeframe = timeframe  # <-- ✅ This is required
+
 # Timeframe Selection
 #timeframe_options = {
 #    "1d": "1 Day (Daily)", "1wk": "1 Week (Weekly)", "1mo": "1 Month (Monthly)",
