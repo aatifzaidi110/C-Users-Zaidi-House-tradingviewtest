@@ -247,7 +247,7 @@ if analyze_button and ticker:
             prev_close = df_calculated.iloc[-2]['Close'] if len(df_calculated) >= 2 else current_price
         else:
             st.warning("Not enough data to perform technical analysis. Please try a different ticker or date range.")
-        return # Or handle this gracefully, perhaps by skipping the rest of the analysis
+            return # Or handle this gracefully, perhaps by skipping the rest of the analysis
 
         # Calculate Confidence Scores
         # Pass the full indicator_selection and normalized_weights to calculate_confidence_score
