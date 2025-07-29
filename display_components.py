@@ -13,7 +13,8 @@ from utils import (
     suggest_options_strategy, get_options_chain, get_data, get_finviz_data,
     calculate_pivot_points, get_moneyness, analyze_options_chain,
     generate_directional_trade_plan, get_indicator_summary_text, # Ensure get_indicator_summary_text is imported
-    get_economic_data_fred, get_vix_data, calculate_economic_score, calculate_sentiment_score
+    get_economic_data_fred, get_vix_data, calculate_economic_score, calculate_sentiment_score,
+    calculate_confidence_score # Needed for backtesting's simple_backtest_trade_plan_func
 )
 
 # Mapping for Finviz recommendation numbers to qualitative descriptions
@@ -47,7 +48,8 @@ def _display_common_header(ticker, current_price, prev_close, overall_confidence
     """
     st.markdown(f"#### {ticker} Overview")
     
-    price_delta = current_price - prev_close if prev_close is not None else 0.0
+    # Ensure prev_close is a valid number for delta calculation
+    price_delta = current_price - prev_close if prev_close is not None and pd.notna(prev_close) else 0.0
     
     sentiment_status = trade_direction # Use the determined trade_direction
     sentiment_icon = "⚪"
@@ -60,19 +62,17 @@ def _display_common_header(ticker, current_price, prev_close, overall_confidence
     with col1:
         st.metric(label="Current Price", value=f"${current_price:.2f}", delta=f"${price_delta:.2f}")
     with col2:
-        st.markdown(f"**Overall Sentiment:** {sentiment_icon} {sentiment_status}")
+        st.markdown(f"**Overall Sentiment:** {sentiment_icon} {sentiment_status} ({overall_confidence:.2f}%)")
     st.markdown("---")
 
 
 # === Helper for Indicator Display ===
-def format_indicator_display(signal_name_base, current_value, bullish_fired, bearish_fired, is_selected):
+def format_indicator_display(signal_name_base, current_value, bullish_fired, bearish_fired):
     """
     Formats and displays a single technical indicator's concise information,
     showing both bullish and bearish status, plus qualitative insights.
+    This function is now aligned with the get_indicator_summary_text signature in utils.py.
     """
-    if not is_selected:
-        return "" # Don't display if not selected
-
     bullish_icon = '🟢' if bullish_fired else '⚪'
     bearish_icon = '🔴' if bearish_fired else '⚪'
     
@@ -81,21 +81,22 @@ def format_indicator_display(signal_name_base, current_value, bullish_fired, bea
         if isinstance(current_value, (int, float)) and not isinstance(current_value, bool):
             value_str = f"Current: `{current_value:.2f}`"
         else:
-            value_str = "Current: N/A"
+            value_str = f"Current: `{current_value}`" # For boolean (Volume Spike)
     else:
         value_str = "Current: N/A"
 
-    # Use the new get_indicator_summary_text to generate details
-    # The get_indicator_summary_text expects signal_name_base, current_value, bullish_fired, bearish_fired
-    details_text = get_indicator_summary_text(signal_name_base, current_value, bullish_fired, bearish_fired)
+    # The get_indicator_summary_text now directly returns the full summary text
+    # We pass a dummy 'row' as it's not used in get_indicator_summary_text's current logic
+    # but it's part of its signature.
+    dummy_row = pd.Series({'Close': current_value}) # Create a dummy row for the function
+    details_text = get_indicator_summary_text(signal_name_base, dummy_row, {signal_name_base: bullish_fired}, {signal_name_base: bearish_fired})
     
-    base_display = ""
-    if "ADX" in signal_name_base:
-        base_display = f"{bullish_icon} {bearish_icon} **{signal_name_base}** ({value_str})"
-    else:
-        base_display = f"{bullish_icon} **{signal_name_base} Bullish** | {bearish_icon} **{signal_name_base} Bearish** ({value_str})"
+    # Remove the initial "**Indicator Name:** " part from the summary text
+    clean_details_text = details_text.replace(f"**{signal_name_base}:** ", "")
+
+    base_display = f"{bullish_icon} {bearish_icon} **{signal_name_base}** ({value_str})"
     
-    return f"{base_display}\n    - {details_text.replace(f'**{signal_name_base}:** ', '')}"
+    return f"{base_display}\n    - {clean_details_text}"
 
 
 # === Option Payoff Chart Functions ===
@@ -417,14 +418,16 @@ def display_technical_analysis_tab(ticker, df_calculated, is_intraday, indicator
                 elif ind_name == "Bollinger Bands": current_ind_value = latest_row.get("BB_mavg") # Using middle band for value
                 elif ind_name == "Ichimoku Cloud": current_ind_value = latest_row.get("ichimoku_conversion_line") # Using conversion line for value
                 elif ind_name == "EMA Trend": current_ind_value = latest_row.get("EMA21") # Using EMA21 for value
-                # For Volume Spike, its 'current value' is often implicit in signal, no direct value needed for summary text
-                
+                elif ind_name == "Volume Spike": current_ind_value = latest_row.get("Volume_Spike") # Volume Spike is boolean
+                elif ind_name == "Pivot Points": current_ind_value = latest_row.get("Pivot") # Pivot Points value
+
                 # Call get_indicator_summary_text for each selected indicator
+                # The get_indicator_summary_text function in utils.py expects (indicator_name, row, bullish_signals, bearish_signals)
                 summary_line = get_indicator_summary_text(
                     ind_name,
-                    current_ind_value,
-                    bullish_signals_summary.get(ind_name, False),
-                    bearish_signals_summary.get(ind_name, False)
+                    latest_row, # Pass the full row
+                    bullish_signals_summary, # Pass the full bullish signals dict
+                    bearish_signals_summary # Pass the full bearish signals dict
                 )
                 summary_texts.append(summary_line)
         
@@ -435,7 +438,7 @@ def display_technical_analysis_tab(ticker, df_calculated, is_intraday, indicator
 
 
     # Display Pivot Points
-    # Ensure df_calculated has 'Pivot (P)' column (calculated in utils.py)
+    # Ensure df_calculated has 'Pivot' column (calculated in utils.py)
     if 'Pivot' in df_calculated.columns and not df_calculated['Pivot'].empty: # Corrected column name to 'Pivot'
         last_pivot = df_calculated.iloc[-1]
         st.markdown("---")
@@ -481,16 +484,21 @@ def display_technical_analysis_tab(ticker, df_calculated, is_intraday, indicator
     else:
         st.info("No immediate bearish signals detected.")
 
-    # Backtesting Section (This should ideally be in display_backtesting_tab, not here)
-    # Removing backtesting logic from here as it has its own tab.
-    # Directional Trade Plan (This should ideally be in Trade Plan tab, not here)
-    # Removing trade plan logic from here as it has its own tab.
 
-
-def display_options_analysis_tab(ticker, current_stock_price, expirations, trade_direction, overall_confidence):
-    # Fetch prev_close for _display_common_header if needed, otherwise pass None or a default
+def display_options_analysis_tab(ticker, current_stock_price, expirations, trade_direction, overall_confidence, target_price, stop_loss_price):
+    """
+    Displays options analysis, allowing selection of expiration date.
+    Args:
+        ticker (str): The stock ticker symbol.
+        current_stock_price (float): The current price of the stock.
+        expirations (list): List of available options expiration dates.
+        trade_direction (str): The predicted trade direction ("Bullish", "Bearish", "Neutral").
+        overall_confidence (float): The overall confidence score for the trade plan.
+        target_price (float): The target price for the trade.
+        stop_loss_price (float): The stop loss price for the trade.
+    """
     # For options tab, prev_close might not be directly available without fetching df_calculated again.
-    # Let's assume it's okay to pass None or handle it in _display_common_header if not critical.
+    # Let's pass None for prev_close to _display_common_header as it's not crucial here.
     _display_common_header(ticker, current_stock_price, None, overall_confidence, trade_direction)
     st.subheader(f"📈 Options Analysis for {ticker}")
 
@@ -526,33 +534,49 @@ def display_options_analysis_tab(ticker, current_stock_price, expirations, trade
             st.markdown("---")
             st.subheader("Options Insights & Strategy Suggestions")
             
-            # analyze_options_chain expects (calls_df, puts_df, current_price)
-            analyzed_options = analyze_options_chain(calls_df, puts_df, current_stock_price)
-            # suggest_options_strategy expects (ticker, confidence_score_value, current_stock_price, expirations, trade_direction)
-            suggested_strategy_result = suggest_options_strategy(ticker, overall_confidence, current_stock_price, expirations, trade_direction)
-
-            if suggested_strategy_result and suggested_strategy_result.get('status') == 'success':
+            # analyze_options_chain expects (calls_df, puts_df, current_price, target_price, stop_loss_price, trade_direction)
+            analyzed_options = analyze_options_chain(calls_df, puts_df, current_stock_price, target_price, stop_loss_price, trade_direction)
+            
+            # suggest_options_strategy expects (suitable_options, trade_direction, current_price, target_price, stop_loss_price)
+            suggested_strategy_result = suggest_options_strategy(analyzed_options, trade_direction, current_stock_price, target_price, stop_loss_price)
+            
+            if suggested_strategy_result and suggested_strategy_result.get('type') != 'N/A': # Check if a valid strategy was suggested
                 st.markdown("##### Suggested Strategy:")
-                strategy_name = suggested_strategy_result.get('Strategy', 'N/A')
-                message = suggested_strategy_result.get('message', 'No message.')
+                strategy_name = suggested_strategy_result.get('type', 'N/A')
+                message = suggested_strategy_result.get('rationale', 'No message.') # Use 'rationale' from utils.py
                 
                 with st.expander(f"**{strategy_name}** - *{message}*"):
-                    st.write(f"**Direction:** {suggested_strategy_result.get('Direction', 'N/A')}")
-                    st.write(f"**Expiration:** {suggested_strategy_result.get('Expiration', 'N/A')}")
-                    st.write(f"**Net Debit/Credit:** {suggested_strategy_result.get('Net Debit', 'N/A')}")
-                    st.write(f"**Max Profit:** {suggested_strategy_result.get('Max Profit', 'N/A')}")
-                    st.write(f"**Max Risk:** {suggested_strategy_result.get('Max Risk', 'N/A')}")
-                    st.write(f"**Reward / Risk:** {suggested_strategy_result.get('Reward / Risk', 'N/A')}")
-                    st.write(f"**Notes:** {suggested_strategy_result.get('Notes', 'N/A')}")
+                    st.write(f"**Direction:** {trade_direction}") # Use the overall trade_direction
+                    st.write(f"**Expiration:** {suggested_strategy_result.get('expiration', 'N/A')}")
+                    st.write(f"**Strike:** ${suggested_strategy_result.get('strike', 'N/A'):.2f}")
+                    st.write(f"**Premium:** ${suggested_strategy_result.get('premium', 'N/A'):.2f}")
                     
-                    st.markdown("###### Contracts:")
-                    contracts = suggested_strategy_result.get('Contracts', {})
-                    for action, details in contracts.items():
-                        st.write(f"- **{action.capitalize()}**: {details.get('type', 'N/A').capitalize()} @ ${details.get('strike', 'N/A'):.2f} (Premium: ${details.get('lastPrice', 'N/A'):.2f})")
+                    # Net Debit/Credit, Max Profit/Risk, Reward/Risk are not directly returned by suggest_options_strategy
+                    # in utils.py. If these are desired, they need to be added to the suggested_strategy_result dict
+                    # within the suggest_options_strategy function in utils.py.
+                    # For now, I'll comment them out or provide N/A.
+                    # st.write(f"**Net Debit/Credit:** {suggested_strategy_result.get('Net Debit', 'N/A')}")
+                    # st.write(f"**Max Profit:** {suggested_strategy_result.get('Max Profit', 'N/A')}")
+                    # st.write(f"**Max Risk:** {suggested_strategy_result.get('Max Risk', 'N/A')}")
+                    # st.write(f"**Reward / Risk:** {suggested_strategy_result.get('Reward / Risk', 'N/A')}")
+                    
+                    st.write(f"**Rationale:** {suggested_strategy_result.get('rationale', 'N/A')}")
+                    
+                    # Contracts are not directly returned in the current suggested_strategy_result structure.
+                    # If detailed contract info is needed, it should be added to the dict in utils.py.
+                    # For now, commenting out.
+                    # st.markdown("###### Contracts:")
+                    # contracts = suggested_strategy_result.get('Contracts', {})
+                    # for action, details in contracts.items():
+                    #     st.write(f"- **{action.capitalize()}**: {details.get('type', 'N/A').capitalize()} @ ${details.get('strike', 'N/A'):.2f} (Premium: ${details.get('lastPrice', 'N/A'):.2f})")
 
                     # Plotting Payoff Diagram for the suggested strategy
-                    legs_for_chart = suggested_strategy_result.get('option_legs_for_chart', [])
-                    if legs_for_chart:
+                    # The `suggest_options_strategy` in utils.py does not return `option_legs_for_chart`.
+                    # This needs to be added to utils.py if you want to plot the payoff.
+                    # For now, this part will not function correctly without that data.
+                    # I will keep the structure but note the dependency.
+                    legs_for_chart = [] # Placeholder: This needs to come from utils.py's suggested_strategy_result
+                    if legs_for_chart: # Placeholder condition
                         # Define a range of stock prices around the current price and strikes
                         min_price = min([leg['strike'] for leg in legs_for_chart]) * 0.8
                         max_price = max([leg['strike'] for leg in legs_for_chart]) * 1.2
@@ -567,106 +591,16 @@ def display_options_analysis_tab(ticker, current_stock_price, expirations, trade
                             plt.close(payoff_fig)
                         else:
                             st.error("Could not generate payoff chart for suggested strategy.")
+                    else:
+                        st.info("Payoff chart data not available for the suggested strategy.")
 
             else:
-                st.info(suggested_strategy_result.get('message', "No specific options strategies suggested based on current analysis and sentiment."))
+                st.info("No specific options strategies suggested based on current analysis and sentiment.")
 
         else:
             st.info(f"Could not retrieve options chain for {ticker} on {selected_expiry}. Please check the ticker and date.")
     else:
         st.info("Please select an expiration date to view the options chain.")
-
-
-# Removed display_option_calculator_tab as it was not in the provided app.py imports,
-# and typically would be a separate feature. If needed, it can be re-added.
-
-def display_backtesting_tab(df_hist, indicator_selection): # Renamed from backtest_data and indicator_selection_current_run
-    st.markdown("### 📈 Backtesting Results")
-
-    # Backtesting parameters (can be made configurable in sidebar if desired)
-    atr_multiplier = st.slider("ATR Multiplier for Stop Loss", 0.5, 3.0, 1.5, 0.1)
-    reward_risk_ratio = st.slider("Reward/Risk Ratio for Take Profit", 1.0, 5.0, 2.0, 0.1)
-    signal_threshold_percentage = st.slider("Signal Threshold Percentage", 0.1, 1.0, 0.7, 0.05)
-    trade_direction_bt = st.selectbox("Backtest Trade Direction", ["long", "short"])
-    exit_strategy_bt = st.selectbox("Backtest Exit Strategy", ["fixed_rr", "trailing_psar"])
-
-    run_backtest_button = st.button("Run Backtest")
-
-    if run_backtest_button:
-        with st.spinner("Running backtest... This may take a moment for longer periods."):
-            # Pass all required arguments to backtest_strategy
-            trades_log, performance_metrics = backtest_strategy(
-                df_hist.copy(), # Pass a copy to avoid modifying original df_hist
-                indicator_selection, # Pass the indicator selection
-                atr_multiplier,
-                reward_risk_ratio,
-                signal_threshold_percentage,
-                trade_direction_bt,
-                exit_strategy_bt
-            )
-
-            if performance_metrics.get("error"):
-                st.warning(f"Backtest could not be completed: {performance_metrics['error']}")
-                return
-
-            st.subheader("Overall Strategy Performance")
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                st.metric("Total Trades", performance_metrics.get('Total Trades', 0))
-                st.metric("Winning Trades", performance_metrics.get('Winning Trades', 0))
-            with col2:
-                st.metric("Losing Trades", performance_metrics.get('Losing Trades', 0))
-                st.metric("Win Rate", performance_metrics.get('Win Rate', "0.00%"))
-            with col3:
-                st.metric("Gross Profit", f"${performance_metrics.get('Gross Profit', 0.0):.2f}")
-                st.metric("Gross Loss", f"${performance_metrics.get('Gross Loss', 0.0):.2f}")
-            
-            st.metric("Net PnL", f"${performance_metrics.get('Net PnL', 0.0):.2f}")
-            st.metric("Profit Factor", performance_metrics.get('Profit Factor', "0.00"))
-            
-            # CAGR and Max Drawdown are not directly returned by backtest_strategy in utils.py
-            # If you want these, you'll need to calculate them within backtest_strategy
-            # or add them to the performance_metrics dictionary in utils.py.
-            # For now, commenting them out to avoid errors.
-            # st.metric("CAGR (Compound Annual Growth Rate)", f"{performance_metrics.get('CAGR', 0.0):.2f}%")
-            # st.metric("Max Drawdown", f"{performance_metrics.get('Max Drawdown', 0.0):.2f}%")
-
-            st.markdown("---")
-            st.subheader("Strategy Parameters Used")
-            st.write("The backtest was run with the following indicator selections:")
-            selected_indicators_list = [
-                key for key, value in indicator_selection.items() if value
-            ]
-            if selected_indicators_list:
-                st.write(", ".join(selected_indicators_list))
-            else:
-                st.write("No specific indicators were selected for this backtest (or default settings were used).")
-            st.write(f"ATR Multiplier: {atr_multiplier}")
-            st.write(f"Reward/Risk Ratio: {reward_risk_ratio}")
-            st.write(f"Signal Threshold: {signal_threshold_percentage:.0%}")
-            st.write(f"Trade Direction: {trade_direction_bt.capitalize()}")
-            st.write(f"Exit Strategy: {exit_strategy_bt.replace('_', ' ').title()}")
-
-
-            # Display detailed trade log
-            if trades_log:
-                trade_log_df = pd.DataFrame(trades_log)
-                st.markdown("---")
-                st.subheader("Detailed Trade Log")
-                # Format PnL column to 2 decimal places and ensure it's numeric
-                if 'PnL' in trade_log_df.columns:
-                    trade_log_df['PnL'] = pd.to_numeric(trade_log_df['PnL'], errors='coerce').fillna(0.0).map('${:,.2f}'.format)
-                
-                # Format 'Entry Price' and 'Exit Price' if they exist
-                for col in ['Price']: # Assuming 'Price' column holds both entry/exit prices
-                    if col in trade_log_df.columns:
-                        trade_log_df[col] = pd.to_numeric(trade_log_df[col], errors='coerce').map('${:,.2f}'.format)
-
-                st.dataframe(trade_log_df)
-            else:
-                st.info("No trades executed during backtesting period with the selected strategy and data.")
-    else:
-        st.info("Configure backtest parameters and click 'Run Backtest' to see results.")
 
 
 def display_trade_log_tab(LOG_FILE, ticker, selected_timeframe, overall_confidence, current_price, prev_close, trade_direction):
@@ -784,7 +718,7 @@ def display_economic_data_tab(ticker, current_price, prev_close, overall_confide
 
 # --- NEW: Display Investor Sentiment Tab ---
 def display_investor_sentiment_tab(ticker, current_price, prev_close, overall_confidence, trade_direction,
-                                   latest_vix, historical_vix_avg):
+                                   latest_vix): # Removed historical_vix_avg
     """Displays key investor sentiment indicators."""
     _display_common_header(ticker, current_price, prev_close, overall_confidence, trade_direction)
     st.subheader("❤️ Investor Sentiment Indicators")
@@ -795,10 +729,9 @@ def display_investor_sentiment_tab(ticker, current_price, prev_close, overall_co
         st.metric("Latest VIX", f"{latest_vix:.2f}" if latest_vix is not None else "N/A")
         st.markdown("*(Source: CBOE Volatility Index, via Yahoo Finance)*")
     with col2:
-        if historical_vix_avg is not None:
-            st.metric("Historical VIX Average (Past Year)", f"{historical_vix_avg:.2f}")
-        else:
-            st.metric("Historical VIX Average (Past Year)", "N/A")
+        # Removed historical_vix_avg as it's not passed from app.py/utils.py
+        st.info("Historical VIX Average (Past Year) - Not available in current data.")
+
 
     st.markdown("---")
     st.subheader("VIX Interpretation")
@@ -815,10 +748,26 @@ def display_investor_sentiment_tab(ticker, current_price, prev_close, overall_co
         st.info("VIX data not available for interpretation.")
 
     st.markdown("---")
+    st.subheader("Analyst Recommendations (from Finviz)")
+    # Access finviz_recommendation from session_state.trade_plan_result
+    finviz_recom = st.session_state.trade_plan_result['sentiment_analysis'].get('finviz_recommendation')
+    if finviz_recom is not None:
+        st.write(f"**Average Recommendation Score:** {finviz_recom:.2f} (1.0 = Strong Buy, 5.0 = Strong Sell)")
+    else:
+        st.info("No analyst recommendation data available from Finviz.")
+
+    st.subheader("News Sentiment (from Finviz)")
+    # Access finviz_news_sentiment from session_state.trade_plan_result
+    finviz_news_sentiment = st.session_state.trade_plan_result['sentiment_analysis'].get('finviz_news_sentiment')
+    if finviz_news_sentiment is not None:
+        st.write(f"**Average News Sentiment Score:** {finviz_news_sentiment:.2f}% (100% = Very Positive)")
+    else:
+        st.info("No news sentiment data available from Finviz.")
+
+    st.markdown("---")
     st.info("Note: Sentiment indicators are often contrarian. Extreme fear can be a buying opportunity, and extreme complacency a selling opportunity.")
 
 
-# --- NEW: Display Scanner Results Tab ---
 def display_scanner_tab(scanner_results_df): # Renamed from display_scanner_results_tab for consistency with app.py
     """
     Displays the results of the stock scanner in a detailed, expandable table.
@@ -828,64 +777,42 @@ def display_scanner_tab(scanner_results_df): # Renamed from display_scanner_resu
         st.info("No opportunities found matching your criteria.")
         return
 
-    # Create a list of dictionaries for display, with expanders for details
-    display_data = []
+    # Use st.expander for each row to show details
     for index, row in scanner_results_df.iterrows():
         # Ensure all expected keys exist, provide defaults if not
-        entry_details_expander = f"**Entry Criteria Details for {row['Ticker']}**\n\n{row.get('Entry Criteria Details', 'N/A')}"
-        exit_details_expander = f"**Exit Criteria Details for {row['Ticker']}**\n\n{row.get('Exit Criteria Details', 'N/A')}"
+        ticker = row.get('Ticker', 'N/A')
+        style = row.get('Trading Style', 'N/A') # This column name is from utils.py's scan_for_trades
+        confidence = row.get('Overall Confidence', 'N/A')
+        direction = row.get('Direction', 'N/A') # This column name is from utils.py's scan_for_trades
 
-        display_data.append({
-            "Ticker": row.get('Ticker', 'N/A'),
-            "Style": row.get('Trading Style', 'N/A'),
-            "Confidence": row.get('Overall Confidence', 'N/A'),
-            "Direction": row.get('Direction', 'N/A'), # Corrected column name from 'Trade Direction' to 'Direction'
-            "Price": f"${row.get('Current Price', 'N/A')}" if pd.notna(row.get('Current Price')) else 'N/A', # Removed .2f for string
-            "ATR": f"{row.get('ATR', 'N/A')}" if pd.notna(row.get('ATR')) else 'N/A', # Removed .2f for string
-            "Target": f"${row.get('Target Price', 'N/A')}" if pd.notna(row.get('Target Price')) else 'N/A', # Removed .2f for string
-            "Stop Loss": f"${row.get('Stop Loss', 'N/A')}" if pd.notna(row.get('Stop Loss')) else 'N/A', # Removed .2f for string
-            "Entry Zone": row.get('Entry Zone', 'N/A'), # Entry Zone is already formatted as string
-            "R/R": f"{row.get('Reward/Risk', 'N/A')}",
-            "Pivot (P)": f"${row.get('Pivot (P)', 'N/A')}" if pd.notna(row.get('Pivot (P)')) else 'N/A', # Removed .2f for string
-            "R1": f"${row.get('Resistance 1 (R1)', 'N/A')}" if pd.notna(row.get('Resistance 1 (R1)')) else 'N/A', # Removed .2f for string
-            "S1": f"${row.get('Support 1 (S1)', 'N/A')}" if pd.notna(row.get('S1')) else 'N/A', # Removed .2f for string
-            "R2": f"${row.get('Resistance 2 (R2)', 'N/A')}" if pd.notna(row.get('R2')) else 'N/A', # Removed .2f for string
-            "S2": f"${row.get('Support 2 (S2)', 'N/A')}" if pd.notna(row.get('S2')) else 'N/A', # Removed .2f for string
-            "Entry Details": entry_details_expander, # This will be expanded
-            "Exit Details": exit_details_expander,   # This will be expanded
-            "Rationale": row.get('Rationale', 'N/A')
-        })
-
-    # Use st.expander for each row to show details
-    for item in display_data:
-        with st.expander(f"**{item['Ticker']}** | {item['Style']} | Confidence: {item['Confidence']}% | Direction: {item['Direction']}"):
+        with st.expander(f"**{ticker}** | {style} | Confidence: {confidence:.2f}% | Direction: {direction}"):
             col1, col2, col3, col4 = st.columns(4)
-            col1.metric("Current Price", item['Price'])
-            col2.metric("Target Price", item['Target'])
-            col3.metric("Stop Loss", item['Stop Loss'])
-            col4.metric("Reward/Risk", item['R/R'])
+            col1.metric("Current Price", f"${row.get('Current Price', 'N/A'):.2f}")
+            col2.metric("Target Price", f"${row.get('Target Price', 'N/A'):.2f}")
+            col3.metric("Stop Loss", f"${row.get('Stop Loss', 'N/A'):.2f}")
+            col4.metric("Reward/Risk", f"{row.get('Reward/Risk', 'N/A')}")
 
             st.markdown("---")
-            st.markdown(f"**Entry Zone:** {item['Entry Zone']}")
-            st.markdown(f"**ATR:** {item['ATR']}")
+            st.markdown(f"**Entry Zone:** {row.get('Entry Zone Start', 'N/A')} - {row.get('Entry Zone End', 'N/A')}")
+            # ATR is not directly in the scanner_results_df from utils.py's scan_for_trades
+            # If needed, it should be added to the scanned_results dict in utils.py
+            # For now, commenting it out to avoid errors.
+            # st.markdown(f"**ATR:** {row.get('ATR', 'N/A')}")
 
             st.markdown("---")
             st.markdown("**Pivot Points:**")
-            st.write(f"P: {item['Pivot (P)']}, R1: {item['R1']}, S1: {item['S1']}, R2: {item['R2']}, S2: {item['S2']}")
+            st.write(f"P: {row.get('Pivot (P)', 'N/A')}, R1: {row.get('Resistance 1 (R1)', 'N/A')}, S1: {row.get('Support 1 (S1)', 'N/A')}, R2: {row.get('Resistance 2 (R2)', 'N/A')}, S2: {row.get('Support 2 (S2)', 'N/A')}")
 
             st.markdown("---")
             st.markdown("**Rationale:**")
-            st.write(item['Rationale'])
+            st.write(row.get('Rationale', 'N/A'))
 
             st.markdown("---")
             st.markdown("**Detailed Entry Criteria:**")
-            st.markdown(item['Entry Details'])
+            st.markdown(row.get('Entry Criteria Details', 'N/A'))
 
             st.markdown("---")
             st.markdown("**Detailed Exit Criteria:**")
-            st.markdown(item['Exit Details'])
+            st.markdown(row.get('Exit Criteria Details', 'N/A'))
             
             st.markdown("---") # Separator for next item
-
-    st.markdown("---")
-    st.info("Click on each ticker's header to expand/collapse detailed trade plan information.")
