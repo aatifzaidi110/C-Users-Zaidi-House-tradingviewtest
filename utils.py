@@ -4713,4 +4713,10 @@ def generate_signals_for_row(row, indicator_selection, normalized_weights):
             signal_strength["Bollinger Bands"] = (close - row['BB_upper']) / row['BB_upper']
 
     # Stochastic Oscillator
-    if indicator_selection.get("Stochastic") and 'Stoch_K' in row and 'Stoch_D' in row:
+if indicator_selection.get("Stochastic") and 'Stoch_K' in row and 'Stoch_D' in row:
+    if row['Stoch_K'] < 20 and row['Stoch_K'] > row['Stoch_D']: # Oversold, K crosses above D
+        bullish_signals["Stochastic"] = True
+        signal_strength["Stochastic"] = (20 - row['Stoch_K']) / 20
+    elif row['Stoch_K'] > 80 and row['Stoch_K'] < row['Stoch_D']: # Overbought, K crosses below D
+        bearish_signals["Stochastic"] = True
+        signal_strength["Stochastic"] = (row['Stoch_K'] - 80) / 20
