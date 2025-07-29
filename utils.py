@@ -1118,23 +1118,6 @@ def backtest_strategy(df, trade_plan_func, initial_capital=10000, commission=0.0
         # A more robust backtesting setup would involve passing the necessary parameters
         # to trade_plan_func or refactoring generate_directional_trade_plan to work with a slice.
         
-        # For this example, let's assume trade_plan_func is a simplified function
-        # that directly provides signals based on the current_data.
-        # Since we don't have the original indicator_selection and weights here,
-        # we'll create a dummy trade plan.
-        
-        # THIS IS A SIMPLIFIED MOCK - YOU WILL NEED TO ADAPT THIS
-        # TO YOUR ACTUAL generate_directional_trade_plan CALL
-        # For a proper backtest, you'd call:
-        # trade_plan_result = generate_directional_trade_plan(
-        #     ticker=df.name, # Assuming ticker is stored or passed
-        #     interval='1d', # Or whatever the interval is
-        #     start_date=current_data.index[0].date(),
-        #     end_date=current_date.date(),
-        #     indicator_selection=YOUR_INDICATOR_SELECTION,
-        #     weights=YOUR_WEIGHTS
-        # )
-        
         # For the purpose of making this backtest_strategy runnable,
         # we'll use a placeholder for trade_plan_result.
         # You MUST replace this with a proper call to generate_directional_trade_plan
