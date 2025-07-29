@@ -12,7 +12,7 @@ import ta
 import requests
 from bs4 import BeautifulSoup
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
-from datetime import datetime, timedelta
+from datetime import datetime, date, timedelta # ADDED 'date' here
 import nltk
 
 # --- NLTK VADER Lexicon Download ---
@@ -446,17 +446,31 @@ def generate_signals_for_row(row, indicator_selection, normalized_weights):
             signal_strength["Stochastic"] = (row['Stoch_K'] - 80) / 20
 
     # Ichimoku Cloud
-    if indicator_selection.get("Ichimoku Cloud") and 'ichimoku_conversion_line' in row and 'ichimoku_base_line' in row and 'ichimoku_leading_span_a' in row and 'ichimoku_leading_span_b' in row:
-        # Bullish: Price above cloud, Conversion Line above Base Line, Leading Span A above Leading Span B
-        if (close > row['ichimoku_leading_span_a'] and close > row['ichimoku_leading_span_b']) and \
-           (row['ichimoku_conversion_line'] > row['ichimoku_base_line']):
-            bullish_signals["Ichimoku Cloud"] = True
-            signal_strength["Ichimoku Cloud"] = 1.0 # Strong signal
-        # Bearish: Price below cloud, Conversion Line below Base Line, Leading Span A below Leading Span B
-        elif (close < row['ichimoku_leading_span_a'] and close < row['ichimoku_leading_span_b']) and \
-             (row['ichimoku_conversion_line'] < row['ichimoku_base_line']):
-            bearish_signals["Ichimoku Cloud"] = True
-            signal_strength["Ichimoku Cloud"] = 1.0 # Strong signal
+    if indicator_selection.get("Ichimoku Cloud"):
+        # Ichimoku requires longer data history, handle NaNs
+        ichimoku_df = ta.trend.ichimoku_cloud(row['High'], row['Low'], row['Close'],
+                                              window1=9, window2=26, window3=52, visual=True)
+        # Check if ichimoku_df is a DataFrame and has the expected columns
+        if not ichimoku_df.empty and 'ichimoku_base_line' in ichimoku_df.columns:
+            # Access values from the single row DataFrame
+            if not ichimoku_df.empty:
+                # Assuming ichimoku_df has only one row or we care about the last one
+                ichimoku_base_line = ichimoku_df['ichimoku_base_line'].iloc[-1]
+                ichimoku_conversion_line = ichimoku_df['ichimoku_conversion_line'].iloc[-1]
+                ichimoku_leading_span_a = ichimoku_df['ichimoku_leading_span_a'].iloc[-1]
+                ichimoku_leading_span_b = ichimoku_df['ichimoku_leading_span_b'].iloc[-1]
+
+                # Bullish: Price above cloud, Conversion Line above Base Line, Leading Span A above Leading Span B
+                if (close > ichimoku_leading_span_a and close > ichimoku_leading_span_b) and \
+                   (ichimoku_conversion_line > ichimoku_base_line):
+                    bullish_signals["Ichimoku Cloud"] = True
+                    signal_strength["Ichimoku Cloud"] = 1.0 # Strong signal
+                # Bearish: Price below cloud, Conversion Line below Base Line, Leading Span A below Leading Span B
+                elif (close < ichimoku_leading_span_a and close < ichimoku_leading_span_b) and \
+                     (ichimoku_conversion_line < ichimoku_base_line):
+                    bearish_signals["Ichimoku Cloud"] = True
+                    signal_strength["Ichimoku Cloud"] = 1.0 # Strong signal
+
 
     # Parabolic SAR
     if indicator_selection.get("Parabolic SAR") and 'psar' in row:
@@ -467,7 +481,7 @@ def generate_signals_for_row(row, indicator_selection, normalized_weights):
             bearish_signals["Parabolic SAR"] = True
             signal_strength["Parabolic SAR"] = 1.0
 
-    # ADX (Trend Strength and Direction)
+    # ADX
     if indicator_selection.get("ADX") and 'adx' in row and 'plus_di' in row and 'minus_di' in row:
         if row['adx'] > 25: # Strong trend
             if row['plus_di'] > row['minus_di']:
