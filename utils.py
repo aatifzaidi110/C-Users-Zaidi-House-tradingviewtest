@@ -200,9 +200,11 @@ def calculate_indicators(df, indicator_selection, is_intraday):
     required_cols = ['Open', 'High', 'Low', 'Close', 'Volume']
     if isinstance(df_copy.columns, pd.MultiIndex):
         df_copy.columns = df_copy.columns.get_level_values(-1)
-    df_copy = df_copy.reindex(columns=pd.Index(df_copy.columns).union(required_cols))
+    # Ensure column names are unique before reindexing
+df_copy.columns = pd.io.parsers.ParserBase({'names': df_copy.columns})._maybe_dedup_names(df_copy.columns)
 
-
+# Now reindex with required columns
+df_copy = df_copy.reindex(columns=pd.Index(df_copy.columns).union(required_cols))
     # Now, ensure numeric types for the core columns
     for col in required_cols:
         if col in df_copy.columns:
