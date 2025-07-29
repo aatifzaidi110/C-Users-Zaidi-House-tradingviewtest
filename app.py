@@ -115,6 +115,7 @@ interval, days = interval_map[timeframe]
 start_date = datetime.today() - timedelta(days=days)
 end_date = datetime.today()
 
+is_intraday = interval in ["1m", "2m", "5m", "15m", "30m", "60m", "90m", "1h"]
 
 # Timeframe Selection
 #timeframe_options = {
