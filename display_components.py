@@ -60,7 +60,10 @@ def _display_common_header(ticker, current_price, prev_close, overall_confidence
         
     col1, col2 = st.columns([1, 1])
     with col1:
-        st.metric(label="Current Price", value=f"${current_price:.2f}", delta=f"${price_delta:.2f}")
+        # Safely format current_price and price_delta
+        current_price_str = f"${current_price:.2f}" if current_price is not None and pd.notna(current_price) else "N/A"
+        price_delta_str = f"${price_delta:.2f}" if price_delta is not None and pd.notna(price_delta) else "N/A"
+        st.metric(label="Current Price", value=current_price_str, delta=price_delta_str)
     with col2:
         st.markdown(f"**Overall Sentiment:** {sentiment_icon} {sentiment_status} ({overall_confidence:.2f}%)")
     st.markdown("---")
