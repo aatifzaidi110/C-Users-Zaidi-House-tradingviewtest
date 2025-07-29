@@ -88,6 +88,14 @@ st.sidebar.header("Configuration")
 ticker = st.sidebar.text_input("Enter Stock Ticker (e.g., AAPL)", st.session_state.ticker).upper()
 st.session_state.ticker = ticker
 
+# Analyze Ticker Button
+st.sidebar.markdown("---")
+analyze_button = st.sidebar.button("Analyze Ticker")
+
+# Clear Cache Button
+if st.sidebar.button("Clear Cache"):
+    st.cache_data.clear()
+    st.rerun()
 # Timeframe Selection
 timeframe_options = {
     "1d": "1 Day (Daily)", "1wk": "1 Week (Weekly)", "1mo": "1 Month (Monthly)",
@@ -171,16 +179,6 @@ scanner_ticker_list = [t.strip().upper() for t in scanner_ticker_list_raw.split(
 selected_trading_style = st.sidebar.selectbox("Scanner Trading Style", ["Swing", "Day", "Long-Term"])
 min_scanner_confidence = st.sidebar.slider("Minimum Scanner Confidence (%)", 0, 100, 70)
 run_scanner_button = st.sidebar.button("Run Stock Scanner")
-
-
-# Analyze Ticker Button
-st.sidebar.markdown("---")
-analyze_button = st.sidebar.button("Analyze Ticker")
-
-# Clear Cache Button
-if st.sidebar.button("Clear Cache"):
-    st.cache_data.clear()
-    st.rerun()
 
 
 # --- Main Application Logic ---
