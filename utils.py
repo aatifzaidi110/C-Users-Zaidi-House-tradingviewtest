@@ -196,14 +196,14 @@ def calculate_indicators(df, indicator_selection, is_intraday):
         if col in df_copy.columns:
             # Check if the column is already numeric or if it can be converted
             # and that it's not a scalar value, which would cause the TypeError
-            if not pd.api.types.is_numeric_dtype(df_copy[col]) and not df_copy[col].empty:
+            # Ensure df_copy[col] is a Series before passing to pd.to_numeric
+            if isinstance(df_copy[col], pd.Series):
                 df_copy[col] = pd.to_numeric(df_copy[col], errors='coerce')
-            elif df_copy[col].empty:
-                # If the column is empty, it cannot be converted, so set to NaN or handle
-                df_copy[col] = np.nan
             else:
-                # If it's already numeric or a scalar, try converting anyway to handle edge cases
-                df_copy[col] = pd.to_numeric(df_copy[col], errors='coerce')
+                # If it's not a Series, it might be a scalar or other type.
+                # Attempt to convert to a Series first, then to numeric.
+                # This handles cases where a single value might be passed.
+                df_copy[col] = pd.to_numeric(pd.Series(df_copy[col]), errors='coerce')
         else:
             # If column is missing, add it with NaNs to prevent errors in later calculations
             df_copy[col] = np.nan
@@ -342,7 +342,7 @@ def calculate_pivot_points(df):
     # Select only the pivot point columns to return
     pivot_cols = ['Pivot', 'R1', 'S1', 'R2', 'S2']
     # Ensure all pivot_cols exist before selecting
-    existing_pivot_cols = [col for col in pivot_cols if col in df_copy.columns]
+    existing_pivot_cols = [col for col in pivot_copy.columns if col in pivot_cols] # Corrected line
     
     return df_copy[existing_pivot_cols]
 
@@ -482,7 +482,7 @@ def generate_signals_for_row(row, indicator_selection, normalized_weights):
 
 
     # Parabolic SAR
-    if indicator_selection.get("Parabolic SAR") and 'psar' in row:
+    if indicator_selection.get("Parabolic SAR"):
         if close > row['psar']:
             bullish_signals["Parabolic SAR"] = True
             signal_strength["Parabolic SAR"] = 1.0
