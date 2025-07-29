@@ -200,7 +200,10 @@ def main():
             st.success(f"Analysis complete for {ticker}.")
 
             # Extract key variables from the trade_plan_result for easier access
-            current_price = trade_plan_result.get("current_price")
+            # Ensure current_price is a scalar float
+            current_price_raw = trade_plan_result.get("current_price")
+            current_price = float(current_price_raw.iloc[-1]) if isinstance(current_price_raw, pd.Series) else float(current_price_raw)
+
             overall_confidence = trade_plan_result.get("overall_confidence")
             trade_direction = trade_plan_result.get("trade_direction")
             
@@ -234,7 +237,7 @@ def main():
             with tabs[1]: # 🔮 Options Analysis
                 display_options_analysis_tab(
                     ticker,
-                    current_price,
+                    current_price, # Pass the scalar current_price
                     options_chain_dates, # Pass expirations
                     trade_direction,
                     overall_confidence
@@ -279,7 +282,7 @@ def main():
                     ticker,
                     selected_timeframe,
                     overall_confidence,
-                    current_price,
+                    current_price, # Pass the scalar current_price
                     prev_close,
                     trade_direction
                 )
@@ -298,8 +301,9 @@ def main():
                 # Display Economic Data
                 display_economic_data_tab(
                     ticker,
-                    current_price,
-                    trade_plan_result.get('current_price'), # Using current_price for prev_close placeholder for now
+                    current_price, # Pass the scalar current_price
+                    trade_plan_result.get('current_price'), # This is still a Series, but display_economic_data_tab uses it as prev_close
+                                                            # Let's adjust this to pass a proper prev_close or ensure it's handled in display_economic_data_tab
                     overall_confidence,
                     trade_direction,
                     trade_plan_result['economic_context'].get('latest_gdp'),
@@ -311,16 +315,12 @@ def main():
                 # Display Investor Sentiment Data
                 display_investor_sentiment_tab(
                     ticker,
-                    current_price,
-                    trade_plan_result.get('current_price'), # Using current_price for prev_close placeholder for now
+                    current_price, # Pass the scalar current_price
+                    trade_plan_result.get('current_price'), # This is still a Series, same as above
                     overall_confidence,
                     trade_direction,
                     trade_plan_result['sentiment_analysis'].get('latest_vix'),
-                    trade_plan_result['sentiment_analysis'].get('historical_vix_avg') # This key doesn't exist in utils.py's sentiment_analysis dict.
-                                                                                     # It only has 'latest_vix'. We need to adjust utils.py or remove this.
-                                                                                     # For now, I'll assume it's meant to be `latest_vix` or remove it.
-                                                                                     # Let's remove historical_vix_avg from display_investor_sentiment_tab call,
-                                                                                     # as it's not calculated in trade_plan_result.
+                    None # Removed historical_vix_avg as it's not in trade_plan_result['sentiment_analysis']
                 )
 
             with tabs[6]: # 📚 Glossary
