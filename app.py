@@ -266,6 +266,11 @@ if analyze_button and ticker:
 
         # Calculate indicators
         df_calculated = calculate_indicators(df.copy(), st.session_state.indicator_selection, is_intraday)
+            
+        # ⛔ Prevent IndexError if df_calculated is empty
+        if df_calculated.empty:
+            st.warning("⚠️ No valid data available after indicator calculations.")
+            st.stop()
         
         # Calculate Pivot Points separately as they need to be passed to display_technical_analysis_tab
         # and are only calculated for non-intraday data.
