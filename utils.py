@@ -44,8 +44,8 @@ def get_finviz_data(ticker):
                 recom_score = None # Handle cases where conversion fails
 
         # Fetch news sentiment
-        news_sentiment_score = None
         news_table = soup.find('table', class_='fullview-news-outer')
+        news_sentiment_score = None
         if news_table:
             news_headlines = []
             for row in news_table.find_all('tr'):
@@ -747,8 +747,8 @@ def calculate_sentiment_score(latest_vix, historical_vix_avg):
     # A simple approach:
     # If VIX < 15: Very low fear (complacency) -> lower score
     # If 15 <= VIX <= 20: Normal range -> neutral score
-    # If 20 < VIX <= 30: Elevated fear -> higher score
-    # If VIX > 30: High fear -> very high score
+    # If 20 < latest_vix <= 30: Elevated fear -> higher score
+    # If latest_vix > 30: High fear -> very high score
 
     if latest_vix < 15:
         score = 20 # Complacency, bearish contrarian
