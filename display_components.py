@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt # Import matplotlib for plt.close()
 import numpy as np # Import numpy for np.linspace and np.inf
 from datetime import datetime, timedelta # Import datetime and timedelta for date operations
 import pytz # Import pytz for timezone handling
+import os # Import the os module for path operations
 
 # Import functions from utils.py (ensure calculate_indicators is imported)
 from utils import (
@@ -182,7 +183,7 @@ def plot_generic_payoff_chart(stock_prices, payoffs, legs, strategy_name, ticker
 
 # === Display Functions for Tabs ===
 
-def display_technical_analysis_tab(ticker, df_calculated, is_intraday, indicator_selection, normalized_weights):
+def display_technical_analysis_tab(ticker, df_calculated, is_intraday, indicator_selection, normalized_weights): # Added normalized_weights
     """
     Displays the technical analysis chart with selected indicators.
     Args:
