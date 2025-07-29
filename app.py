@@ -245,10 +245,7 @@ if analyze_button and ticker:
             last_row = df_calculated.iloc[-1]
             current_price = last_row['Close']
             prev_close = df_calculated.iloc[-2]['Close'] if len(df_calculated) >= 2 else current_price
-        else:
-            st.warning("Not enough data to perform technical analysis. Please try a different ticker or date range.")
-            return # Or handle this gracefully, perhaps by skipping the rest of the analysis
-
+        
         # Calculate Confidence Scores
         # Pass the full indicator_selection and normalized_weights to calculate_confidence_score
         scores, overall_confidence, trade_direction = calculate_confidence_score(
@@ -263,6 +260,9 @@ if analyze_button and ticker:
             st.session_state.indicator_selection, # Pass the full indicator selection dict
             normalized_weights # Pass the normalized weights
         )
+    else:
+        st.warning("Not enough data to perform technical analysis. Please try a different ticker or date range.")
+        return # Or handle this gracefully, perhaps by skipping the rest of the analysis
 
         # Get options chain expiration dates
         options_chain = yf.Ticker(ticker).options
