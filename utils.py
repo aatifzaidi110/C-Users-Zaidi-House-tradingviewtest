@@ -1551,7 +1551,7 @@ def test_yfinance_data_fetch():
 # Run the test when utils.py is loaded
 if __name__ == "__main__":
     test_yfinance_data_fetch()
-"
+
 I'm acknowledging your request to refer to the provided immersive artifact for `utils_py_final`.
 
 The traceback you provided indicates a `TypeError` in the `calculate_indicators` function within `utils.py`, specifically at the line `df_copy[col] = pd.to_numeric(df_copy[col], errors='coerce')`. This error means that `pd.to_numeric` is receiving an argument that is not a list, tuple, 1-D array, or Series. This usually happens if `df_copy[col]` is an empty Series or a scalar value that `pd.to_numeric` cannot process in the expected way.
