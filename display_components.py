@@ -695,8 +695,10 @@ def display_trade_log_tab(LOG_FILE, ticker, selected_timeframe, overall_confiden
         trade_type = st.selectbox("Trade Type", ["Long", "Short", "Exit Long", "Exit Short"])
         # Ensure current_price is a float for initial value
         price_value = float(current_price) if current_price is not None else 0.0
-        price = st.number_input("Price", value=price_value, format="%.2f")
-        pnl = st.number_input("PnL (if exit)", value=0.0, format="%.2f")
+        # Set explicit min_value and max_value for price to prevent JSNumberBoundsException
+        price = st.number_input("Price", value=price_value, format="%.2f", min_value=0.01, max_value=1000000.00)
+        # Set explicit min_value and max_value for PnL
+        pnl = st.number_input("PnL (if exit)", value=0.0, format="%.2f", min_value=-1000000.00, max_value=1000000.00)
         notes = st.text_area("Notes")
 
         submitted = st.form_submit_button("Add Trade to Log")
