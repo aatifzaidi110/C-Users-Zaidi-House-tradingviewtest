@@ -884,3 +884,4 @@ def display_scanner_tab(scanner_results_df): # Renamed from display_scanner_resu
 
     st.markdown("---")
     st.info("Click on each ticker's header to expand/collapse detailed trade plan information.")
+
