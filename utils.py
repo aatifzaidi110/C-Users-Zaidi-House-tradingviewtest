@@ -193,31 +193,31 @@ def calculate_indicators(df, indicator_selection, is_intraday):
 
     required_cols = ['Open', 'High', 'Low', 'Close', 'Volume']
     
-    # Ensure df_copy.columns is a simple Index before union
-    current_cols = pd.Index(df_copy.columns.tolist()) if isinstance(df_copy.columns, pd.MultiIndex) else df_copy.columns
+    # Get current column names as a list of strings, handling MultiIndex
+    if isinstance(df_copy.columns, pd.MultiIndex):
+        current_col_names = [col[0] if isinstance(col, tuple) else col for col in df_copy.columns]
+    else:
+        current_col_names = df_copy.columns.tolist()
+
+    # Combine current and required columns, then create a unique list for reindex
+    all_cols = list(set(current_col_names + required_cols))
     
-# Reindex the DataFrame to ensure all required columns exist, filling missing with NaN
-required_cols = ['Open', 'High', 'Low', 'Close', 'Volume']
-if isinstance(df_copy.columns, pd.MultiIndex):
-    df_copy.columns = df_copy.columns.get_level_values(-1)
+    # Reindex the DataFrame to ensure all required columns exist, filling missing with NaN
+    df_copy = df_copy.reindex(columns=all_cols, fill_value=np.nan)
 
-# Ensure column names are unique before reindexing
-df_copy.columns = pd.io.parsers.ParserBase({'names': df_copy.columns})._maybe_dedup_names(df_copy.columns)
-
-# Now reindex with required columns
-df_copy = df_copy.reindex(columns=pd.Index(df_copy.columns).union(required_cols))
-
-# Now, ensure numeric types for the core columns
-for col in required_cols:
-    df_copy[col] = pd.to_numeric(df_copy[col], errors='coerce')
-    if col in df_copy.columns:
-        # Always convert to a Series first if it's not already, then to numeric
-        if isinstance(df_copy[col], pd.DataFrame):
-            # If it's a DataFrame, assume it's a single column and convert to Series
-            df_copy[col] = pd.to_numeric(df_copy[col].iloc[:, 0], errors='coerce')
-        elif not isinstance(df_copy[col], pd.Series):
-            # If it's not a Series (e.g., a list, numpy array, or scalar), convert to Series first
-            df_copy[col] = pd.to_numeric(pd.Series(df_copy[col]), errors='coerce')
+    # Now, ensure numeric types for the core columns
+    for col in required_cols:
+        if col in df_copy.columns:
+            # Always convert to a Series first if it's not already, then to numeric
+            if isinstance(df_copy[col], pd.DataFrame):
+                # If it's a DataFrame, assume it's a single column and convert to Series
+                df_copy[col] = pd.to_numeric(df_copy[col].iloc[:, 0], errors='coerce')
+            elif not isinstance(df_copy[col], pd.Series):
+                # If it's not a Series (e.g., a list, numpy array, or scalar), convert to Series first
+                df_copy[col] = pd.to_numeric(pd.Series(df_copy[col]), errors='coerce')
+            else:
+                # If it's already a Series, just convert to numeric
+                df_copy[col] = pd.to_numeric(df_copy[col], errors='coerce')
 
     # It's crucial to check if df_copy is empty *after* the initial data fetch and before calculations.
     if df_copy.empty:
@@ -702,7 +702,7 @@ def calculate_sentiment_score(finviz_data, vix_data):
             sentiment_score += (21 - latest_vix) * 0.5 # Closer to 17 adds, closer to 25 subtracts
 
     # Ensure score is within 0-100 bounds
-    return max(0, min(100, sentiment_score))
+    return max(0, min(100, score))
 
 
 def get_moneyness(current_price, strike_price, option_type):
