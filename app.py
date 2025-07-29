@@ -96,37 +96,57 @@ analyze_button = st.sidebar.button("Analyze Ticker")
 if st.sidebar.button("Clear Cache"):
     st.cache_data.clear()
     st.rerun()
-# Timeframe Selection
-timeframe_options = {
-    "1d": "1 Day (Daily)", "1wk": "1 Week (Weekly)", "1mo": "1 Month (Monthly)",
-    "1m": "1 Minute (Intraday)", "2m": "2 Minutes (Intraday)", "5m": "5 Minutes (Intraday)",
-    "15m": "15 Minutes (Intraday)", "30m": "30 Minutes (Intraday)", "60m": "60 Minutes (Intraday)",
-    "90m": "90 Minutes (Intraday)", "1h": "1 Hour (Intraday)"
+
+# Trading selection 
+timeframe = st.selectbox("Trading Style", [
+    "Scalp Trading (1m)",
+    "Day Trading (5m)",
+    "Swing Trading (1h)",
+    "Position Trading (1d)"
+])
+interval_map = {
+    "Scalp Trading (1m)": ("1m", 5),      # 5 days max for 1m data
+    "Day Trading (5m)": ("5m", 15),       # 15 days
+    "Swing Trading (1h)": ("1h", 90),     # 3 months
+    "Position Trading (1d)": ("1d", 365)  # 1 year
 }
-selected_timeframe_key = st.sidebar.selectbox(
-    "Select Timeframe",
-    list(timeframe_options.keys()),
-    format_func=lambda x: timeframe_options[x],
-    index=list(timeframe_options.keys()).index(st.session_state.data_interval)
-)
-st.session_state.data_interval = selected_timeframe_key
-selected_timeframe = timeframe_options[selected_timeframe_key]
+
+interval, days = interval_map[timeframe]
+start_date = datetime.today() - timedelta(days=days)
+end_date = datetime.today()
+
+
+# Timeframe Selection
+#timeframe_options = {
+#    "1d": "1 Day (Daily)", "1wk": "1 Week (Weekly)", "1mo": "1 Month (Monthly)",
+#    "1m": "1 Minute (Intraday)", "2m": "2 Minutes (Intraday)", "5m": "5 Minutes (Intraday)",
+#    "15m": "15 Minutes (Intraday)", "30m": "30 Minutes (Intraday)", "60m": "60 Minutes (Intraday)",
+#    "90m": "90 Minutes (Intraday)", "1h": "1 Hour (Intraday)"
+#}
+#selected_timeframe_key = st.sidebar.selectbox(
+ #   "Select Timeframe",
+ #   list(timeframe_options.keys()),
+  #  format_func=lambda x: timeframe_options[x],
+  #  index=list(timeframe_options.keys()).index(st.session_state.data_interval)
+#)
+#st.session_state.data_interval = selected_timeframe_key
+#selected_timeframe = timeframe_options[selected_timeframe_key]
 
 # Date Range for Historical Data
-is_intraday = "Intraday" in selected_timeframe
+#is_intraday = "Intraday" in selected_timeframe
 
-if not is_intraday:
-    st.sidebar.subheader("Historical Data Range")
-    start_date = st.sidebar.date_input("Start Date", st.session_state.start_date)
-    end_date = st.sidebar.date_input("End Date", st.session_state.end_date)
-    st.session_state.start_date = start_date
-    st.session_state.end_date = end_date
-else:
-    st.sidebar.info("For intraday data, the data range is typically limited by the provider (e.g., 7 days for Yahoo Finance).")
-    start_date = date.today() - timedelta(days=7) # Yahoo Finance limits intraday to 7 days
-    end_date = date.today()
-    st.session_state.start_date = start_date
-    st.session_state.end_date = end_date
+#if not is_intraday:
+ #   st.sidebar.subheader("Historical Data Range")
+#    start_date = st.sidebar.date_input("Start Date", st.session_state.start_date)
+ #   end_date = st.sidebar.date_input("End Date", st.session_state.end_date)
+ #   st.session_state.start_date = start_date
+ #   st.session_state.end_date = end_date
+#else:
+ #   st.sidebar.info("For intraday data, the data range is typically limited by the provider (e.g., 7 days for Yahoo Finance).")
+ #   start_date = date.today() - timedelta(days=7) # Yahoo Finance limits intraday to 7 days
+  #  end_date = date.today()
+ #   st.session_state.start_date = start_date
+ #   st.session_state.end_date = end_date
 
 
 # Indicator Selection
