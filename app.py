@@ -187,8 +187,8 @@ if analyze_button and ticker:
         latest_cpi = get_economic_data_fred("CPI", st.session_state.start_date, st.session_state.end_date)
         latest_unemployment = get_economic_data_fred("UNRATE", st.session_state.start_date, st.session_state.end_date)
 
-        # Get VIX data
-        vix_data = get_vix_data()
+        # Get VIX data, passing start_date and end_date
+        vix_data = get_vix_data(st.session_state.start_date, st.session_state.end_date)
         latest_vix = vix_data['Close'].iloc[-1] if vix_data is not None and not vix_data.empty else None
         historical_vix_avg = vix_data['Close'].mean() if vix_data is not None and not vix_data.empty else None
 
