@@ -198,9 +198,9 @@ def calculate_indicators(df, indicator_selection, is_intraday):
     
     # Reindex the DataFrame to ensure all required columns exist, filling missing with NaN
     required_cols = ['Open', 'High', 'Low', 'Close', 'Volume']
-if isinstance(df_copy.columns, pd.MultiIndex):
-    df_copy.columns = df_copy.columns.get_level_values(-1)
-df_copy = df_copy.reindex(columns=pd.Index(df_copy.columns).union(required_cols))
+    if isinstance(df_copy.columns, pd.MultiIndex):
+        df_copy.columns = df_copy.columns.get_level_values(-1)
+    df_copy = df_copy.reindex(columns=pd.Index(df_copy.columns).union(required_cols))
 
 
     # Now, ensure numeric types for the core columns
