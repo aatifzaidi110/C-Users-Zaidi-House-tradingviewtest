@@ -751,13 +751,19 @@ def display_economic_data_tab(ticker, current_price, prev_close, overall_confide
 
     col1, col2, col3 = st.columns(3)
     with col1:
-        st.metric("Latest GDP Growth (Annualized)", f"{latest_gdp:.2f}%" if latest_gdp is not None else "N/A")
+        # Access the scalar value from the Series before formatting
+        gdp_value = latest_gdp.iloc[-1] if latest_gdp is not None and not latest_gdp.empty else None
+        st.metric("Latest GDP Growth (Annualized)", f"{gdp_value:.2f}%" if gdp_value is not None else "N/A")
         st.markdown("*(Source: FRED - Gross Domestic Product)*")
     with col2:
-        st.metric("Latest CPI (Inflation)", f"{latest_cpi:.2f}" if latest_cpi is not None else "N/A")
+        # Access the scalar value from the Series before formatting
+        cpi_value = latest_cpi.iloc[-1] if latest_cpi is not None and not latest_cpi.empty else None
+        st.metric("Latest CPI (Inflation)", f"{cpi_value:.2f}" if cpi_value is not None else "N/A")
         st.markdown("*(Source: FRED - Consumer Price Index)*")
     with col3:
-        st.metric("Latest Unemployment Rate", f"{latest_unemployment:.2f}%" if latest_unemployment is not None else "N/A")
+        # Access the scalar value from the Series before formatting
+        unemployment_value = latest_unemployment.iloc[-1] if latest_unemployment is not None and not latest_unemployment.empty else None
+        st.metric("Latest Unemployment Rate", f"{unemployment_value:.2f}%" if unemployment_value is not None else "N/A")
         st.markdown("*(Source: FRED - Unemployment Rate)*")
     
     st.markdown("---")
