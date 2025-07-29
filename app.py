@@ -26,15 +26,15 @@ from utils import (
     suggest_options_strategy, generate_directional_trade_plan,
     calculate_confidence_score, convert_finviz_recom_to_score,
     get_economic_data_fred, get_vix_data, calculate_economic_score, calculate_sentiment_score,
-    run_stock_scanner
+    run_stock_scanner, get_indicator_summary_text # Ensure get_indicator_summary_text is imported here
 )
 
 from display_components import (
     display_technical_analysis_tab, display_options_analysis_tab,
     display_backtesting_tab, display_trade_log_tab,
     display_scanner_tab,
-    display_economic_data_tab, # <--- New function name
-    display_investor_sentiment_tab, # <--- New function name
+    display_economic_data_tab,
+    display_investor_sentiment_tab,
     # ... other imports
 )
 
@@ -224,27 +224,13 @@ if analyze_button and ticker:
     if not df_calculated.empty:
         last_row = df_calculated.iloc[-1]
         
-       # Generate technical signals for the latest row
-        bullish_signals, bearish_signals, _ = generate_signals_for_row(
+        # Generate technical signals for the latest row
+        # Ensure generate_signals_for_row in utils.py accepts these 3 arguments and returns 3 values
+        bullish_signals, bearish_signals, technical_score = generate_signals_for_row(
             last_row,
             st.session_state.indicator_selection,
             normalized_weights
         )
-
-        tech_score_raw = 0
-        total_possible_tech_points = 0
-        for ind_name, is_selected in st.session_state.indicator_selection.items():
-            if is_selected and ind_name not in ["Bollinger Bands", "Pivot Points"]: # Exclude non-directional for scoring
-                total_possible_tech_points += 1
-                if bullish_signals.get(ind_name, False):
-                    tech_score_raw += 1
-                elif bearish_signals.get(ind_name, False):
-                    tech_score_raw -= 1
-        
-        if total_possible_tech_points > 0:
-            technical_score = ((tech_score_raw + total_possible_tech_points) / (2 * total_possible_tech_points)) * 100
-        else:
-            technical_score = 50 # Neutral if no selected indicators were directional
 
         # News sentiment score (Finviz)
         news_sentiment_score = finviz_data.get("sentiment_compound", 0) * 100
@@ -253,9 +239,14 @@ if analyze_button and ticker:
         expert_recom_str = stock_info.get('recommendationMean', None)
         expert_score = convert_finviz_recom_to_score(str(expert_recom_str))
 
+        # Define current_price and prev_close for display_economic_data_tab and display_investor_sentiment_tab
+        current_price = df_calculated.iloc[-1]['Close'] if not df_calculated.empty else None
+        prev_close = df_calculated.iloc[-2]['Close'] if not df_calculated.empty and len(df_calculated) > 1 else None
+
+
         # Calculate overall confidence
         confidence_results = calculate_confidence_score(
-            technical_score,
+            technical_score, # Use the technical_score returned by generate_signals_for_row
             news_sentiment_score,
             expert_score,
             economic_score_val, # Use the calculated economic score
@@ -272,6 +263,9 @@ if analyze_button and ticker:
         expert_score = 50
         economic_score_val = 50
         investor_sentiment_score_val = 50
+        current_price = None
+        prev_close = None
+
 
     # Create tabs for different analysis views
     tab_titles = [
@@ -290,7 +284,7 @@ if analyze_button and ticker:
 
     with tabs[0]: # 📊 Technical Analysis
         if not df_calculated.empty:
-             display_technical_analysis_tab(
+            display_technical_analysis_tab(
                 ticker,
                 df_calculated,
                 is_intraday,
@@ -339,7 +333,7 @@ if analyze_button and ticker:
                 st.write(f"**Entry Zone:** ${trade_plan['entry_zone_start']:.2f} - ${trade_plan['entry_zone_end']:.2f}")
                 st.write(f"**Stop Loss:** ${trade_plan['stop_loss']:.2f}")
                 st.write(f"**Profit Target:** ${trade_plan['profit_target']:.2f}")
-                st.write(f"**Reward/Risk Ratio:** {trade_plan['reward_risk_ratio']:.2f}:1")
+                st.write(f"**Reward/Risk Ratio:** {trade_plan['reward_risk_ratio']:.1f}:1")
                 st.markdown(f"**Rationale:** {trade_plan['key_rationale']}")
             else:
                 st.info(trade_plan['message'])
@@ -360,7 +354,7 @@ if analyze_button and ticker:
         )
         
         st.markdown("---") # Add a separator if you like
-    
+        
         # Display Investor Sentiment Data
         display_investor_sentiment_tab(
             ticker, # Assuming ticker is available
@@ -392,26 +386,26 @@ if analyze_button and ticker:
 # This 'elif' and 'else' block needs to be at the same indentation level
 # as the 'if ticker:' block, or wherever you handle the main application flow.
 # It should NOT be inside any 'with tabs[X]:' block.
-elif run_scanner_button: # <--- UNINDENT THIS LINE
+elif run_scanner_button: # <--- UNINDENTED TO ZERO INDENTATION
     st.header("⚡ Stock Scanner Results")
     with st.spinner(f"Running scanner for {len(scanner_ticker_list)} tickers with '{selected_trading_style}' style..."):
-            # Pass all necessary parameters to the scanner function
-            scanner_results_df = run_stock_scanner(
-                scanner_ticker_list,
-                selected_trading_style,
-                min_scanner_confidence,
-                st.session_state.indicator_selection, # Pass the full selection dict
-                normalized_weights # Pass the normalized weights
-            )
+        # Pass all necessary parameters to the scanner function
+        scanner_results_df = run_stock_scanner(
+            scanner_ticker_list,
+            selected_trading_style,
+            min_scanner_confidence,
+            st.session_state.indicator_selection, # Pass the full selection dict
+            normalized_weights # Pass the normalized weights
+        )
 
-            if not scanner_results_df.empty:
-                display_scanner_tab(scanner_results_df)
-            else:
-                st.info("No qualifying stocks found based on your criteria.")
-                
-else: # <--- UNINDENT THIS LINE to match 'if ticker:' or 'elif run_scanner_button:'
+        if not scanner_results_df.empty:
+            display_scanner_tab(scanner_results_df)
+        else:
+            st.info("No qualifying stocks found based on your criteria.")
+            
+else: # <--- UNINDENTED TO ZERO INDENTATION
     st.info("Enter a stock ticker in the sidebar and click 'Analyze Ticker' to begin analysis, or configure and run the 'Stock Scanner'.")
 
+
 if __name__ == "__main__":
-    pass # Or you can simply remove the 'if __name__ == "__main__":' block entirely if it's empty
-   
+    pass # Removed the main() call as no main function is defined
