@@ -224,8 +224,12 @@ if analyze_button and ticker:
     if not df_calculated.empty:
         last_row = df_calculated.iloc[-1]
         
-        # Generate technical signals for the latest row
-        bullish_signals, bearish_signals = generate_signals_for_row(last_row)
+       # Generate technical signals for the latest row
+        bullish_signals, bearish_signals, _ = generate_signals_for_row(
+            last_row,
+            st.session_state.indicator_selection,
+            normalized_weights
+        )
 
         tech_score_raw = 0
         total_possible_tech_points = 0
@@ -286,7 +290,13 @@ if analyze_button and ticker:
 
     with tabs[0]: # 📊 Technical Analysis
         if not df_calculated.empty:
-            display_technical_analysis_tab(ticker, df_calculated, is_intraday, st.session_state.indicator_selection)
+             display_technical_analysis_tab(
+                ticker,
+                df_calculated,
+                is_intraday,
+                st.session_state.indicator_selection,
+                normalized_weights # Pass normalized_weights here
+            )
         else:
             st.info("No data to display technical analysis.")
 
