@@ -235,12 +235,16 @@ def main():
                 )
 
             with tabs[1]: # 🔮 Options Analysis
+                # Pass the trade_plan_result to display_options_analysis_tab
+                # This allows the options tab to access target_price, stop_loss, and trade_direction
                 display_options_analysis_tab(
                     ticker,
                     current_price, # Pass the scalar current_price
                     options_chain_dates, # Pass expirations
                     trade_direction,
-                    overall_confidence
+                    overall_confidence,
+                    trade_plan_result.get('target_price'), # Pass target_price
+                    trade_plan_result.get('stop_loss') # Pass stop_loss
                 )
 
             with tabs[2]: # 💡 Trade Plan
@@ -299,11 +303,13 @@ def main():
 
             with tabs[5]: # 🌍 Economic & Sentiment
                 # Display Economic Data
+                # Ensure prev_close is a scalar before passing
+                prev_close_economic = df_calculated.iloc[-2]['Close'] if len(df_calculated) >= 2 else current_price
+
                 display_economic_data_tab(
                     ticker,
                     current_price, # Pass the scalar current_price
-                    trade_plan_result.get('current_price'), # This is still a Series, but display_economic_data_tab uses it as prev_close
-                                                            # Let's adjust this to pass a proper prev_close or ensure it's handled in display_economic_data_tab
+                    prev_close_economic, # Pass scalar prev_close
                     overall_confidence,
                     trade_direction,
                     trade_plan_result['economic_context'].get('latest_gdp'),
@@ -313,10 +319,13 @@ def main():
 
                 st.markdown("---")
                 # Display Investor Sentiment Data
+                # Ensure prev_close is a scalar before passing
+                prev_close_sentiment = df_calculated.iloc[-2]['Close'] if len(df_calculated) >= 2 else current_price
+                
                 display_investor_sentiment_tab(
                     ticker,
                     current_price, # Pass the scalar current_price
-                    trade_plan_result.get('current_price'), # This is still a Series, same as above
+                    prev_close_sentiment, # Pass scalar prev_close
                     overall_confidence,
                     trade_direction,
                     trade_plan_result['sentiment_analysis'].get('latest_vix'),
