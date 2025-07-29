@@ -178,18 +178,17 @@ st.title("Advanced Stock Analysis Dashboard")
 if analyze_button and ticker:
     # Fetch data
     with st.spinner(f"Fetching data for {ticker} ({selected_timeframe})..."):
-        # Get data might return a tuple, so handle it to ensure `df` is a DataFrame
-        df_raw = get_data(ticker, st.session_state.data_interval, st.session_state.start_date, st.session_state.end_date)
+        # Get data might return a tuple or None, so handle it to ensure `df` is a DataFrame
+        df_result = get_data(ticker, st.session_state.data_interval, st.session_state.start_date, st.session_state.end_date)
         
         # Initialize df to an empty DataFrame
         df = pd.DataFrame()
-        # Check if df_raw is a tuple and extract the DataFrame if it is
-        if isinstance(df_raw, tuple) and len(df_raw) > 0:
-            # Assume the first element is the intended DataFrame
-            if isinstance(df_raw[0], pd.DataFrame):
-                df = df_raw[0]
-        elif isinstance(df_raw, pd.DataFrame):
-            df = df_raw # If it's already a DataFrame, use it directly
+        # Check if df_result is a DataFrame or a tuple containing a DataFrame
+        if isinstance(df_result, pd.DataFrame):
+            df = df_result
+        elif isinstance(df_result, tuple) and len(df_result) > 0 and isinstance(df_result[0], pd.DataFrame):
+            df = df_result[0]
+        # If df_result is None or an unexpected type, df remains an empty DataFrame
 
 
         info = yf.Ticker(ticker).info # Fetch ticker info for company profile
