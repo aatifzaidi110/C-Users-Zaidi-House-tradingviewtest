@@ -179,7 +179,7 @@ def get_vix_data(start_date, end_date):
 
 # === Indicator Calculation Functions ===
 
-def calculate_indicators(df, indicator_selection, is_intraday):
+def calculate_indicators(df, indicator_selection, is_intraday): # Add 'def calculate_indicators' here
     """
     Calculates selected technical indicators for the given DataFrame.
     Args:
@@ -201,6 +201,9 @@ def calculate_indicators(df, indicator_selection, is_intraday):
             elif df_copy[col].empty:
                 # If the column is empty, it cannot be converted, so set to NaN or handle
                 df_copy[col] = np.nan
+            else:
+                # If it's already numeric or a scalar, try converting anyway to handle edge cases
+                df_copy[col] = pd.to_numeric(df_copy[col], errors='coerce')
         else:
             # If column is missing, add it with NaNs to prevent errors in later calculations
             df_copy[col] = np.nan
@@ -236,74 +239,72 @@ def calculate_indicators(df, indicator_selection, is_intraday):
         df_copy['Stoch_K'] = ta.momentum.stoch(df_copy['High'], df_copy['Low'], df_copy['Close'])
         df_copy['Stoch_D'] = ta.momentum.stoch_signal(df_copy['High'], df_copy['Low'], df_copy['Close'])
         
-   
-# Ichimoku Cloud
-if indicator_selection.get("Ichimoku Cloud"):
-    # Ichimoku requires longer data history, handle NaNs
-    ichimoku_df = ta.trend.ichimoku_cloud(df_copy['High'], df_copy['Low'], df_copy['Close'],
-                                          window1=9, window2=26, window3=52, visual=True)
-    df_copy['ichimoku_base_line'] = ichimoku_df['ichimoku_base_line']
-    df_copy['ichimoku_conversion_line'] = ichimoku_df['ichimoku_conversion_line']
-    df_copy['ichimoku_a'] = ichimoku_df['ichimoku_a']
-    df_copy['ichimoku_b'] = ichimoku_df['ichimoku_b']
-    df_copy['ichimoku_leading_span_a'] = ichimoku_df['ichimoku_leading_span_a']
-    df_copy['ichimoku_leading_span_b'] = ichimoku_df['ichimoku_leading_span_b']
+    # Ichimoku Cloud
+    if indicator_selection.get("Ichimoku Cloud"):
+        # Ichimoku requires longer data history, handle NaNs
+        ichimoku_df = ta.trend.ichimoku_cloud(df_copy['High'], df_copy['Low'], df_copy['Close'],
+                                              window1=9, window2=26, window3=52, visual=True)
+        df_copy['ichimoku_base_line'] = ichimoku_df['ichimoku_base_line']
+        df_copy['ichimoku_conversion_line'] = ichimoku_df['ichimoku_conversion_line']
+        df_copy['ichimoku_a'] = ichimoku_df['ichimoku_a']
+        df_copy['ichimoku_b'] = ichimoku_df['ichimoku_b']
+        df_copy['ichimoku_leading_span_a'] = ichimoku_df['ichimoku_leading_span_a']
+        df_copy['ichimoku_leading_span_b'] = ichimoku_df['ichimoku_leading_span_b']
 
 
-# Parabolic SAR
-if indicator_selection.get("Parabolic SAR"):
-    df_copy['psar'] = ta.trend.psar(df_copy['High'], df_copy['Low'], df_copy['Close'])
+    # Parabolic SAR
+    if indicator_selection.get("Parabolic SAR"):
+        df_copy['psar'] = ta.trend.psar(df_copy['High'], df_copy['Low'], df_copy['Close'])
 
-# ADX
-if indicator_selection.get("ADX"):
-    df_copy['adx'] = ta.trend.adx(df_copy['High'], df_copy['Low'], df_copy['Close'])
-    df_copy['plus_di'] = ta.trend.adx_pos(df_copy['High'], df_copy['Low'], df_copy['Close'])
-    df_copy['minus_di'] = ta.trend.adx_neg(df_copy['High'], df_copy['Low'], df_copy['Close'])
+    # ADX
+    if indicator_selection.get("ADX"):
+        df_copy['adx'] = ta.trend.adx(df_copy['High'], df_copy['Low'], df_copy['Close'])
+        df_copy['plus_di'] = ta.trend.adx_pos(df_copy['High'], df_copy['Low'], df_copy['Close'])
+        df_copy['minus_di'] = ta.trend.adx_neg(df_copy['High'], df_copy['Low'], df_copy['Close'])
 
-# Volume Spike (simple check)
-if indicator_selection.get("Volume Spike"):
-    # Define a rolling window for average volume (e.g., 20 periods)
-    window = 20
-    if len(df_copy) >= window:
-        df_copy['Volume_MA'] = df_copy['Volume'].rolling(window=window).mean()
-        # A spike is typically defined as volume significantly higher than average (e.g., 1.5x)
-        df_copy['Volume_Spike'] = df_copy['Volume'] > (df_copy['Volume_MA'] * 1.5)
-    else:
-        df_copy['Volume_Spike'] = False # Not enough data for calculation
+    # Volume Spike (simple check)
+    if indicator_selection.get("Volume Spike"):
+        # Define a rolling window for average volume (e.g., 20 periods)
+        window = 20
+        if len(df_copy) >= window:
+            df_copy['Volume_MA'] = df_copy['Volume'].rolling(window=window).mean()
+            # A spike is typically defined as volume significantly higher than average (e.g., 1.5x)
+            df_copy['Volume_Spike'] = df_copy['Volume'] > (df_copy['Volume_MA'] * 1.5)
+        else:
+            df_copy['Volume_Spike'] = False # Not enough data for calculation
 
-# CCI (Commodity Channel Index)
-if indicator_selection.get("CCI"):
-    df_copy['CCI'] = ta.trend.cci(df_copy['High'], df_copy['Low'], df_copy['Close'])
+    # CCI (Commodity Channel Index)
+    if indicator_selection.get("CCI"):
+        df_copy['CCI'] = ta.trend.cci(df_copy['High'], df_copy['Low'], df_copy['Close'])
 
-# ROC (Rate of Change)
-if indicator_selection.get("ROC"):
-    df_copy['ROC'] = ta.momentum.roc(df_copy['Close'])
+    # ROC (Rate of Change)
+    if indicator_selection.get("ROC"):
+        df_copy['ROC'] = ta.momentum.roc(df_copy['Close'])
 
-# OBV (On-Balance Volume)
-if indicator_selection.get("OBV"):
-    df_copy['obv'] = ta.volume.on_balance_volume(df_copy['Close'], df_copy['Volume'])
-    df_copy['obv_ema'] = ta.trend.ema_indicator(df_copy['obv'], window=10) # Corrected to OBV EMA
+    # OBV (On-Balance Volume)
+    if indicator_selection.get("OBV"):
+        df_copy['obv'] = ta.volume.on_balance_volume(df_copy['Close'], df_copy['Volume'])
+        df_copy['obv_ema'] = ta.trend.ema_indicator(df_copy['obv'], window=10) # Corrected to OBV EMA
 
 
-# VWAP (Volume Weighted Average Price) - Only for intraday
-if indicator_selection.get("VWAP") and is_intraday:
-    # VWAP typically needs to be calculated per day for intraday data
-    # This implementation assumes df_copy is already intraday data for a single day or handles daily resets.
-    # For multi-day intraday data, a more complex group-by-day VWAP calculation would be needed.
-    # For simplicity here, we'll calculate a cumulative VWAP.
-    # Ensure 'Volume' column exists and is numeric
-    if 'Volume' in df_copy.columns and pd.api.types.is_numeric_dtype(df_copy['Volume']):
-        df_copy['VWAP'] = (df_copy['Close'] * df_copy['Volume']).cumsum() / df_copy['Volume'].cumsum()
-    else:
-        df_copy['VWAP'] = np.nan # Set to NaN if Volume is missing or not numeric
-elif "VWAP" in df_copy.columns:
-    df_copy = df_copy.drop(columns=['VWAP']) # Drop if not intraday and VWAP was somehow calculated
+    # VWAP (Volume Weighted Average Price) - Only for intraday
+    if indicator_selection.get("VWAP") and is_intraday:
+        # VWAP typically needs to be calculated per day for intraday data
+        # This implementation assumes df_copy is already intraday data for a single day or handles daily resets.
+        # For multi-day intraday data, a more complex group-by-day VWAP calculation would be needed.
+        # For simplicity here, we'll calculate a cumulative VWAP.
+        # Ensure 'Volume' column exists and is numeric
+        if 'Volume' in df_copy.columns and pd.api.types.is_numeric_dtype(df_copy['Volume']):
+            df_copy['VWAP'] = (df_copy['Close'] * df_copy['Volume']).cumsum() / df_copy['Volume'].cumsum()
+        else:
+            df_copy['VWAP'] = np.nan # Set to NaN if Volume is missing or not numeric
+    elif "VWAP" in df_copy.columns:
+        df_copy = df_copy.drop(columns=['VWAP']) # Drop if not intraday and VWAP was somehow calculated
 
-# Drop rows with NaN values that result from indicator calculations
-df_copy = df_copy.dropna()
+    # Drop rows with NaN values that result from indicator calculations
+    df_copy = df_copy.dropna()
 
-return df_copy
-
+    return df_copy
 
 def calculate_pivot_points(df):
     """
