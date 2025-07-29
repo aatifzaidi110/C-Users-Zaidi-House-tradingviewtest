@@ -13,8 +13,7 @@ from utils import (
     suggest_options_strategy, get_options_chain, get_data, get_finviz_data,
     calculate_pivot_points, get_moneyness, analyze_options_chain,
     generate_directional_trade_plan, get_indicator_summary_text, # Ensure get_indicator_summary_text is imported
-    get_economic_data_fred, get_vix_data, calculate_economic_score, calculate_sentiment_score,
-    calculate_confidence_score # Needed for backtesting's simple_backtest_trade_plan_func
+    get_economic_data_fred, get_vix_data, calculate_economic_score, calculate_sentiment_score
 )
 
 # Mapping for Finviz recommendation numbers to qualitative descriptions
@@ -718,7 +717,7 @@ def display_economic_data_tab(ticker, current_price, prev_close, overall_confide
 
 # --- NEW: Display Investor Sentiment Tab ---
 def display_investor_sentiment_tab(ticker, current_price, prev_close, overall_confidence, trade_direction,
-                                   latest_vix): # Removed historical_vix_avg
+                                   latest_vix, historical_vix_avg):
     """Displays key investor sentiment indicators."""
     _display_common_header(ticker, current_price, prev_close, overall_confidence, trade_direction)
     st.subheader("❤️ Investor Sentiment Indicators")
@@ -729,9 +728,10 @@ def display_investor_sentiment_tab(ticker, current_price, prev_close, overall_co
         st.metric("Latest VIX", f"{latest_vix:.2f}" if latest_vix is not None else "N/A")
         st.markdown("*(Source: CBOE Volatility Index, via Yahoo Finance)*")
     with col2:
-        # Removed historical_vix_avg as it's not passed from app.py/utils.py
-        st.info("Historical VIX Average (Past Year) - Not available in current data.")
-
+        if historical_vix_avg is not None:
+            st.metric("Historical VIX Average (Past Year)", f"{historical_vix_avg:.2f}")
+        else:
+            st.metric("Historical VIX Average (Past Year)", "N/A")
 
     st.markdown("---")
     st.subheader("VIX Interpretation")
@@ -777,42 +777,64 @@ def display_scanner_tab(scanner_results_df): # Renamed from display_scanner_resu
         st.info("No opportunities found matching your criteria.")
         return
 
-    # Use st.expander for each row to show details
+    # Create a list of dictionaries for display, with expanders for details
+    display_data = []
     for index, row in scanner_results_df.iterrows():
         # Ensure all expected keys exist, provide defaults if not
-        ticker = row.get('Ticker', 'N/A')
-        style = row.get('Trading Style', 'N/A') # This column name is from utils.py's scan_for_trades
-        confidence = row.get('Overall Confidence', 'N/A')
-        direction = row.get('Direction', 'N/A') # This column name is from utils.py's scan_for_trades
+        entry_criteria_details_str = row.get('Entry Criteria Details', 'N/A')
+        exit_criteria_details_str = row.get('Exit Criteria Details', 'N/A')
 
-        with st.expander(f"**{ticker}** | {style} | Confidence: {confidence:.2f}% | Direction: {direction}"):
+        display_data.append({
+            "Ticker": row.get('Ticker', 'N/A'),
+            "Style": row.get('Trading Style', 'N/A'),
+            "Confidence": row.get('Overall Confidence', 'N/A'),
+            "Direction": row.get('Direction', 'N/A'), # Corrected column name from 'Trade Direction' to 'Direction'
+            "Price": f"${row.get('Current Price', 'N/A')}" if pd.notna(row.get('Current Price')) else 'N/A', # Removed .2f for string
+            "ATR": f"{row.get('ATR', 'N/A')}" if pd.notna(row.get('ATR')) else 'N/A', # Removed .2f for string
+            "Target": f"${row.get('Target Price', 'N/A')}" if pd.notna(row.get('Target Price')) else 'N/A', # Removed .2f for string
+            "Stop Loss": f"${row.get('Stop Loss', 'N/A')}" if pd.notna(row.get('Stop Loss')) else 'N/A', # Removed .2f for string
+            "Entry Zone": f"{row.get('Entry Zone Start', 'N/A')} - {row.get('Entry Zone End', 'N/A')}", # Combine start/end
+            "R/R": f"{row.get('Reward/Risk', 'N/A')}",
+            "Pivot (P)": f"${row.get('Pivot (P)', 'N/A')}" if pd.notna(row.get('Pivot (P)')) else 'N/A', # Removed .2f for string
+            "R1": f"${row.get('Resistance 1 (R1)', 'N/A')}" if pd.notna(row.get('Resistance 1 (R1)')) else 'N/A', # Removed .2f for string
+            "S1": f"${row.get('Support 1 (S1)', 'N/A')}" if pd.notna(row.get('Support 1 (S1)')) else 'N/A', # Removed .2f for string
+            "R2": f"${row.get('Resistance 2 (R2)', 'N/A')}" if pd.notna(row.get('Resistance 2 (R2)')) else 'N/A', # Removed .2f for string
+            "S2": f"${row.get('Support 2 (S2)', 'N/A')}" if pd.notna(row.get('Support 2 (S2)')) else 'N/A', # Removed .2f for string
+            "Entry Details": entry_criteria_details_str, # This will be expanded
+            "Exit Details": exit_criteria_details_str,   # This will be expanded
+            "Rationale": row.get('Rationale', 'N/A')
+        })
+
+    # Use st.expander for each row to show details
+    for item in display_data:
+        with st.expander(f"**{item['Ticker']}** | {item['Style']} | Confidence: {item['Confidence']:.2f}% | Direction: {item['Direction']}"):
             col1, col2, col3, col4 = st.columns(4)
-            col1.metric("Current Price", f"${row.get('Current Price', 'N/A'):.2f}")
-            col2.metric("Target Price", f"${row.get('Target Price', 'N/A'):.2f}")
-            col3.metric("Stop Loss", f"${row.get('Stop Loss', 'N/A'):.2f}")
-            col4.metric("Reward/Risk", f"{row.get('Reward/Risk', 'N/A')}")
+            col1.metric("Current Price", item['Price'])
+            col2.metric("Target Price", item['Target'])
+            col3.metric("Stop Loss", item['Stop Loss'])
+            col4.metric("Reward/Risk", item['R/R'])
 
             st.markdown("---")
-            st.markdown(f"**Entry Zone:** {row.get('Entry Zone Start', 'N/A')} - {row.get('Entry Zone End', 'N/A')}")
-            # ATR is not directly in the scanner_results_df from utils.py's scan_for_trades
-            # If needed, it should be added to the scanned_results dict in utils.py
-            # For now, commenting it out to avoid errors.
-            # st.markdown(f"**ATR:** {row.get('ATR', 'N/A')}")
+            st.markdown(f"**Entry Zone:** {item['Entry Zone']}")
+            st.markdown(f"**ATR:** {item['ATR']}")
 
             st.markdown("---")
             st.markdown("**Pivot Points:**")
-            st.write(f"P: {row.get('Pivot (P)', 'N/A')}, R1: {row.get('Resistance 1 (R1)', 'N/A')}, S1: {row.get('Support 1 (S1)', 'N/A')}, R2: {row.get('Resistance 2 (R2)', 'N/A')}, S2: {row.get('Support 2 (S2)', 'N/A')}")
+            st.write(f"P: {item['Pivot (P)']}, R1: {item['R1']}, S1: {item['S1']}, R2: {item['R2']}, S2: {item['S2']}")
 
             st.markdown("---")
             st.markdown("**Rationale:**")
-            st.write(row.get('Rationale', 'N/A'))
+            st.write(item['Rationale'])
 
             st.markdown("---")
             st.markdown("**Detailed Entry Criteria:**")
-            st.markdown(row.get('Entry Criteria Details', 'N/A'))
+            st.markdown(item['Entry Details'])
 
             st.markdown("---")
             st.markdown("**Detailed Exit Criteria:**")
-            st.markdown(row.get('Exit Criteria Details', 'N/A'))
+            st.markdown(item['Exit Details'])
             
             st.markdown("---") # Separator for next item
+
+    st.markdown("---")
+    st.info("Click on each ticker's header to expand/collapse detailed trade plan information.")
