@@ -1,5 +1,5 @@
 # utils.py - Final Version (with distutils workaround for Python 3.10+)
-print("--- utils.py VERSION CHECK: Loading Final Version with all functions and scanner (v4.1) ---")
+print("--- utils.py VERSION CHECK: Loading Final Version with all functions and scanner (v4.1) ---\n") # Added newline for better log readability
 
 # IMPORTANT: Import setuptools first to provide distutils compatibility for older libraries like pandas_datareader
 import setuptools
@@ -194,15 +194,16 @@ def calculate_indicators(df, indicator_selection, is_intraday):
     # Ensure columns are numeric, coercing errors
     for col in ['Open', 'High', 'Low', 'Close', 'Volume']:
         if col in df_copy.columns:
-            # Check if the column is already numeric or if it can be converted
-            # If df_copy[col] is a DataFrame with one column, convert it to a Series
-            if isinstance(df_copy[col], pd.DataFrame) and df_copy[col].shape[1] == 1:
+            # Always convert to a Series first if it's not already, then to numeric
+            if isinstance(df_copy[col], pd.DataFrame):
+                # If it's a DataFrame, assume it's a single column and convert to Series
                 df_copy[col] = pd.to_numeric(df_copy[col].iloc[:, 0], errors='coerce')
-            elif isinstance(df_copy[col], pd.Series):
-                df_copy[col] = pd.to_numeric(df_copy[col], errors='coerce')
-            else:
-                # If it's neither a DataFrame nor a Series, try converting to Series then numeric
+            elif not isinstance(df_copy[col], pd.Series):
+                # If it's not a Series (e.g., a list, numpy array, or scalar), convert to Series first
                 df_copy[col] = pd.to_numeric(pd.Series(df_copy[col]), errors='coerce')
+            else:
+                # If it's already a Series, just convert to numeric
+                df_copy[col] = pd.to_numeric(df_copy[col], errors='coerce')
         else:
             # If column is missing, add it with NaNs to prevent errors in later calculations
             df_copy[col] = np.nan
@@ -341,7 +342,7 @@ def calculate_pivot_points(df):
     # Select only the pivot point columns to return
     pivot_cols = ['Pivot', 'R1', 'S1', 'R2', 'S2']
     # Ensure all pivot_cols exist before selecting
-    existing_pivot_cols = [col for col in pivot_cols if col in df_copy.columns] # Corrected from pivot_copy.columns
+    existing_pivot_cols = [col for col in pivot_cols if col in df_copy.columns]
     
     return df_copy[existing_pivot_cols]
 
@@ -1112,16 +1113,6 @@ def backtest_strategy(df, trade_plan_func, initial_capital=10000, commission=0.0
         # and has access to indicator_selection and weights.
         # This is a placeholder and needs to be adapted to how trade_plan_func is structured.
         
-        # Mock trade_plan_result for backtesting if the full generate_directional_trade_plan
-        # cannot be called with just a slice.
-        # A more robust backtesting setup would involve passing the necessary parameters
-        # to trade_plan_func or refactoring generate_directional_trade_plan to work with a slice.
-        
-        # For the purpose of making this backtest_strategy runnable,
-        # we'll use a placeholder for trade_plan_result.
-        # You MUST replace this with a proper call to generate_directional_trade_plan
-        # with the correct parameters derived from your application's state.
-        
         # Mock trade plan for demonstration purposes
         trade_plan_result = {
             "trade_direction": "Neutral",
@@ -1191,8 +1182,7 @@ def backtest_strategy(df, trade_plan_func, initial_capital=10000, commission=0.0
                         "capital": capital,
                         "profit_loss": trade_profit_loss
                     })
-                    # st.write(f"SELL: {shares_held} shares at {current_price:.2f} on {current_date.date()} P/L: {trade_profit_loss:.2f}")
-                    shares_held = 0
+                    # st.write(f"SELL: {shares_held} shares at {current_price:.2f} on {current_date.date()}")
 
             elif shares_held < 0: # Short position
                 # Check for target or stop loss
