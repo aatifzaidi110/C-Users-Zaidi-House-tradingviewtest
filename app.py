@@ -98,7 +98,7 @@ if st.sidebar.button("Clear Cache"):
     st.rerun()
 
 # Trading selection 
-timeframe = st.selectbox("Trading Style", [
+trading_style = st.selectbox("Trading Style", [
     "Scalp Trading (1m)",
     "Day Trading (5m)",
     "Swing Trading (1h)",
