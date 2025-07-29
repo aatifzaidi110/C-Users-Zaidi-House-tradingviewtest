@@ -190,14 +190,22 @@ if analyze_button and ticker:
         # Get VIX data, passing start_date and end_date
         vix_data_raw = get_vix_data(st.session_state.start_date, st.session_state.end_date)
         
+        # Initialize vix_data to None
+        vix_data = None
         # Check if vix_data_raw is a tuple and extract the DataFrame if it is
-        if isinstance(vix_data_raw, tuple):
-            vix_data = vix_data_raw[0] # Assuming the DataFrame is the first element
-        else:
+        if isinstance(vix_data_raw, tuple) and len(vix_data_raw) > 0:
+            # Assume the first element is the intended DataFrame
+            if isinstance(vix_data_raw[0], pd.DataFrame):
+                vix_data = vix_data_raw[0]
+        elif isinstance(vix_data_raw, pd.DataFrame):
             vix_data = vix_data_raw # If it's already a DataFrame, use it directly
 
-        latest_vix = vix_data['Close'].iloc[-1] if vix_data is not None and not vix_data.empty else None
-        historical_vix_avg = vix_data['Close'].mean() if vix_data is not None and not vix_data.empty else None
+        latest_vix = None
+        historical_vix_avg = None
+
+        if vix_data is not None and not vix_data.empty and 'Close' in vix_data.columns:
+            latest_vix = vix_data['Close'].iloc[-1]
+            historical_vix_avg = vix_data['Close'].mean()
 
 
     if not df.empty:
