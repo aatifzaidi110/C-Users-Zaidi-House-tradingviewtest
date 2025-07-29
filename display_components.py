@@ -13,7 +13,8 @@ from utils import (
     suggest_options_strategy, get_options_chain, get_data, get_finviz_data,
     calculate_pivot_points, get_moneyness, analyze_options_chain,
     generate_directional_trade_plan, get_indicator_summary_text, # Ensure get_indicator_summary_text is imported
-    get_economic_data_fred, get_vix_data, calculate_economic_score, calculate_sentiment_score
+    get_economic_data_fred, get_vix_data, calculate_economic_score, calculate_sentiment_score,
+    calculate_confidence_score # Added this import as it's used in display_backtesting_tab
 )
 
 # Mapping for Finviz recommendation numbers to qualitative descriptions
@@ -766,6 +767,159 @@ def display_investor_sentiment_tab(ticker, current_price, prev_close, overall_co
 
     st.markdown("---")
     st.info("Note: Sentiment indicators are often contrarian. Extreme fear can be a buying opportunity, and extreme complacency a selling opportunity.")
+
+
+def display_backtesting_tab(df_hist, indicator_selection, normalized_weights): # Renamed from backtest_data and indicator_selection_current_run
+    st.markdown("### 📈 Backtesting Results")
+
+    # Backtesting parameters (can be made configurable in sidebar if desired)
+    atr_multiplier = st.slider("ATR Multiplier for Stop Loss", 0.5, 3.0, 1.5, 0.1)
+    reward_risk_ratio = st.slider("Reward/Risk Ratio for Take Profit", 1.0, 5.0, 2.0, 0.1)
+    signal_threshold_percentage = st.slider("Signal Threshold Percentage", 0.1, 1.0, 0.7, 0.05)
+    trade_direction_bt = st.selectbox("Backtest Trade Direction", ["long", "short"])
+    exit_strategy_bt = st.selectbox("Backtest Exit Strategy", ["fixed_rr", "trailing_psar"])
+
+    run_backtest_button = st.button("Run Backtest")
+
+    if run_backtest_button:
+        with st.spinner("Running backtest... This may take a moment for longer periods."):
+            # Define a simple trade plan function for backtesting
+            # This function needs to mimic the output of generate_directional_trade_plan
+            # but operate on a single row (or small slice) of historical data.
+            def simple_backtest_trade_plan_func(current_data_slice, indicators_selected, weights_normalized):
+                # Ensure current_data_slice is not empty and has enough data for indicators
+                if current_data_slice.empty or len(current_data_slice) < 200: # Minimum data for some indicators
+                    return {
+                        "trade_direction": "Neutral",
+                        "entry_zone_start": None, "entry_zone_end": None,
+                        "target_price": None, "stop_loss": None,
+                        "current_price": current_data_slice['Close'].iloc[-1] if not current_data_slice.empty else None
+                    }
+
+                latest_row_bt = current_data_slice.iloc[-1]
+                current_price_bt = latest_row_bt['Close']
+
+                # Generate signals for this historical row
+                bullish_signals_bt, bearish_signals_bt, signal_strength_bt = generate_signals_for_row(
+                    latest_row_bt, indicators_selected, weights_normalized
+                )
+                
+                overall_confidence_bt, direction_bt, _ = calculate_confidence_score(
+                    bullish_signals_bt, bearish_signals_bt, signal_strength_bt, weights_normalized
+                )
+
+                # Simple ATR calculation for this slice
+                if 'ATR' not in current_data_slice.columns or pd.isna(current_data_slice['ATR'].iloc[-1]):
+                     # Recalculate ATR for the slice if not present
+                    current_data_slice['ATR'] = ta.volatility.average_true_range(
+                        current_data_slice['High'], current_data_slice['Low'], current_data_slice['Close'], window=14
+                    )
+                atr_bt = current_data_slice['ATR'].iloc[-1] if 'ATR' in current_data_slice.columns and not pd.isna(current_data_slice['ATR'].iloc[-1]) else (current_price_bt * 0.02)
+
+                # Determine entry/exit based on backtest parameters
+                target_bt = None
+                stop_loss_bt = None
+                entry_start_bt = None
+                entry_end_bt = None
+
+                if direction_bt == "Bullish" and overall_confidence_bt >= (signal_threshold_percentage * 100):
+                    entry_start_bt = current_price_bt * (1 - 0.005) # Small buffer for entry
+                    entry_end_bt = current_price_bt * (1 + 0.005)
+                    target_bt = current_price_bt + (reward_risk_ratio * atr_multiplier * atr_bt)
+                    stop_loss_bt = current_price_bt - (atr_multiplier * atr_bt)
+                elif direction_bt == "Bearish" and overall_confidence_bt >= (signal_threshold_percentage * 100):
+                    entry_start_bt = current_price_bt * (1 + 0.005)
+                    entry_end_bt = current_price_bt * (1 - 0.005)
+                    target_bt = current_price_bt - (reward_risk_ratio * atr_multiplier * atr_bt)
+                    stop_loss_bt = current_price_bt + (atr_multiplier * atr_bt)
+                
+                return {
+                    "trade_direction": direction_bt,
+                    "overall_confidence": overall_confidence_bt,
+                    "entry_zone_start": entry_start_bt,
+                    "entry_zone_end": entry_end_bt,
+                    "target_price": target_bt,
+                    "stop_loss": stop_loss_bt,
+                    "current_price": current_price_bt
+                }
+
+            # Pass all required arguments to backtest_strategy
+            # The backtest_strategy function needs to be updated to accept `indicator_selection` and `normalized_weights`
+            # and pass them to the `trade_plan_func` (which is `simple_backtest_trade_plan_func` here).
+            # For now, let's adapt the call to match the expected signature in utils.py.
+            trades_log, performance_metrics = backtest_strategy(
+                df_hist.copy(), # Pass a copy to avoid modifying original df_hist
+                lambda df_slice: simple_backtest_trade_plan_func(df_slice, indicator_selection, normalized_weights),
+                # The lambda function ensures that simple_backtest_trade_plan_func receives the correct arguments
+                atr_multiplier=atr_multiplier, # Pass these as keyword arguments if backtest_strategy expects them
+                reward_risk_ratio=reward_risk_ratio,
+                signal_threshold_percentage=signal_threshold_percentage,
+                trade_direction_bt=trade_direction_bt,
+                exit_strategy_bt=exit_strategy_bt
+            )
+
+            if performance_metrics.get("error"):
+                st.warning(f"Backtest could not be completed: {performance_metrics['error']}")
+                return
+
+            st.subheader("Overall Strategy Performance")
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Total Trades", performance_metrics.get('Total Trades', 0))
+                st.metric("Winning Trades", performance_metrics.get('Winning Trades', 0))
+            with col2:
+                st.metric("Losing Trades", performance_metrics.get('Losing Trades', 0))
+                st.metric("Win Rate", performance_metrics.get('Win Rate', "0.00%"))
+            with col3:
+                st.metric("Gross Profit", f"${performance_metrics.get('Gross Profit', 0.0):.2f}")
+                st.metric("Gross Loss", f"${performance_metrics.get('Gross Loss', 0.0):.2f}")
+
+            st.metric("Net PnL", f"${performance_metrics.get('Net PnL', 0.0):.2f}")
+            st.metric("Profit Factor", performance_metrics.get('Profit Factor', "0.00"))
+
+            # CAGR and Max Drawdown are not directly returned by backtest_strategy in utils.py
+            # If you want these, you'll need to calculate them within backtest_strategy
+            # or add them to the performance_metrics dictionary in utils.py.
+            # For now, commenting them out to avoid errors.
+            # st.metric("CAGR (Compound Annual Growth Rate)", f"{performance_metrics.get('CAGR', 0.0):.2f}%")
+            # st.metric("Max Drawdown", f"{performance_metrics.get('Max Drawdown', 0.0):.2f}%")
+
+            st.markdown("---")
+            st.subheader("Strategy Parameters Used")
+            st.write("The backtest was run with the following indicator selections:")
+            selected_indicators_list = [
+                key for key, value in indicator_selection.items() if value
+            ]
+            if selected_indicators_list:
+                st.write(", ".join(selected_indicators_list))
+            else:
+                st.write("No specific indicators were selected for this backtest (or default settings were used).")
+            st.write(f"ATR Multiplier: {atr_multiplier}")
+            st.write(f"Reward/Risk Ratio: {reward_risk_ratio}")
+            st.write(f"Signal Threshold: {signal_threshold_percentage:.0%}")
+            st.write(f"Trade Direction: {trade_direction_bt.capitalize()}")
+            st.write(f"Exit Strategy: {exit_strategy_bt.replace('_', ' ').title()}")
+
+
+            # Display detailed trade log
+            if trades_log:
+                trade_log_df = pd.DataFrame(trades_log)
+                st.markdown("---")
+                st.subheader("Detailed Trade Log")
+                # Format PnL column to 2 decimal places and ensure it's numeric
+                if 'profit_loss' in trade_log_df.columns: # Changed from 'PnL' to 'profit_loss'
+                    trade_log_df['profit_loss'] = pd.to_numeric(trade_log_df['profit_loss'], errors='coerce').fillna(0.0).map('${:,.2f}'.format)
+
+                # Format 'Entry Price' and 'Exit Price' if they exist
+                for col in ['price']: # Assuming 'price' column holds both entry/exit prices
+                    if col in trade_log_df.columns:
+                        trade_log_df[col] = pd.to_numeric(trade_log_df[col], errors='coerce').map('${:,.2f}'.format)
+
+                st.dataframe(trade_log_df)
+            else:
+                st.info("No trades executed during backtesting period with the selected strategy and data.")
+    else:
+        st.info("Configure backtest parameters and click 'Run Backtest' to see results.")
 
 
 def display_scanner_tab(scanner_results_df): # Renamed from display_scanner_results_tab for consistency with app.py
