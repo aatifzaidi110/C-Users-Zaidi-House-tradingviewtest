@@ -4713,4 +4713,4 @@ def generate_signals_for_row(row, indicator_selection, normalized_weights):
             signal_strength["Bollinger Bands"] = (close - row['BB_upper']) / row['BB_upper']
 
     # Stochastic Oscillator
-    if indicator_selection.get("Stochastic") and 'Stoch_K' in row and 'Stoch_D'
+    if indicator_selection.get("Stochastic") and 'Stoch_K' in row and 'Stoch_D' in row:
