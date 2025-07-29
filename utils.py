@@ -141,7 +141,7 @@ def calculate_indicators(df, is_intraday=False):
         'ichimoku_a', 'ichimoku_b', 'ichimoku_conversion_line', 'ichimoku_base_line',
         'psar', "BB_upper", "BB_lower", "BB_mavg", "RSI", "MACD", "MACD_Signal",
         "MACD_Hist", "Stoch_K", "Stoch_D", "adx", "plus_di", "minus_di", "CCI", "ROC",
-        "obv", "obv_ema" # Ensure OBV and OBV_EMA are included here
+        "obv", "obv_ema", "ATR" # Ensure ATR is included here
     ]
 
     if not all(col in df_processed.columns for col in required_cols):
@@ -163,8 +163,6 @@ def calculate_indicators(df, is_intraday=False):
             if col not in df_cleaned.columns:
                 df_cleaned.loc[:, col] = np.nan
         return df_cleaned # Return the empty DataFrame with expected columns
-
-    # --- End of initial checks ---
 
 
     # --- Initialize all indicator columns to NaN to ensure they always exist before calculation attempts ---
@@ -271,8 +269,15 @@ def calculate_indicators(df, is_intraday=False):
     except Exception as e:
         print(f"Error calculating OBV indicators: {e}")
 
+    # ATR (Average True Range)
+    try:
+        if not df_cleaned["High"].empty and not df_cleaned["Low"].empty and not df_cleaned["Close"].empty:
+            df_cleaned.loc[:, 'ATR'] = ta.volatility.AverageTrueRange(df_cleaned['High'], df_cleaned['Low'], df_cleaned['Close'], fillna=True).average_true_range()
+    except Exception as e:
+        print(f"Error calculating ATR: {e}")
 
     return df_cleaned
+
 # === Signal Generation ===
 def generate_signals_for_row(row, indicator_selection, normalized_weights):
     """Generates bullish and bearish signals and a technical confidence score
@@ -282,12 +287,11 @@ def generate_signals_for_row(row, indicator_selection, normalized_weights):
     bearish_signals = {}
     
     # Initialize technical confidence score
-    # This will be calculated based on the signals generated
-    technical_confidence_score = 50 # Default to neutral
+    technical_confidence_score = 50 # Default to neutral if no signals or issues
 
-    close_price = row.get("Close") # Use 'row' directly, not 'row_data'
+    close_price = row.get("Close") # Use 'row', which is the DataFrame row passed to the function
 
-    # === Signal Generation Logic (ensure these are placed AFTER initializations) ===
+    # --- Signal Generation Logic (ensure these are placed AFTER initializations) ---
 
     # EMA Trend
     if indicator_selection.get("EMA Trend", False): # Check if indicator is selected
@@ -298,94 +302,158 @@ def generate_signals_for_row(row, indicator_selection, normalized_weights):
            not pd.isna(ema21) and not pd.isna(ema50) and not pd.isna(ema200):
             bullish_signals["EMA Trend"] = ema21 > ema50 > ema200
             bearish_signals["EMA Trend"] = ema21 < ema50 < ema200
-            # Add logic here to contribute to technical_confidence_score based on EMA signal
     
     # Ichimoku Cloud
     if indicator_selection.get("Ichimoku Cloud", False):
-        # ... your Ichimoku Cloud logic using 'row' ...
-        pass # Placeholder, replace with actual logic
-    
+        ichimoku_a = row.get("ichimoku_a")
+        ichimoku_b = row.get("ichimoku_b")
+        if close_price is not None and ichimoku_a is not None and ichimoku_b is not None and \
+           not pd.isna(close_price) and not pd.isna(ichimoku_a) and not pd.isna(ichimoku_b):
+            bullish_signals["Ichimoku Cloud"] = close_price > ichimoku_a and close_price > ichimoku_b
+            bearish_signals["Ichimoku Cloud"] = close_price < ichimoku_a and close_price < ichimoku_b
+
     # Parabolic SAR
     if indicator_selection.get("Parabolic SAR", False):
-        # ... your Parabolic SAR logic using 'row' ...
-        pass # Placeholder, replace with actual logic
-        
+        psar = row.get("psar")
+        if close_price is not None and psar is not None and \
+           not pd.isna(close_price) and not pd.isna(psar):
+            bullish_signals["Parabolic SAR"] = close_price > psar
+            bearish_signals["Parabolic SAR"] = close_price < psar
+
     # ADX
     if indicator_selection.get("ADX", False):
-        # ... your ADX logic using 'row' ...
-        pass # Placeholder, replace with actual logic
+        adx = row.get("adx")
+        plus_di = row.get("plus_di")
+        minus_di = row.get("minus_di")
+        if adx is not None and plus_di is not None and minus_di is not None and \
+           not pd.isna(adx) and not pd.isna(plus_di) and not pd.isna(minus_di):
+            # ADX > 25 indicates a strong trend
+            if adx > 25:
+                bullish_signals["ADX"] = plus_di > minus_di # Bullish if +DI > -DI in strong trend
+                bearish_signals["ADX"] = minus_di > plus_di # Bearish if -DI > +DI in strong trend
+            else:
+                bullish_signals["ADX"] = False # No strong trend, so no strong directional signal
+                bearish_signals["ADX"] = False
 
     # RSI Momentum
     if indicator_selection.get("RSI Momentum", False):
-        # ... your RSI Momentum logic using 'row' ...
-        pass # Placeholder, replace with actual logic
+        rsi = row.get("RSI")
+        if rsi is not None and not pd.isna(rsi):
+            bullish_signals["RSI Momentum"] = rsi < 30 # Oversold, potential buy
+            bearish_signals["RSI Momentum"] = rsi > 70 # Overbought, potential sell
 
-    # Stochastic
+    # Stochastic Oscillator
     if indicator_selection.get("Stochastic", False):
-        # ... your Stochastic logic using 'row' ...
-        pass # Placeholder, replace with actual logic
+        stoch_k = row.get("Stoch_K")
+        stoch_d = row.get("Stoch_D")
+        if stoch_k is not None and stoch_d is not None and \
+           not pd.isna(stoch_k) and not pd.isna(stoch_d):
+            bullish_signals["Stochastic"] = stoch_k < 20 and stoch_k > stoch_d # Oversold, K crosses above D
+            bearish_signals["Stochastic"] = stoch_k > 80 and stoch_k < stoch_d # Overbought, K crosses below D
 
     # MACD
     if indicator_selection.get("MACD", False):
-        # ... your MACD logic using 'row' ...
-        pass # Placeholder, replace with actual logic
-
-    # Volume Spike
-    if indicator_selection.get("Volume Spike", False):
-        # ... your Volume Spike logic using 'row' ...
-        pass # Placeholder, replace with actual logic
-
-    # CCI
-    if indicator_selection.get("CCI", False):
-        # ... your CCI logic using 'row' ...
-        pass # Placeholder, replace with actual logic
-
-    # ROC
-    if indicator_selection.get("ROC", False):
-        # ... your ROC logic using 'row' ...
-        pass # Placeholder, replace with actual logic
-
-    # OBV
-    if indicator_selection.get("OBV", False):
-        # ... your OBV logic using 'row' ...
-        pass # Placeholder, replace with actual logic
+        macd = row.get("MACD")
+        macd_signal = row.get("MACD_Signal")
+        macd_hist = row.get("MACD_Hist")
+        if macd is not None and macd_signal is not None and macd_hist is not None and \
+           not pd.isna(macd) and not pd.isna(macd_signal) and not pd.isna(macd_hist):
+            bullish_signals["MACD"] = macd > macd_signal and macd_hist > 0 # MACD above signal, histogram positive
+            bearish_signals["MACD"] = macd < macd_signal and macd_hist < 0 # MACD below signal, histogram negative
 
     # Bollinger Bands (often for volatility, less direct signal, but can be used)
     if indicator_selection.get("Bollinger Bands", False):
-        # ... your Bollinger Bands logic using 'row' ...
-        pass # Placeholder, replace with actual logic
+        bb_upper = row.get("BB_upper")
+        bb_lower = row.get("BB_lower")
+        if close_price is not None and bb_upper is not None and bb_lower is not None and \
+           not pd.isna(close_price) and not pd.isna(bb_upper) and not pd.isna(bb_lower):
+            bullish_signals["Bollinger Bands"] = close_price < bb_lower # Price below lower band (oversold)
+            bearish_signals["Bollinger Bands"] = close_price > bb_upper # Price above upper band (overbought)
 
-    # VWAP (Intraday specific)
+    # Volume Spike
+    if indicator_selection.get("Volume Spike", False):
+        volume = row.get("Volume")
+        # You'd need a historical average volume to detect a spike.
+        # For simplicity, let's assume a 'Volume_Spike_Detected' column is pre-calculated in df_calculated
+        # or you'd need to pass more historical data to this function.
+        # For now, let's assume a boolean 'Volume_Spike_Detected' column exists.
+        if 'Volume_Spike_Detected' in row and not pd.isna(row['Volume_Spike_Detected']):
+            bullish_signals["Volume Spike"] = row['Volume_Spike_Detected'] and (close_price > row.get("Open", close_price)) # Spike with green candle
+            bearish_signals["Volume Spike"] = row['Volume_Spike_Detected'] and (close_price < row.get("Open", close_price)) # Spike with red candle
+        else:
+            bullish_signals["Volume Spike"] = False
+            bearish_signals["Volume Spike"] = False
+
+
+    # CCI (Commodity Channel Index)
+    if indicator_selection.get("CCI", False):
+        cci = row.get("CCI")
+        if cci is not None and not pd.isna(cci):
+            bullish_signals["CCI"] = cci < -100 # Extreme oversold
+            bearish_signals["CCI"] = cci > 100 # Extreme overbought
+
+    # ROC (Rate of Change)
+    if indicator_selection.get("ROC", False):
+        roc = row.get("ROC")
+        if roc is not None and not pd.isna(roc):
+            bullish_signals["ROC"] = roc > 0 # Price increasing
+            bearish_signals["ROC"] = roc < 0 # Price decreasing
+
+    # OBV (On Balance Volume)
+    if indicator_selection.get("OBV", False):
+        obv = row.get("obv")
+        obv_ema = row.get("obv_ema") # Assuming you have an EMA of OBV for signals
+        if obv is not None and obv_ema is not None and \
+           not pd.isna(obv) and not pd.isna(obv_ema):
+            bullish_signals["OBV"] = obv > obv_ema # OBV crossing above its EMA (accumulation)
+            bearish_signals["OBV"] = obv < obv_ema # OBV crossing below its EMA (distribution)
+
+    # VWAP (Intraday specific) - typically on main panel, but can generate signals
     if indicator_selection.get("VWAP", False):
-        # ... your VWAP logic using 'row' ...
-        pass # Placeholder, replace with actual logic
+        vwap = row.get("VWAP")
+        if close_price is not None and vwap is not None and \
+           not pd.isna(close_price) and not pd.isna(vwap):
+            bullish_signals["VWAP"] = close_price > vwap # Price above VWAP (bullish)
+            bearish_signals["VWAP"] = close_price < vwap # Price below VWAP (bearish)
 
     # Pivot Points (for support/resistance, less direct signal, but can be used)
+    # This usually involves price interacting with pivot levels, which requires more complex logic
+    # For now, we'll mark it as non-directional for simple scoring unless specific logic is added.
+    # If you had a 'Price_Above_Pivot' or 'Price_Below_S1' column, you could use it here.
     if indicator_selection.get("Pivot Points", False):
-        # ... your Pivot Points logic using 'row' ...
-        pass # Placeholder, replace with actual logic
+        # Example: Price above Pivot Point
+        pivot = row.get("Pivot")
+        if close_price is not None and pivot is not None and not pd.isna(close_price) and not pd.isna(pivot):
+            bullish_signals["Pivot Points"] = close_price > pivot
+            bearish_signals["Pivot Points"] = close_price < pivot
+
 
     # === Calculate Technical Confidence Score ===
-    # This is where you'd aggregate the individual signals into a single score.
-    # The 'normalized_weights' can be used here to give different indicators
-    # more or less influence on the final score.
+    # This aggregates the signals into a single score based on selected indicators.
+    # The 'normalized_weights' are for the *overall* confidence score in app.py,
+    # not typically for the technical score calculation itself unless you want
+    # to weight individual technical indicators differently within this function.
+    # For simplicity, we'll use a count-based score here.
 
-    # Example (you will need to refine this based on your scoring logic):
     total_bullish_points = sum(1 for v in bullish_signals.values() if v)
     total_bearish_points = sum(1 for v in bearish_signals.values() if v)
     
-    total_possible_directional_indicators = 0
-    for ind_name, is_selected in indicator_selection.items():
-        # Exclude indicators that aren't typically directional for scoring purposes if you wish
-        if is_selected and ind_name not in ["Bollinger Bands", "Pivot Points", "VWAP"]:
-            total_possible_directional_indicators += 1
+    # Count only the selected indicators that are directional for scoring
+    total_directional_indicators_selected = 0
+    for ind_name in indicator_selection:
+        if indicator_selection[ind_name]: # If the indicator is selected
+            # Exclude indicators that don't directly provide a strong directional signal for this score
+            # Adjust this list based on which indicators you consider "directional" for scoring
+            if ind_name not in ["Bollinger Bands", "Pivot Points"]: # These often indicate volatility or S/R, not direct trend/momentum
+                total_directional_indicators_selected += 1
 
-    if total_possible_directional_indicators > 0:
-        # A simple way to score: (bullish - bearish + total_possible) / (2 * total_possible) * 100
-        # This normalizes the score from 0-100 where 50 is neutral.
-        technical_score_raw = total_bullish_points - total_bearish_points
-        technical_confidence_score = ((technical_score_raw + total_possible_directional_indicators) /
-                                      (2 * total_possible_directional_indicators)) * 100
+    if total_directional_indicators_selected > 0:
+        # Score from -100 (all bearish) to +100 (all bullish)
+        # Convert to a 0-100 scale where 50 is neutral
+        raw_score = (total_bullish_points - total_bearish_points)
+        technical_confidence_score = ((raw_score + total_directional_indicators_selected) /
+                                      (2 * total_directional_indicators_selected)) * 100
+        technical_confidence_score = max(0, min(100, technical_confidence_score)) # Clamp between 0 and 100
     else:
         technical_confidence_score = 50 # Neutral if no directional indicators are selected or applicable
 
@@ -973,7 +1041,12 @@ def backtest_strategy(df_historical, selection, atr_multiplier=1.5, reward_risk_
             
         # --- Entry Logic ---
         if not in_trade:
-            bullish_signals, bearish_signals = generate_signals_for_row(prev_day)
+            # Pass indicator_selection and normalized_weights to generate_signals_for_row
+            bullish_signals, bearish_signals, _ = generate_signals_for_row(
+                prev_day,
+                selection, # 'selection' here is equivalent to indicator_selection from app.py
+                normalized_weights # This argument is needed for generate_signals_for_row
+            )
             
             fired_signals_count = 0
             total_selected_directional_indicators = 0
@@ -1010,7 +1083,7 @@ def backtest_strategy(df_historical, selection, atr_multiplier=1.5, reward_risk_
                         take_profit = entry_price + (atr * atr_multiplier * reward_risk_ratio)
                     elif trade_direction == "short":
                         stop_loss = entry_price + (atr * atr_multiplier)
-                        take_profit = entry_price - (atr * atr_multiplier * reward_risk_ratio)
+                        take_profit = entry_price - (atr * atr * reward_risk_ratio)
                     
                     trades.append({
                         "Entry Date": current_day.name.strftime('%Y-%m-%d'),
@@ -1136,7 +1209,7 @@ def get_indicator_summary_text(signal_name_base, current_value, bullish_fired, b
                 status = "Neutral"
             summary += f"{status} ({value_str}). Ideal Bullish: %K above %D (below 20). Ideal Bearish: %K below %D (above 80)."
         else:
-            summary += f"N/A ({value_str})."
+            summary += f"N/A ({value_value})." # Fixed typo here: current_value instead of value_value
     elif "CCI" in signal_name_base:
         if current_value is not None and not pd.isna(current_value):
             if current_value > 100:
@@ -1230,14 +1303,19 @@ def run_stock_scanner(
                 continue
 
             # Calculate indicators for the full historical data
-            df_calculated = (df_hist.copy())
+            df_calculated = calculate_indicators(df_hist.copy()) # Ensure ATR is calculated here
             
             # Get Finviz data
             finviz_data = get_finviz_data(ticker)
 
             # 2. Calculate Confidence Scores
             last_row = df_calculated.iloc[-1]
-            bullish_signals, bearish_signals = generate_signals_for_row(last_row)
+            # Pass indicator_selection and confidence_weights to generate_signals_for_row
+            bullish_signals, bearish_signals, _ = generate_signals_for_row(
+                last_row,
+                indicator_selection, # Pass indicator_selection
+                confidence_weights # Pass normalized_weights (called confidence_weights in scanner)
+            )
             
             tech_score_raw = 0
             total_possible_tech_points = 0
@@ -1246,65 +1324,20 @@ def run_stock_scanner(
             all_indicator_names = [
                 "EMA Trend", "Ichimoku Cloud", "Parabolic SAR", "ADX",
                 "RSI Momentum", "Stochastic", "MACD", "Volume Spike",
-                "CCI", "ROC", "OBV", "VWAP"
+                "CCI", "ROC", "OBV", "VWAP", "Bollinger Bands", "Pivot Points" # Include all relevant ones
             ]
 
             for ind_name in all_indicator_names:
                 is_selected = indicator_selection.get(ind_name, False) # Check if user selected it
                 if is_selected:
-                    total_possible_tech_points += 1 
-                    # Check for specific bullish signals based on indicator name
-                    if ind_name == "EMA Trend" and bullish_signals.get("EMA Trend", False):
-                        tech_score_raw += 1
-                    elif ind_name == "Ichimoku Cloud" and bullish_signals.get("Ichimoku Cloud", False):
-                        tech_score_raw += 1
-                    elif ind_name == "Parabolic SAR" and bullish_signals.get("Parabolic SAR", False):
-                        tech_score_raw += 1
-                    elif ind_name == "ADX" and bullish_signals.get("ADX", False): # ADX signal includes direction
-                        tech_score_raw += 1
-                    elif ind_name == "RSI Momentum" and bullish_signals.get("RSI Momentum", False):
-                        tech_score_raw += 1
-                    elif ind_name == "Stochastic" and bullish_signals.get("Stochastic", False):
-                        tech_score_raw += 1
-                    elif ind_name == "MACD" and bullish_signals.get("MACD", False):
-                        tech_score_raw += 1
-                    elif ind_name == "Volume Spike" and bullish_signals.get("Volume Spike", False):
-                        tech_score_raw += 1
-                    elif ind_name == "CCI" and bullish_signals.get("CCI", False):
-                        tech_score_raw += 1
-                    elif ind_name == "ROC" and bullish_signals.get("ROC", False):
-                        tech_score_raw += 1
-                    elif ind_name == "OBV" and bullish_signals.get("OBV", False):
-                        tech_score_raw += 1
-                    elif ind_name == "VWAP" and bullish_signals.get("VWAP", False):
-                        tech_score_raw += 1
+                    # Bollinger Bands and Pivot Points are typically not used for directional signal counting
+                    if ind_name not in ["Bollinger Bands", "Pivot Points"]: 
+                        total_possible_tech_points += 1 
+                        if bullish_signals.get(ind_name, False):
+                            tech_score_raw += 1
+                        elif bearish_signals.get(ind_name, False):
+                            tech_score_raw -= 1
                     
-                    # Check for specific bearish signals and subtract
-                    if ind_name == "EMA Trend" and bearish_signals.get("EMA Trend", False):
-                        tech_score_raw -= 1
-                    elif ind_name == "Ichimoku Cloud" and bearish_signals.get("Ichimoku Cloud", False):
-                        tech_score_raw -= 1
-                    elif ind_name == "Parabolic SAR" and bearish_signals.get("Parabolic SAR", False):
-                        tech_score_raw -= 1
-                    elif ind_name == "ADX" and bearish_signals.get("ADX", False):
-                        tech_score_raw -= 1
-                    elif ind_name == "RSI Momentum" and bearish_signals.get("RSI Momentum", False):
-                        tech_score_raw -= 1
-                    elif ind_name == "Stochastic" and bearish_signals.get("Stochastic", False):
-                        tech_score_raw -= 1
-                    elif ind_name == "MACD" and bearish_signals.get("MACD", False):
-                        tech_score_raw -= 1
-                    elif ind_name == "Volume Spike" and bearish_signals.get("Volume Spike", False):
-                        tech_score_raw -= 1
-                    elif ind_name == "CCI" and bearish_signals.get("CCI", False):
-                        tech_score_raw -= 1
-                    elif ind_name == "ROC" and bearish_signals.get("ROC", False):
-                        tech_score_raw -= 1
-                    elif ind_name == "OBV" and bearish_signals.get("OBV", False):
-                        tech_score_raw -= 1
-                    elif ind_name == "VWAP" and bearish_signals.get("VWAP", False):
-                        tech_score_raw -= 1
-
             if total_possible_tech_points > 0:
                 technical_score_current = ((tech_score_raw + total_possible_tech_points) / (2 * total_possible_tech_points)) * 100
             else:
@@ -1383,14 +1416,17 @@ def run_stock_scanner(
                     # Map indicator name from selection to the key in last_row
                     current_ind_value = None
                     if ind_name == "RSI Momentum": current_ind_value = last_row.get("RSI")
-                    elif ind_name == "Stochastic": current_ind_value = last_row.get("stoch_k")
+                    elif ind_name == "Stochastic": current_ind_value = last_row.get("Stoch_K") # Corrected to Stoch_K
                     elif ind_name == "ADX": current_ind_value = last_row.get("adx")
-                    elif ind_name == "CCI": current_ind_value = last_row.get("cci")
-                    elif ind_name == "ROC": current_ind_value = last_row.get("roc")
+                    elif ind_name == "CCI": current_ind_value = last_row.get("CCI")
+                    elif ind_name == "ROC": current_ind_value = last_row.get("ROC")
                     elif ind_name == "OBV": current_ind_value = last_row.get("obv")
                     elif ind_name == "VWAP": current_ind_value = last_row.get("VWAP")
-                    # For EMA Trend, Ichimoku, Parabolic SAR, Volume Spike, their 'current value' is often implicit in signal
-                    # For these, get_indicator_summary_text relies more on bullish_fired/bearish_fired
+                    elif ind_name == "Parabolic SAR": current_ind_value = last_row.get("psar") # Added for PSAR
+                    elif ind_name == "Bollinger Bands": current_ind_value = last_row.get("BB_mavg") # Using middle band for value
+                    elif ind_name == "Ichimoku Cloud": current_ind_value = last_row.get("ichimoku_conversion_line") # Using conversion line for value
+                    elif ind_name == "EMA Trend": current_ind_value = last_row.get("EMA21") # Using EMA21 for value
+                    # For Volume Spike, its 'current value' is often implicit in signal, no direct value needed for summary text
                     
                     summary_text = get_indicator_summary_text(
                         ind_name,
