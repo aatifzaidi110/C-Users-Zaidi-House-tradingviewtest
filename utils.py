@@ -196,28 +196,28 @@ def calculate_indicators(df, indicator_selection, is_intraday):
     # Ensure df_copy.columns is a simple Index before union
     current_cols = pd.Index(df_copy.columns.tolist()) if isinstance(df_copy.columns, pd.MultiIndex) else df_copy.columns
     
-    # Reindex the DataFrame to ensure all required columns exist, filling missing with NaN
-    required_cols = ['Open', 'High', 'Low', 'Close', 'Volume']
-    if isinstance(df_copy.columns, pd.MultiIndex):
-        df_copy.columns = df_copy.columns.get_level_values(-1)
-    # Ensure column names are unique before reindexing
+# Reindex the DataFrame to ensure all required columns exist, filling missing with NaN
+required_cols = ['Open', 'High', 'Low', 'Close', 'Volume']
+if isinstance(df_copy.columns, pd.MultiIndex):
+    df_copy.columns = df_copy.columns.get_level_values(-1)
+
+# Ensure column names are unique before reindexing
 df_copy.columns = pd.io.parsers.ParserBase({'names': df_copy.columns})._maybe_dedup_names(df_copy.columns)
 
 # Now reindex with required columns
 df_copy = df_copy.reindex(columns=pd.Index(df_copy.columns).union(required_cols))
-    # Now, ensure numeric types for the core columns
-    for col in required_cols:
-        if col in df_copy.columns:
-            # Always convert to a Series first if it's not already, then to numeric
-            if isinstance(df_copy[col], pd.DataFrame):
-                # If it's a DataFrame, assume it's a single column and convert to Series
-                df_copy[col] = pd.to_numeric(df_copy[col].iloc[:, 0], errors='coerce')
-            elif not isinstance(df_copy[col], pd.Series):
-                # If it's not a Series (e.g., a list, numpy array, or scalar), convert to Series first
-                df_copy[col] = pd.to_numeric(pd.Series(df_copy[col]), errors='coerce')
-            else:
-                # If it's already a Series, just convert to numeric
-                df_copy[col] = pd.to_numeric(df_copy[col], errors='coerce')
+
+# Now, ensure numeric types for the core columns
+for col in required_cols:
+    df_copy[col] = pd.to_numeric(df_copy[col], errors='coerce')
+    if col in df_copy.columns:
+        # Always convert to a Series first if it's not already, then to numeric
+        if isinstance(df_copy[col], pd.DataFrame):
+            # If it's a DataFrame, assume it's a single column and convert to Series
+            df_copy[col] = pd.to_numeric(df_copy[col].iloc[:, 0], errors='coerce')
+        elif not isinstance(df_copy[col], pd.Series):
+            # If it's not a Series (e.g., a list, numpy array, or scalar), convert to Series first
+            df_copy[col] = pd.to_numeric(pd.Series(df_copy[col]), errors='coerce')
 
     # It's crucial to check if df_copy is empty *after* the initial data fetch and before calculations.
     if df_copy.empty:
