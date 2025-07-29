@@ -111,7 +111,7 @@ interval_map = {
     "Position Trading (1d)": ("1d", 365)  # 1 year
 }
 
-interval, days = interval_map[timeframe]
+interval, days = interval_map[trading_style]
 start_date = datetime.today() - timedelta(days=days)
 end_date = datetime.today()
 
