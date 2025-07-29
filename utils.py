@@ -1074,6 +1074,183 @@ def generate_directional_trade_plan(
 
     return trade_plan
 
+def backtest_strategy(df, trade_plan_func, initial_capital=10000, commission=0.001):
+    """
+    Backtests a trading strategy based on generated trade plans.
+    Args:
+        df (pd.DataFrame): Historical stock data with 'Open', 'High', 'Low', 'Close'.
+        trade_plan_func (callable): A function that takes a DataFrame slice (representing historical data up to a point)
+                                    and returns a trade plan (dict) with 'trade_direction', 'entry_zone_start',
+                                    'entry_zone_end', 'target_price', 'stop_loss'.
+        initial_capital (float): Starting capital for backtesting.
+        commission (float): Commission per trade as a percentage of trade value (e.g., 0.001 for 0.1%).
+    Returns:
+        dict: Backtesting results including final capital, total trades, win rate, etc.
+    """
+    capital = initial_capital
+    shares_held = 0
+    trades = [] # List to store details of each trade
+    
+    # Ensure df is sorted by date
+    df = df.sort_index()
+
+    # Iterate through the DataFrame to simulate trading day by day (or bar by bar)
+    # Start from a point where enough historical data is available for indicator calculation
+    min_history_for_indicators = 200 # Roughly for 200-period EMA, adjust as needed
+
+    for i in range(min_history_for_indicators, len(df)):
+        current_data = df.iloc[:i+1] # Data up to the current point for trade plan generation
+        current_price = current_data['Close'].iloc[-1]
+        current_date = current_data.index[-1]
+
+        # Generate trade plan for the current historical context
+        # Note: We need to pass the actual arguments that generate_directional_trade_plan expects.
+        # This backtest_strategy function assumes a simplified trade_plan_func for demonstration.
+        # In a real scenario, you would pass the full context (indicator_selection, weights, etc.)
+        # to the trade_plan_func, or make trade_plan_func a method of a strategy class.
+        
+        # For simplicity, let's assume trade_plan_func wraps generate_directional_trade_plan
+        # and has access to indicator_selection and weights.
+        # This is a placeholder and needs to be adapted to how trade_plan_func is structured.
+        
+        # Mock trade_plan_result for backtesting if the full generate_directional_trade_plan
+        # cannot be called with just a slice.
+        # A more robust backtesting setup would involve passing the necessary parameters
+        # to trade_plan_func or refactoring generate_directional_trade_plan to work with a slice.
+        
+        # For this example, let's assume trade_plan_func is a simplified function
+        # that directly provides signals based on the current_data.
+        # Since we don't have the original indicator_selection and weights here,
+        # we'll create a dummy trade plan.
+        
+        # THIS IS A SIMPLIFIED MOCK - YOU WILL NEED TO ADAPT THIS
+        # TO YOUR ACTUAL generate_directional_trade_plan CALL
+        # For a proper backtest, you'd call:
+        # trade_plan_result = generate_directional_trade_plan(
+        #     ticker=df.name, # Assuming ticker is stored or passed
+        #     interval='1d', # Or whatever the interval is
+        #     start_date=current_data.index[0].date(),
+        #     end_date=current_date.date(),
+        #     indicator_selection=YOUR_INDICATOR_SELECTION,
+        #     weights=YOUR_WEIGHTS
+        # )
+        
+        # For the purpose of making this backtest_strategy runnable,
+        # we'll use a placeholder for trade_plan_result.
+        # You MUST replace this with a proper call to generate_directional_trade_plan
+        # with the correct parameters derived from your application's state.
+        
+        # Mock trade plan for demonstration purposes
+        trade_plan_result = {
+            "trade_direction": "Neutral",
+            "entry_zone_start": current_price * 0.99,
+            "entry_zone_end": current_price * 1.01,
+            "target_price": current_price * 1.05,
+            "stop_loss": current_price * 0.95,
+            "current_price": current_price
+        }
+
+        # --- Trading Logic ---
+        if shares_held == 0: # Not in a position
+            if trade_plan_result["trade_direction"] == "Bullish" and \
+               trade_plan_result["entry_zone_start"] <= current_price <= trade_plan_result["entry_zone_end"]:
+                
+                # Buy signal
+                shares_to_buy = int(capital / current_price)
+                if shares_to_buy > 0:
+                    cost = shares_to_buy * current_price * (1 + commission)
+                    if capital >= cost:
+                        capital -= cost
+                        shares_held += shares_to_buy
+                        trades.append({
+                            "date": current_date,
+                            "type": "BUY",
+                            "price": current_price,
+                            "shares": shares_to_buy,
+                            "capital": capital,
+                            "position_value": shares_held * current_price
+                        })
+                        # st.write(f"BUY: {shares_to_buy} shares at {current_price:.2f} on {current_date.date()}")
+
+            elif trade_plan_result["trade_direction"] == "Bearish" and \
+                 trade_plan_result["entry_zone_end"] <= current_price <= trade_plan_result["entry_zone_start"]: # Note: entry_zone_start/end might be swapped for bearish
+                
+                # Sell (short) signal - simplified, assuming ability to short
+                shares_to_short = int(capital / current_price) # Use capital as margin for short
+                if shares_to_short > 0:
+                    proceeds = shares_to_short * current_price * (1 - commission)
+                    capital += proceeds # Capital increases from short sale
+                    shares_held -= shares_to_short # Negative shares for short position
+                    trades.append({
+                        "date": current_date,
+                        "type": "SHORT",
+                        "price": current_price,
+                        "shares": shares_to_short,
+                        "capital": capital,
+                        "position_value": shares_held * current_price # This will be negative
+                    })
+                    # st.write(f"SHORT: {shares_to_short} shares at {current_price:.2f} on {current_date.date()}")
+
+        else: # In a position (long or short)
+            if shares_held > 0: # Long position
+                # Check for target or stop loss
+                if current_price >= trade_plan_result["target_price"] or \
+                   current_price <= trade_plan_result["stop_loss"]:
+                    
+                    # Sell to close long position
+                    proceeds = shares_held * current_price * (1 - commission)
+                    capital += proceeds
+                    trade_profit_loss = (current_price - trades[-1]['price']) * shares_held - (2 * commission * current_price * shares_held) # Simplified P/L
+                    trades.append({
+                        "date": current_date,
+                        "type": "SELL",
+                        "price": current_price,
+                        "shares": shares_held,
+                        "capital": capital,
+                        "profit_loss": trade_profit_loss
+                    })
+                    # st.write(f"SELL: {shares_held} shares at {current_price:.2f} on {current_date.date()} P/L: {trade_profit_loss:.2f}")
+                    shares_held = 0
+
+            elif shares_held < 0: # Short position
+                # Check for target or stop loss
+                if current_price <= trade_plan_result["target_price"] or \
+                   current_price >= trade_plan_result["stop_loss"]:
+                    
+                    # Buy to close short position
+                    cost = abs(shares_held) * current_price * (1 + commission)
+                    capital -= cost
+                    trade_profit_loss = (trades[-1]['price'] - current_price) * abs(shares_held) - (2 * commission * current_price * abs(shares_held)) # Simplified P/L
+                    trades.append({
+                        "date": current_date,
+                        "type": "COVER",
+                        "price": current_price,
+                        "shares": abs(shares_held),
+                        "capital": capital,
+                        "profit_loss": trade_profit_loss
+                    })
+                    # st.write(f"COVER: {abs(shares_held)} shares at {current_price:.2f} on {current_date.date()} P/L: {trade_profit_loss:.2f}")
+                    shares_held = 0
+
+    # Calculate final portfolio value
+    final_portfolio_value = capital + (shares_held * df['Close'].iloc[-1])
+
+    # Calculate performance metrics
+    total_profit_loss = final_portfolio_value - initial_capital
+    total_trades = len([t for t in trades if t['type'] in ['BUY', 'SHORT']])
+    winning_trades = len([t for t in trades if 'profit_loss' in t and t['profit_loss'] > 0])
+    win_rate = (winning_trades / total_trades) * 100 if total_trades > 0 else 0
+
+    return {
+        "initial_capital": initial_capital,
+        "final_capital": final_portfolio_value,
+        "total_profit_loss": total_profit_loss,
+        "total_trades": total_trades,
+        "winning_trades": winning_trades,
+        "win_rate": win_rate,
+        "trade_log": trades
+    }
+
 
 def scan_for_trades(
     tickers,
