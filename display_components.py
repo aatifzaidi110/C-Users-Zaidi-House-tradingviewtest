@@ -336,7 +336,20 @@ def display_technical_analysis_tab(ticker, df_calculated, is_intraday, indicator
 
     # --- Construct panels_list and panel_ratios_list for mpf.plot ---
     # Get all unique panel numbers used in add_plots (including 0 for the main chart)
-    all_panels_in_addplots = [ap.panel for ap in add_plots]
+    all_panels_in_addplots = []
+    for i, ap in enumerate(add_plots):
+        print(f"DEBUG: Item {i} in add_plots: Type={type(ap)}, Content={ap}")
+        if hasattr(ap, 'panel'):
+            all_panels_in_addplots.append(ap.panel)
+        elif isinstance(ap, dict) and 'panel' in ap:
+            # This case should ideally not happen if make_addplot is consistently used
+            all_panels_in_addplots.append(ap['panel'])
+        else:
+            print(f"ERROR: Unexpected item in add_plots at index {i}. Does not have 'panel' attribute or 'panel' key.")
+            # You might want to raise an error or handle it differently here
+            # For now, we'll skip it to allow the code to run
+            pass # Or all_panels_in_addplots.append(0) as a fallback
+
     
     # The panels list must include 0 for the main chart, plus any other unique panels from add_plots
     panels_list = sorted(list(set([0] + all_panels_in_addplots)))
