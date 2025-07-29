@@ -178,7 +178,20 @@ st.title("Advanced Stock Analysis Dashboard")
 if analyze_button and ticker:
     # Fetch data
     with st.spinner(f"Fetching data for {ticker} ({selected_timeframe})..."):
-        df = get_data(ticker, st.session_state.data_interval, st.session_state.start_date, st.session_state.end_date)
+        # Get data might return a tuple, so handle it to ensure `df` is a DataFrame
+        df_raw = get_data(ticker, st.session_state.data_interval, st.session_state.start_date, st.session_state.end_date)
+        
+        # Initialize df to an empty DataFrame
+        df = pd.DataFrame()
+        # Check if df_raw is a tuple and extract the DataFrame if it is
+        if isinstance(df_raw, tuple) and len(df_raw) > 0:
+            # Assume the first element is the intended DataFrame
+            if isinstance(df_raw[0], pd.DataFrame):
+                df = df_raw[0]
+        elif isinstance(df_raw, pd.DataFrame):
+            df = df_raw # If it's already a DataFrame, use it directly
+
+
         info = yf.Ticker(ticker).info # Fetch ticker info for company profile
         finviz_data = get_finviz_data(ticker) # Fetch Finviz data
         
