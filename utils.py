@@ -195,14 +195,13 @@ def calculate_indicators(df, indicator_selection, is_intraday):
     for col in ['Open', 'High', 'Low', 'Close', 'Volume']:
         if col in df_copy.columns:
             # Check if the column is already numeric or if it can be converted
-            # and that it's not a scalar value, which would cause the TypeError
-            # Ensure df_copy[col] is a Series before passing to pd.to_numeric
-            if isinstance(df_copy[col], pd.Series):
+            # If df_copy[col] is a DataFrame with one column, convert it to a Series
+            if isinstance(df_copy[col], pd.DataFrame) and df_copy[col].shape[1] == 1:
+                df_copy[col] = pd.to_numeric(df_copy[col].iloc[:, 0], errors='coerce')
+            elif isinstance(df_copy[col], pd.Series):
                 df_copy[col] = pd.to_numeric(df_copy[col], errors='coerce')
             else:
-                # If it's not a Series, it might be a scalar or other type.
-                # Attempt to convert to a Series first, then to numeric.
-                # This handles cases where a single value might be passed.
+                # If it's neither a DataFrame nor a Series, try converting to Series then numeric
                 df_copy[col] = pd.to_numeric(pd.Series(df_copy[col]), errors='coerce')
         else:
             # If column is missing, add it with NaNs to prevent errors in later calculations
@@ -342,7 +341,7 @@ def calculate_pivot_points(df):
     # Select only the pivot point columns to return
     pivot_cols = ['Pivot', 'R1', 'S1', 'R2', 'S2']
     # Ensure all pivot_cols exist before selecting
-    existing_pivot_cols = [col for col in pivot_copy.columns if col in pivot_cols] # Corrected line
+    existing_pivot_cols = [col for col in pivot_cols if col in df_copy.columns] # Corrected from pivot_copy.columns
     
     return df_copy[existing_pivot_cols]
 
