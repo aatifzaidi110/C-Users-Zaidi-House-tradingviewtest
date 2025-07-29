@@ -223,8 +223,7 @@ def display_technical_analysis_tab(ticker, df_calculated, is_intraday, indicator
     )
     s = mpf.make_mpf_style(
         base_mpf_style='yahoo',
-        marketcolors=mc,
-        figscale=1.5
+        marketcolors=mc
     )
 
     add_plots = []
