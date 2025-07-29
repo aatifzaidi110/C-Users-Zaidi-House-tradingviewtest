@@ -549,8 +549,13 @@ def display_options_analysis_tab(ticker, current_stock_price, expirations, trade
                 with st.expander(f"**{strategy_name}** - *{message}*"):
                     st.write(f"**Direction:** {trade_direction}") # Use the overall trade_direction
                     st.write(f"**Expiration:** {suggested_strategy_result.get('expiration', 'N/A')}")
-                    st.write(f"**Strike:** ${suggested_strategy_result.get('strike', 'N/A'):.2f}")
-                    st.write(f"**Premium:** ${suggested_strategy_result.get('premium', 'N/A'):.2f}")
+                    
+                    # Safely format strike and premium
+                    strike_val = suggested_strategy_result.get('strike')
+                    premium_val = suggested_strategy_result.get('premium')
+                    
+                    st.write(f"**Strike:** ${strike_val:.2f}" if strike_val is not None and pd.notna(strike_val) else "**Strike:** N/A")
+                    st.write(f"**Premium:** ${premium_val:.2f}" if premium_val is not None and pd.notna(premium_val) else "**Premium:** N/A")
                     
                     # Net Debit/Credit, Max Profit/Risk, Reward/Risk are not directly returned by suggest_options_strategy
                     # in utils.py. If these are desired, they need to be added to the suggested_strategy_result dict
@@ -994,4 +999,3 @@ def display_scanner_tab(scanner_results_df): # Renamed from display_scanner_resu
 
     st.markdown("---")
     st.info("Click on each ticker's header to expand/collapse detailed trade plan information.")
-
