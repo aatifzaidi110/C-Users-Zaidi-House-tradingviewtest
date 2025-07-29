@@ -177,6 +177,12 @@ run_scanner_button = st.sidebar.button("Run Stock Scanner")
 st.sidebar.markdown("---")
 analyze_button = st.sidebar.button("Analyze Ticker")
 
+# Clear Cache Button
+if st.sidebar.button("Clear Cache"):
+    st.cache_data.clear()
+    st.rerun()
+
+
 # --- Main Application Logic ---
 st.title("Advanced Stock Analysis Dashboard")
 
@@ -278,9 +284,9 @@ if analyze_button and ticker:
             last_row,
             finviz_data.get('news_sentiment_score'),
             finviz_data.get('recom_score'),
-            latest_gdp.iloc[-1] if latest_gdp is not None and not latest_gdp.empty else None,
-            latest_cpi.iloc[-1] if latest_cpi is not None and not latest_cpi.empty else None,
-            latest_unemployment.iloc[-1] if latest_unemployment is not None and not latest_unemployment.empty else None,
+            latest_gdp.iloc[-1] if latest_gdp is not None and not latest_gdp.empty and len(latest_gdp) > 0 else None,
+            latest_cpi.iloc[-1] if latest_cpi is not None and not latest_cpi.empty and len(latest_cpi) > 0 else None,
+            latest_unemployment.iloc[-1] if latest_unemployment is not None and not latest_unemployment.empty and len(latest_unemployment) > 0 else None,
             latest_vix, # Pass scalar VIX
             historical_vix_avg, # Pass scalar VIX average
             st.session_state.indicator_selection, # Pass the full indicator selection dict
