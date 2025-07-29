@@ -540,7 +540,8 @@ def display_options_analysis_tab(ticker, current_stock_price, expirations, trade
             # suggest_options_strategy expects (suitable_options, trade_direction, current_price, target_price, stop_loss_price)
             suggested_strategy_result = suggest_options_strategy(analyzed_options, trade_direction, current_stock_price, target_price, stop_loss_price)
             
-            if suggested_strategy_result and suggested_strategy_result.get('type') != 'N/A': # Check if a valid strategy was suggested
+            # Check if suggested_strategy_result is a dictionary before accessing its keys
+            if isinstance(suggested_strategy_result, dict) and suggested_strategy_result.get('type') != 'N/A': # Check if a valid strategy was suggested
                 st.markdown("##### Suggested Strategy:")
                 strategy_name = suggested_strategy_result.get('type', 'N/A')
                 message = suggested_strategy_result.get('rationale', 'No message.') # Use 'rationale' from utils.py
@@ -595,7 +596,8 @@ def display_options_analysis_tab(ticker, current_stock_price, expirations, trade
                         st.info("Payoff chart data not available for the suggested strategy.")
 
             else:
-                st.info("No specific options strategies suggested based on current analysis and sentiment.")
+                # If suggested_strategy_result is a string, display it directly as an info message
+                st.info(suggested_strategy_result if isinstance(suggested_strategy_result, str) else "No specific options strategies suggested based on current analysis and sentiment.")
 
         else:
             st.info(f"Could not retrieve options chain for {ticker} on {selected_expiry}. Please check the ticker and date.")
@@ -992,3 +994,4 @@ def display_scanner_tab(scanner_results_df): # Renamed from display_scanner_resu
 
     st.markdown("---")
     st.info("Click on each ticker's header to expand/collapse detailed trade plan information.")
+
