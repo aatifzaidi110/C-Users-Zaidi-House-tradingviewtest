@@ -10,6 +10,7 @@ from utils import (
     calculate_economic_score, calculate_sentiment_score, scan_for_trades
 )
 from display_components import (
+    _display_common_header, # Import the common header function directly
     display_technical_analysis_tab, display_options_analysis_tab,
     display_backtesting_tab, display_trade_log_tab,
     display_economic_data_tab, display_investor_sentiment_tab,
@@ -185,7 +186,7 @@ def main():
     trade_direction = trade_plan_result.get('trade_direction', 'Neutral')
 
     # Display common header for all tabs
-    display_components._display_common_header(ticker, current_price, prev_close, overall_confidence, trade_direction)
+    _display_common_header(ticker, current_price, prev_close, overall_confidence, trade_direction)
 
 
     # --- Tabbed Interface ---
