@@ -230,11 +230,27 @@ if analyze_button and ticker:
 
         if not vix_data.empty and 'Close' in vix_data.columns:
             # Explicitly convert to scalar float values
-            latest_vix_val = vix_data['Close'].iloc[-1]
+            latest_vix_val_candidate = vix_data['Close'].iloc[-1]
+            if isinstance(latest_vix_val_candidate, pd.Series):
+                if not latest_vix_val_candidate.empty:
+                    latest_vix_val = latest_vix_val_candidate.item() # Get the scalar value
+                else:
+                    latest_vix_val = None
+            else:
+                latest_vix_val = latest_vix_val_candidate
+
             if pd.notna(latest_vix_val):
                 latest_vix = float(latest_vix_val)
 
-            historical_vix_avg_val = vix_data['Close'].mean()
+            historical_vix_avg_val_candidate = vix_data['Close'].mean()
+            if isinstance(historical_vix_avg_val_candidate, pd.Series):
+                if not historical_vix_avg_val_candidate.empty:
+                    historical_vix_avg_val = historical_vix_avg_val_candidate.item() # Get the scalar value
+                else:
+                    historical_vix_avg_val = None
+            else:
+                historical_vix_avg_val = historical_vix_avg_val_candidate
+
             if pd.notna(historical_vix_avg_val):
                 historical_vix_avg = float(historical_vix_avg_val)
 
