@@ -132,9 +132,13 @@ st.sidebar.subheader("Confidence Score Weights (%)")
 total_weight = 0
 for component in st.session_state.confidence_weights.keys():
     # Use a unique key for each slider
+    # Clamp the initial value to be between 0 and 100 to prevent JSNumberBoundsException
+    initial_slider_value = int(st.session_state.confidence_weights[component] * 100)
+    clamped_slider_value = max(0, min(100, initial_slider_value))
+    
     st.session_state.confidence_weights[component] = st.sidebar.slider(
         f"{component.replace('_', ' ').title()}",
-        0, 100, int(st.session_state.confidence_weights[component] * 100), key=f"weight_{component}"
+        0, 100, clamped_slider_value, key=f"weight_{component}"
     )
     total_weight += st.session_state.confidence_weights[component]
 
