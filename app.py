@@ -1,4 +1,4 @@
-# app.py - Final Version (v1.35 - Corrected for Syntax and Logic)
+# app.py - Final Version (v1.37 - Corrected for Argument Mismatches and Data Types)
 import sys
 import os
 import streamlit as st
@@ -26,14 +26,14 @@ from utils import (
     suggest_options_strategy, generate_directional_trade_plan,
     calculate_confidence_score, convert_finviz_recom_to_score,
     get_economic_data_fred, get_vix_data, calculate_economic_score, calculate_sentiment_score,
-    scan_for_trades # Renamed from run_stock_scanner for consistency with utils.py
+    scan_for_trades 
 )
 
 from display_components import (
     display_technical_analysis_tab, display_options_analysis_tab,
     display_backtesting_tab, display_trade_log_tab,
     display_economic_data_tab, display_investor_sentiment_tab,
-    display_scanner_tab # Ensure display_scanner_tab is imported
+    display_scanner_tab 
 )
 
 # --- Configuration ---
@@ -71,7 +71,7 @@ if 'confidence_weights' not in st.session_state:
     st.session_state.confidence_weights = {
         "technical": 0.4,
         "sentiment": 0.2,
-        "expert": 0.2, # This 'expert' weight is not directly used by current utils.py confidence score logic
+        "expert": 0.2, 
         "economic": 0.1,
         "investor_sentiment": 0.1
     }
@@ -181,17 +181,14 @@ def main():
     if analyze_button and ticker:
         # Fetch data and generate comprehensive trade plan
         with st.spinner(f"Analyzing {ticker} ({selected_timeframe})..."):
-            # generate_directional_trade_plan handles all data fetching and indicator calculation internally
-            # It returns a dictionary with all the analysis results.
-            # We pass the options_expiration_date as None for now, it can be added as a user input later.
             st.session_state.trade_plan_result = generate_directional_trade_plan(
                 ticker=st.session_state.ticker,
                 interval=st.session_state.data_interval,
                 start_date=st.session_state.start_date,
                 end_date=st.session_state.end_date,
                 indicator_selection=st.session_state.indicator_selection,
-                weights=st.session_state.confidence_weights, # Pass raw weights, generate_directional_trade_plan normalizes them
-                options_expiration_date=None # Placeholder for user-selected options expiration
+                weights=st.session_state.confidence_weights, 
+                options_expiration_date=None 
             )
         
         trade_plan_result = st.session_state.trade_plan_result
@@ -200,7 +197,6 @@ def main():
             st.success(f"Analysis complete for {ticker}.")
 
             # Extract key variables from the trade_plan_result for easier access
-            # Ensure current_price is a scalar float
             current_price_raw = trade_plan_result.get("current_price")
             current_price = float(current_price_raw.iloc[-1]) if isinstance(current_price_raw, pd.Series) else float(current_price_raw)
 
@@ -210,6 +206,9 @@ def main():
             # Fetch raw data again for plotting, as df_calculated might be filtered/modified
             df = get_data(ticker, st.session_state.data_interval, st.session_state.start_date, st.session_state.end_date)
             df_calculated = calculate_indicators(df.copy(), st.session_state.indicator_selection, is_intraday) # Recalculate for display
+
+            # Calculate prev_close for common header and trade log
+            prev_close = df_calculated['Close'].iloc[-2] if len(df_calculated) >= 2 else current_price
 
             # Get options chain expiration dates
             options_chain_dates = []
@@ -230,21 +229,19 @@ def main():
                     ticker,
                     df_calculated,
                     is_intraday,
-                    st.session_state.indicator_selection, # Pass the full selection dict
-                    normalized_weights # Pass normalized weights
+                    st.session_state.indicator_selection, 
+                    normalized_weights 
                 )
 
             with tabs[1]: # 🔮 Options Analysis
-                # Pass the trade_plan_result to display_options_analysis_tab
-                # This allows the options tab to access target_price, stop_loss, and trade_direction
                 display_options_analysis_tab(
                     ticker,
-                    current_price, # Pass the scalar current_price
-                    options_chain_dates, # Pass expirations
+                    current_price, 
+                    options_chain_dates, 
                     trade_direction,
                     overall_confidence,
-                    trade_plan_result.get('target_price'), # Pass target_price
-                    trade_plan_result.get('stop_loss') # Pass stop_loss
+                    trade_plan_result.get('target_price'), 
+                    trade_plan_result.get('stop_loss') 
                 )
 
             with tabs[2]: # 💡 Trade Plan
@@ -266,7 +263,7 @@ def main():
                             st.write(f"- {p_key}: ${p_val:.2f}")
                     
                     st.write("**Technical Signals & Entry Criteria:**")
-                    for criteria in trade_plan_result.get('technical_signals', []): # Using 'technical_signals' from trade_plan_result
+                    for criteria in trade_plan_result.get('technical_signals', []): 
                         st.markdown(f"- {criteria}")
 
                     # Exit criteria are part of the main rationale or target/stop
@@ -278,38 +275,31 @@ def main():
                     st.info("Could not generate a directional trade plan. Ensure sufficient data and valid indicator selections.")
 
             with tabs[3]: # 📜 Trade Log
-                # Need prev_close for trade log, calculate it here if df_calculated is not empty
-                prev_close = df_calculated.iloc[-2]['Close'] if len(df_calculated) >= 2 else current_price
-
                 display_trade_log_tab(
-                    "trade_log.csv", # Placeholder, actual file name constructed inside function
+                    "trade_log.csv", 
                     ticker,
                     selected_timeframe,
                     overall_confidence,
-                    current_price, # Pass the scalar current_price
-                    prev_close,
+                    current_price, 
+                    prev_close, # Pass scalar prev_close
                     trade_direction
                 )
 
             with tabs[4]: # 🤖 Backtesting
                 if not df_calculated.empty:
                     display_backtesting_tab(
-                        df_calculated.copy(), # Pass a copy of df_calculated
-                        st.session_state.indicator_selection, # Pass the full selection dict
+                        df_calculated.copy(), 
+                        st.session_state.indicator_selection,
                         normalized_weights # Pass normalized weights
                     )
                 else:
                     st.info("No historical data available for backtesting.")
 
             with tabs[5]: # 🌍 Economic & Sentiment
-                # Display Economic Data
-                # Ensure prev_close is a scalar before passing
-                prev_close_economic = df_calculated.iloc[-2]['Close'] if len(df_calculated) >= 2 else current_price
-
                 display_economic_data_tab(
                     ticker,
-                    current_price, # Pass the scalar current_price
-                    prev_close_economic, # Pass scalar prev_close
+                    current_price, 
+                    prev_close, # Pass scalar prev_close
                     overall_confidence,
                     trade_direction,
                     trade_plan_result['economic_context'].get('latest_gdp'),
@@ -318,23 +308,18 @@ def main():
                 )
 
                 st.markdown("---")
-                # Display Investor Sentiment Data
-                # Ensure prev_close is a scalar before passing
-                prev_close_sentiment = df_calculated.iloc[-2]['Close'] if len(df_calculated) >= 2 else current_price
-                
                 display_investor_sentiment_tab(
                     ticker,
-                    current_price, # Pass the scalar current_price
-                    prev_close_sentiment, # Pass scalar prev_close
+                    current_price, 
+                    prev_close, # Pass scalar prev_close
                     overall_confidence,
                     trade_direction,
-                    trade_plan_result['sentiment_analysis'].get('latest_vix'),
-                    None # Removed historical_vix_avg as it's not in trade_plan_result['sentiment_analysis']
+                    trade_plan_result['sentiment_analysis'].get('latest_vix') # Removed historical_vix_avg
                 )
 
             with tabs[6]: # 📚 Glossary
                 st.markdown("### 📚 Glossary")
-                st.info("The glossary content will be displayed here.") # Placeholder for actual glossary content
+                st.info("The glossary content will be displayed here.") 
 
         else:
             st.warning("No data fetched or sufficient data for analysis for the given ticker and timeframe. Please check the ticker symbol and try again.")
@@ -344,14 +329,13 @@ def main():
         st.header("⚡ Stock Scanner Results")
         if scanner_ticker_list:
             with st.spinner(f"Running scanner for {len(scanner_ticker_list)} tickers with '{selected_trading_style}' style..."):
-                # Pass all necessary parameters to the scanner function
-                scanner_results_df = scan_for_trades( # Changed from run_stock_scanner
+                scanner_results_df = scan_for_trades( 
                     scanner_ticker_list,
                     st.session_state.data_interval,
                     st.session_state.start_date,
                     st.session_state.end_date,
-                    st.session_state.indicator_selection, # Pass the full selection dict
-                    normalized_weights, # Pass the normalized weights
+                    st.session_state.indicator_selection, 
+                    normalized_weights, 
                     min_confidence=min_scanner_confidence
                 )
 
@@ -367,4 +351,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main() # Call the main function to run the app
+    main() 
