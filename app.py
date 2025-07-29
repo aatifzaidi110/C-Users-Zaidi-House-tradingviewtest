@@ -188,7 +188,14 @@ if analyze_button and ticker:
         latest_unemployment = get_economic_data_fred("UNRATE", st.session_state.start_date, st.session_state.end_date)
 
         # Get VIX data, passing start_date and end_date
-        vix_data = get_vix_data(st.session_state.start_date, st.session_state.end_date)
+        vix_data_raw = get_vix_data(st.session_state.start_date, st.session_state.end_date)
+        
+        # Check if vix_data_raw is a tuple and extract the DataFrame if it is
+        if isinstance(vix_data_raw, tuple):
+            vix_data = vix_data_raw[0] # Assuming the DataFrame is the first element
+        else:
+            vix_data = vix_data_raw # If it's already a DataFrame, use it directly
+
         latest_vix = vix_data['Close'].iloc[-1] if vix_data is not None and not vix_data.empty else None
         historical_vix_avg = vix_data['Close'].mean() if vix_data is not None and not vix_data.empty else None
 
