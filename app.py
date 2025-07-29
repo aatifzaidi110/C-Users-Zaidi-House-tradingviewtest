@@ -191,7 +191,15 @@ if analyze_button and ticker:
         # If df_result is None or an unexpected type, df remains an empty DataFrame
 
 
-        info = yf.Ticker(ticker).info # Fetch ticker info for company profile
+        info = None
+        try:
+            ticker_obj = yf.Ticker(ticker)
+            info = ticker_obj.info # Fetch ticker info for company profile
+        except Exception as e:
+            st.warning(f"Could not fetch ticker info for {ticker}: {e}")
+            print(f"Error fetching ticker info for {ticker}: {e}")
+
+
         finviz_data = get_finviz_data(ticker) # Fetch Finviz data
         
         # Get economic data, passing start_date and end_date
