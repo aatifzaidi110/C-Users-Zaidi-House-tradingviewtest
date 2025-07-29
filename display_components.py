@@ -670,6 +670,9 @@ def display_backtesting_tab(df_hist, indicator_selection): # Renamed from backte
 
 
 def display_trade_log_tab(LOG_FILE, ticker, selected_timeframe, overall_confidence, current_price, prev_close, trade_direction):
+    # Import os locally to ensure it's available
+    import os 
+
     st.markdown("### 📜 Trade Log")
 
     # Use a unique log file name based on ticker and timeframe to avoid conflicts
@@ -843,9 +846,9 @@ def display_scanner_tab(scanner_results_df): # Renamed from display_scanner_resu
             "R/R": f"{row.get('Reward/Risk', 'N/A')}",
             "Pivot (P)": f"${row.get('Pivot (P)', 'N/A')}" if pd.notna(row.get('Pivot (P)')) else 'N/A', # Removed .2f for string
             "R1": f"${row.get('Resistance 1 (R1)', 'N/A')}" if pd.notna(row.get('Resistance 1 (R1)')) else 'N/A', # Removed .2f for string
-            "S1": f"${row.get('Support 1 (S1)', 'N/A')}" if pd.notna(row.get('Support 1 (S1)')) else 'N/A', # Removed .2f for string
-            "R2": f"${row.get('Resistance 2 (R2)', 'N/A')}" if pd.notna(row.get('Resistance 2 (R2)')) else 'N/A', # Removed .2f for string
-            "S2": f"${row.get('Support 2 (S2)', 'N/A')}" if pd.notna(row.get('Support 2 (S2)')) else 'N/A', # Removed .2f for string
+            "S1": f"${row.get('Support 1 (S1)', 'N/A')}" if pd.notna(row.get('S1')) else 'N/A', # Removed .2f for string
+            "R2": f"${row.get('Resistance 2 (R2)', 'N/A')}" if pd.notna(row.get('R2')) else 'N/A', # Removed .2f for string
+            "S2": f"${row.get('Support 2 (S2)', 'N/A')}" if pd.notna(row.get('S2')) else 'N/A', # Removed .2f for string
             "Entry Details": entry_details_expander, # This will be expanded
             "Exit Details": exit_details_expander,   # This will be expanded
             "Rationale": row.get('Rationale', 'N/A')
@@ -884,4 +887,3 @@ def display_scanner_tab(scanner_results_df): # Renamed from display_scanner_resu
 
     st.markdown("---")
     st.info("Click on each ticker's header to expand/collapse detailed trade plan information.")
-
