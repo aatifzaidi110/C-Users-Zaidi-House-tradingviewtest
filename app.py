@@ -26,7 +26,7 @@ from utils import (
     suggest_options_strategy, generate_directional_trade_plan,
     calculate_confidence_score, convert_finviz_recom_to_score,
     get_economic_data_fred, get_vix_data, calculate_economic_score, calculate_sentiment_score,
-    run_stock_scanner # Ensure run_stock_scanner is imported
+    scan_for_trades # Ensure run_stock_scanner is imported
 )
 
 from display_components import (
