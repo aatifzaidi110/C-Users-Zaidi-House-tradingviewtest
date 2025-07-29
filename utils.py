@@ -274,7 +274,20 @@ def calculate_indicators(df, is_intraday=False):
 
     return df_cleaned
 # === Signal Generation ===
-def generate_signals_for_row(row_data):
+def generate_signals_for_row(row, indicator_selection, normalized_weights):
+    # Your existing logic for generating signals will go here.
+    # Make sure to utilize indicator_selection and normalized_weights
+    # within this function if they are relevant to its internal calculations.
+
+    # Example placeholder for return values, adjust according to your actual logic
+    bullish_signals = {}
+    bearish_signals = {}
+    technical_confidence_score = 50 # Or calculate based on signals
+
+    # Your signal generation logic using 'row', 'indicator_selection', and 'normalized_weights'
+    # ...
+
+    return bullish_signals, bearish_signals, technical_confidence_score
     """Generates bullish and bearish signals for a single row of data."""
     bullish_signals = {}
     bearish_signals = {}
