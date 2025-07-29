@@ -191,9 +191,14 @@ def calculate_indicators(df, indicator_selection, is_intraday):
     """
     df_copy = df.copy() # Work on a copy to avoid modifying original DataFrame
 
-    # Ensure columns are numeric, coercing errors
-    for col in ['Open', 'High', 'Low', 'Close', 'Volume']:
-        if col in df_copy.columns:
+    required_cols = ['Open', 'High', 'Low', 'Close', 'Volume']
+    # Reindex the DataFrame to ensure all required columns exist, filling missing with NaN
+    # This is more robust than iterating and adding, especially if df_copy is initially empty or malformed
+    df_copy = df_copy.reindex(columns=df_copy.columns.union(required_cols), fill_value=np.nan)
+
+    # Now, ensure numeric types for the core columns
+    for col in required_cols:
+        if col in df_copy.columns: # This check is now redundant but harmless after reindex
             # Always convert to a Series first if it's not already, then to numeric
             if isinstance(df_copy[col], pd.DataFrame):
                 # If it's a DataFrame, assume it's a single column and convert to Series
@@ -204,11 +209,16 @@ def calculate_indicators(df, indicator_selection, is_intraday):
             else:
                 # If it's already a Series, just convert to numeric
                 df_copy[col] = pd.to_numeric(df_copy[col], errors='coerce')
-        else:
-            # If column is missing, add it with NaNs to prevent errors in later calculations
-            df_copy[col] = np.nan
+        # No 'else' needed here, as reindex already ensured column existence
 
-    df_copy = df_copy.dropna(subset=['Open', 'High', 'Low', 'Close', 'Volume'])
+    # It's crucial to check if df_copy is empty *after* the initial data fetch and before calculations.
+    # The dropna could make it empty, but if it's empty *before* dropna, it's better to catch it earlier.
+    if df_copy.empty:
+        print("DataFrame is empty after ensuring required columns and initial type conversion.")
+        return pd.DataFrame()
+
+    # Now dropna can be safely called as columns are guaranteed to exist
+    df_copy = df_copy.dropna(subset=required_cols)
 
     if df_copy.empty:
         print("DataFrame is empty after cleaning for indicator calculation.")
@@ -302,6 +312,255 @@ def calculate_indicators(df, indicator_selection, is_intraday):
         df_copy = df_copy.drop(columns=['VWAP']) # Drop if not intraday and VWAP was somehow calculated
 
     # Drop rows with NaN values that result from indicator calculations
+    # This line is now safer as required_cols are guaranteed to exist.
+    df_copy = df_copy.dropna()
+
+    return df_copy
+
+def calculate_pivot_points(df):
+    """
+    Calculates Classic Pivot Points (P, R1, R2, S1, S2) for each period in the DataFrame.
+    Assumes df has 'High', 'Low', 'Close' columns.
+    """
+    df_copy = df.copy()
+    
+    # Ensure columns are numeric
+    for col in ['High', 'Low', 'Close']:
+        df_copy[col] = pd.to_numeric(df_copy[col], errors='coerce')
+
+    # Drop rows with NaNs in critical columns for pivot point calculation
+    df_copy = df_copy.dropna(subset=['High', 'Low', 'Close'])
+
+    if df_copy.empty:
+        print("DataFrame is empty after cleaning for pivot point calculation.")
+        return pd.DataFrame() # Return empty DataFrame if no valid data
+
+    # Calculate Pivot Point (P)
+    df_copy['Pivot'] = (df_copy['High'] + df_copy['Low'] + df_copy['Close']) / 3
+
+    # Calculate Resistance 1 (R1)
+    df_copy['R1'] = (2 * df_copy['Pivot']) - df_copy['Low']
+
+    # Calculate Support 1 (S1)
+    df_copy['S1'] = (2 * df_copy['Pivot']) - df_copy['High']
+
+    # Calculate Resistance 2 (R2)
+    df_copy['R2'] = df_copy['Pivot'] + (df_copy['High'] - df_copy['Low'])
+
+    # Calculate Support 2 (S2)
+    df_copy['S2'] = df_copy['Pivot'] - (df_copy['High'] - df_copy['Low'])
+
+    # Select only the pivot point columns to return
+    pivot_cols = ['Pivot', 'R1', 'S1', 'R2', 'S2']
+    # Ensure all pivot_cols exist before selecting
+    existing_pivot_cols = [col for col in pivot_cols if col in df_copy.columns]
+    
+    return df_copy[existing_pivot_cols]
+
+
+# === Signal Generation and Confidence Scoring ===
+
+def get_indicator_summary_text(indicator_name, current_value, bullish_fired, bearish_fired):
+    """
+    Generates a qualitative summary text for a given indicator.
+    """
+    summary = f"**{indicator_name}:** "
+    if current_value is not None and not pd.isna(current_value):
+        if isinstance(current_value, (int, float)) and not isinstance(current_value, bool):
+            summary += f"Current Value: `{current_value:.2f}`. "
+        else:
+            summary += "Current Value: N/A. "
+    else:
+        summary += "Current Value: N/A. "
+
+    if bullish_fired and bearish_fired:
+        summary += "Conflicting signals (both bullish and bearish detected)."
+    elif bullish_fired:
+        summary += "Bullish signal detected."
+    elif bearish_fired:
+        summary += "Bearish signal detected."
+    else:
+        summary += "Neutral or no clear signal."
+    return summary
+
+
+def generate_signals_for_row(row, indicator_selection, normalized_weights):
+    """
+    Generates bullish and bearish signals based on the latest row of data
+    and selected indicators.
+    Args:
+        row (pd.Series): The latest row of the DataFrame with calculated indicators.
+        indicator_selection (dict): Dictionary of selected indicators.
+        normalized_weights (dict): Dictionary of normalized weights for each component.
+    Returns:
+        tuple: (bullish_signals, bearish_signals, signal_strength)
+               bullish_signals (dict): True/False for each bullish signal.
+               bearish_signals (dict): True/False for each bearish signal.
+               signal_strength (dict): Raw strength for each signal (0-1).
+    """
+    bullish_signals = {
+        "EMA Trend": False, "MACD": False, "RSI Momentum": False,
+        "Bollinger Bands": False, "Stochastic": False, "Ichimoku Cloud": False,
+        "Parabolic SAR": False, "ADX": False, "Volume Spike": False,
+        "CCI": False, "ROC": False, "OBV": False, "VWAP": False,
+        "Pivot Points": False
+    }
+    bearish_signals = {
+        "EMA Trend": False, "MACD": False, "RSI Momentum": False,
+        "Bollinger Bands": False, "Stochastic": False, "Ichimoku Cloud": False,
+        "Parabolic SAR": False, "ADX": False, "Volume Spike": False,
+        "CCI": False, "ROC": False, "OBV": False, "VWAP": False,
+        "Pivot Points": False
+    }
+    signal_strength = {
+        "EMA Trend": 0.0, "MACD": 0.0, "RSI Momentum": 0.0,
+        "Bollinger Bands": 0.0, "Stochastic": 0.0, "Ichimoku Cloud": 0.0,
+        "Parabolic SAR": 0.0, "ADX": 0.0, "Volume Spike": 0.0,
+        "CCI": 0.0, "ROC": 0.0, "OBV": 0.0, "VWAP": 0.0,
+        "Pivot Points": 0.0
+    }
+
+    close = row['Close']
+    
+    # EMA Trend
+    if indicator_selection.get("EMA Trend") and 'EMA21' in row and 'EMA50' in row and 'EMA200' in row:
+        if close > row['EMA21'] > row['EMA50'] > row['EMA200']:
+            bullish_signals["EMA Trend"] = True
+            signal_strength["EMA Trend"] = 1.0
+        elif close < row['EMA21'] < row['EMA50'] < row['EMA200']:
+            bearish_signals["EMA Trend"] = True
+            signal_strength["EMA Trend"] = 1.0
+
+    # MACD
+    if indicator_selection.get("MACD") and 'MACD' in row and 'MACD_Signal' in row and 'MACD_Hist' in row:
+        if row['MACD'] > row['MACD_Signal'] and row['MACD_Hist'] > 0:
+            bullish_signals["MACD"] = True
+            signal_strength["MACD"] = min(1.0, abs(row['MACD_Hist']) / (close * 0.01)) # Scale by 1% of price
+        elif row['MACD'] < row['MACD_Signal'] and row['MACD_Hist'] < 0:
+            bearish_signals["MACD"] = True
+            signal_strength["MACD"] = min(1.0, abs(row['MACD_Hist']) / (close * 0.01))
+
+    # RSI Momentum
+    if indicator_selection.get("RSI Momentum") and 'RSI' in row:
+        if row['RSI'] < 30: # Oversold
+            bullish_signals["RSI Momentum"] = True
+            signal_strength["RSI Momentum"] = (30 - row['RSI']) / 30
+        elif row['RSI'] > 70: # Overbought
+            bearish_signals["RSI Momentum"] = True
+            signal_strength["RSI Momentum"] = (row['RSI'] - 70) / 30
+
+    # Bollinger Bands
+    if indicator_selection.get("Bollinger Bands") and 'BB_upper' in row and 'BB_lower' in row:
+        if close < row['BB_lower']:
+            bullish_signals["Bollinger Bands"] = True
+            signal_strength["Bollinger Bands"] = (row['BB_lower'] - close) / row['BB_lower']
+        elif close > row['BB_upper']:
+            bearish_signals["Bollinger Bands"] = True
+            signal_strength["Bollinger Bands"] = (close - row['BB_upper']) / row['BB_upper']
+
+    # Stochastic Oscillator
+    if indicator_selection.get("Stochastic") and 'Stoch_K' in row and 'Stoch_D' in row:
+        if row['Stoch_K'] < 20 and row['Stoch_K'] > row['Stoch_D']: # Oversold, K crosses above D
+            bullish_signals["Stochastic"] = True
+            signal_strength["Stochastic"] = (20 - row['Stoch_K']) / 20
+        elif row['Stoch_K'] > 80 and row['Stoch_K'] < row['Stoch_D']: # Overbought, K crosses below D
+            bearish_signals["Stochastic"] = True
+            signal_strength["Stochastic"] = (row['Stoch_K'] - 80) / 20
+
+    # Ichimoku Cloud
+    if indicator_selection.get("Ichimoku Cloud"):
+        # Ichimoku requires longer data history, handle NaNs
+        # The `ta.trend.ichimoku_cloud` function expects Series, not a single row.
+        # This part of the logic needs to read pre-calculated Ichimoku values from 'row'.
+        if 'ichimoku_base_line' in row and 'ichimoku_conversion_line' in row and \
+           'ichimoku_leading_span_a' in row and 'ichimoku_leading_span_b' in row:
+            
+            ichimoku_base_line = row['ichimoku_base_line']
+            ichimoku_conversion_line = row['ichimoku_conversion_line']
+            ichimoku_leading_span_a = row['ichimoku_leading_span_a']
+            ichimoku_leading_span_b = row['ichimoku_leading_span_b']
+
+            # Bullish: Price above cloud, Conversion Line above Base Line, Leading Span A above Leading Span B
+            if (close > ichimoku_leading_span_a and close > ichimoku_leading_span_b) and \
+               (ichimoku_conversion_line > ichimoku_base_line):
+                bullish_signals["Ichimoku Cloud"] = True
+                signal_strength["Ichimoku Cloud"] = 1.0 # Strong signal
+            # Bearish: Price below cloud, Conversion Line below Base Line, Leading Span A below Leading Span B
+            elif (close < ichimoku_leading_span_a and close < ichimoku_leading_span_b) and \
+                 (ichimoku_conversion_line < ichimoku_base_line):
+                bearish_signals["Ichimoku Cloud"] = True
+                signal_strength["Ichimoku Cloud"] = 1.0 # Strong signal
+
+
+    # Parabolic SAR
+    if indicator_selection.get("Parabolic SAR"):
+        if close > row['psar']:
+            bullish_signals["Parabolic SAR"] = True
+            signal_strength["Parabolic SAR"] = 1.0
+        elif close < row['psar']:
+            bearish_signals["Parabolic SAR"] = True
+            signal_strength["Parabolic SAR"] = 1.0
+
+    # ADX
+    if indicator_selection.get("ADX") and 'adx' in row and 'plus_di' in row and 'minus_di' in row:
+        if row['adx'] > 25: # Strong trend
+            if row['plus_di'] > row['minus_di']:
+                bullish_signals["ADX"] = True
+                signal_strength["ADX"] = (row['adx'] - 25) / 75 # Scale strength by ADX value
+            elif row['minus_di'] > row['plus_di']:
+                bearish_signals["ADX"] = True
+                signal_strength["ADX"] = (row['adx'] - 25) / 75
+    
+    # Volume Spike
+    if indicator_selection.get("Volume Spike") and 'Volume_Spike' in row:
+        if row['Volume_Spike']:
+            # Volume spike itself isn't directional, but can confirm other signals
+            # Assign a neutral or confirming strength
+            signal_strength["Volume Spike"] = 0.5 # Neutral confirmation
+
+    # CCI (Commodity Channel Index)
+    if indicator_selection.get("CCI") and 'CCI' in row:
+        if row['CCI'] > 100:
+            bullish_signals["CCI"] = True
+            signal_strength["CCI"] = min(1.0, (row['CCI'] - 100) / 100)
+        elif row['CCI'] < -100:
+            bearish_signals["CCI"] = True
+            signal_strength["CCI"] = min(1.0, (-100 - row['CCI']) / 100)
+
+    # ROC (Rate of Change)
+    if indicator_selection.get("ROC") and 'ROC' in row:
+        if row['ROC'] > 0:
+            bullish_signals["ROC"] = True
+            signal_strength["ROC"] = min(1.0, row['ROC'] / 10) # Scale, adjust divisor as needed
+        elif row['ROC'] < 0:
+            bearish_signals["ROC"] = True
+            signal_strength["ROC"] = min(1.0, abs(row['ROC']) / 10)
+
+    # OBV (On-Balance Volume)
+    if indicator_selection.get("OBV") and 'obv' in row and 'obv_ema' in row:
+        if row['obv'] > row['obv_ema']:
+            bullish_signals["OBV"] = True
+            signal_strength["OBV"] = 1.0
+        elif row['obv'] < row['obv_ema']:
+            bearish_signals["OBV"] = True
+            signal_strength["OBV"] = 1.0
+
+    # VWAP (Volume Weighted Average Price) - Only for intraday
+    if indicator_selection.get("VWAP") and is_intraday:
+        # VWAP typically needs to be calculated per day for intraday data
+        # This implementation assumes df_copy is already intraday data for a single day or handles daily resets.
+        # For multi-day intraday data, a more complex group-by-day VWAP calculation would be needed.
+        # For simplicity here, we'll calculate a cumulative VWAP.
+        # Ensure 'Volume' column exists and is numeric
+        if 'Volume' in df_copy.columns and pd.api.types.is_numeric_dtype(df_copy['Volume']):
+            df_copy['VWAP'] = (df_copy['Close'] * df_copy['Volume']).cumsum() / df_copy['Volume'].cumsum()
+        else:
+            df_copy['VWAP'] = np.nan # Set to NaN if Volume is missing or not numeric
+    elif "VWAP" in df_copy.columns:
+        df_copy = df_copy.drop(columns=['VWAP']) # Drop if not intraday and VWAP was somehow calculated
+
+    # Drop rows with NaN values that result from indicator calculations
+    # This line is now safer as required_cols are guaranteed to exist.
     df_copy = df_copy.dropna()
 
     return df_copy
@@ -1347,4 +1606,3 @@ def test_yfinance_data_fetch():
 # Example of how to call the test function if this script is run directly
 if __name__ == "__main__":
     test_yfinance_data_fetch()
-
