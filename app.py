@@ -1,4 +1,4 @@
-# app.py - Final Version (v1.34) 0729
+# app.py - Final Version (v1.34) 0730
 import sys
 import os
 import streamlit as st
@@ -64,6 +64,57 @@ display_scanner_tab # Ensure display_scanner_tab is imported
 # --- Configuration ---
 # Set Streamlit page configuration
 st.set_page_config(layout="wide", page_title="Advanced Stock Analyzer")
+
+st.sidebar.header("Configuration")
+ticker = st.sidebar.text_input("Enter Stock Ticker (e.g., AAPL)")
+analyze = st.sidebar.button("Analyze Ticker")
+clear = st.sidebar.button("Clear Cache")
+
+if clear:
+    st.cache_data.clear()
+    st.cache_resource.clear()
+    st.success("🔁 Cache cleared.")
+
+if analyze:
+    if not ticker:
+        st.warning("⚠️ Please enter a stock ticker symbol.")
+    else:
+        st.markdown(f"## Analyzing {ticker.upper()}")
+        try:
+            df = yf.download(ticker, period="3mo", interval="1h")
+            df.dropna(inplace=True)
+            indicator_selection = {
+                "EMA Trend": True,
+                "MACD": True,
+                "RSI Momentum": True,
+                "Bollinger Bands": True
+            }
+            df_indicators = calculate_indicators(df, indicator_selection, is_intraday=True)
+
+            # Simulated signal strengths for demo purposes
+            signal_strengths = {
+                "EMA Trend": 0.7,
+                "MACD": 0.8,
+                "RSI Momentum": 0.6,
+                "Bollinger Bands": 0.9
+            }
+
+            bullish_signals = 2  # placeholder
+            bearish_signals = 1  # placeholder
+            normalized_weights = {key: 1 for key in signal_strengths}
+
+            confidence_result = calculate_confidence_score(
+                bullish_signals=bullish_signals,
+                bearish_signals=bearish_signals,
+                signal_strength=signal_strengths,
+                normalized_weights=normalized_weights
+            )
+
+            st.markdown("### ✅ Confidence Score Result")
+            st.write(confidence_result)
+
+        except Exception as e:
+            st.error(f"❌ Error analyzing ticker: {e}")
 
 # --- Session State Initialization ---
 # Initialize session state for consistent UI across reruns
