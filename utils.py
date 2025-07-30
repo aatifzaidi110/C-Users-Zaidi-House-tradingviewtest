@@ -265,20 +265,15 @@ def calculate_indicators(df, indicator_selection, is_intraday):
         # df_copy['RSI'] = ta.momentum.RSIIndicator(df_copy['Close'], window=14).rsi()
         # df_copy['SMA_20'] = ta.trend.SMAIndicator(df_copy['Close'], window=20).sma_indicator()
         # ... and so on for other indicators ...
-
-
         # Potentially problematic line - consider commenting or modifying:
         # df_copy.dropna(inplace=True) # This line is around line 257 in image_d1b9a9.png.
-                                      # You might want to comment it out by adding a '#' at the beginning,
-                                      # or change it as discussed (e.g., df_copy.dropna(subset=['Close'], inplace=True))
-
+        # You might want to comment it out by adding a '#' at the beginning,
+        # or change it as discussed (e.g., df_copy.dropna(subset=['Close'], inplace=True))
 
         print(f"DEBUG: calculate_indicators df_copy shape AFTER operations: {df_copy.shape}") # Add this line (around line 260)
         print(f"DEBUG: calculate_indicators df_copy columns: {df_copy.columns.tolist()}") # Add this line (around line 261)
+        return df_copy
 
-    return df_copy
-
-    
     # Drop NaNs after indicator calculations
     df_copy.dropna(inplace=True)
 
