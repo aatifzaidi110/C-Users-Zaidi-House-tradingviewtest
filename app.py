@@ -498,7 +498,7 @@ def calculate_confidence_score(
                 st.info("No calculated data available to generate a trade plan.")
 
 
-        with tabs[3]: # 📜 Trade Log
+   with tabs[3]: # 📜 Trade Log
             display_trade_log_tab(
                 "trade_log.csv", # Placeholder, actual file name constructed inside function
                 ticker,
@@ -549,12 +549,12 @@ def calculate_confidence_score(
             st.info("The glossary content will be displayed here.") # Placeholder for actual glossary content
 
         else:
-            st.warning("No data fetched for the given ticker and timeframe. Please check the ticker symbol and try again.")
-            st.info("Ensure the ticker is valid and data is available for the selected period. Intraday data typically has a limited history (e.g., 7 days).")
+st.warning("No data fetched for the given ticker and timeframe. Please check the ticker symbol and try again.")
+st.info("Ensure the ticker is valid and data is available for the selected period. Intraday data typically has a limited history (e.g., 7 days).")
 
 elif run_scanner_button: # This block is for the scanner
-    st.header("⚡ Stock Scanner Results")
-    if scanner_ticker_list:
+st.header("⚡ Stock Scanner Results")
+if scanner_ticker_list:
         with st.spinner(f"Running scanner for {len(scanner_ticker_list)} tickers with '{selected_trading_style}' style..."):
             # Pass all necessary parameters to the scanner function
             scanner_results_df = scan_for_trades( # Changed from run_stock_scanner to scan_for_trades
@@ -576,7 +576,7 @@ elif run_scanner_button: # This block is for the scanner
         st.info("Please enter tickers in the 'Tickers for Scanner' box in the sidebar to run the scanner.")
         
 else:
-    st.info("Enter a stock ticker in the sidebar and click 'Analyze Ticker' to begin analysis, or configure and run the 'Stock Scanner'.")
+st.info("Enter a stock ticker in the sidebar and click 'Analyze Ticker' to begin analysis, or configure and run the 'Stock Scanner'.")
 
 
 if __name__ == "__main__":
