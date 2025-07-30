@@ -333,6 +333,12 @@ if analyze_button and ticker:
             adx_value = last_row['ADX']
             signal_strengths['ADX'] = min(adx_value / 40, 1)
 
+        # === Initialize Weights and Flags ===
+        user_sentiment_weights = {"sentiment": 1.0}
+        expert_sentiment_weights = {"expert": 1.0}
+        use_sentiment = True
+        use_expert = True
+
 
         # Calculate Confidence Scores
         # Pass the full indicator_selection and normalized_weights to calculate_confidence_score
