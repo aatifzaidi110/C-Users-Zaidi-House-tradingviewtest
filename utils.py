@@ -264,22 +264,35 @@ def calculate_indicators(df, indicator_selection, is_intraday):
 
 
 def calculate_confidence_score(
-    last_row,
-    finviz_data.get('news_sentiment_score'),
-    finviz_data.get('recom_score'),
-    latest_gdp.iloc[-1] if latest_gdp is not None and not latest_gdp.empty and len(latest_gdp) > 0 else None,
-    latest_cpi.iloc[-1] if latest_cpi is not None and not latest_cpi.empty and len(latest_cpi) > 0 else None,
-    latest_unemployment.iloc[-1] if latest_unemployment is not None and not latest_unemployment.empty and len(latest_unemployment) > 0 else None,
+   last_row,
+    # These are the *names* of the parameters that will receive the values
+    news_sentiment_score,    # This parameter will receive finviz_data.get('news_sentiment_score')
+    recom_score,             # This parameter will receive finviz_data.get('recom_score')
+    latest_gdp_val,          # This parameter will receive the GDP value (e.g., latest_gdp.iloc[-1] or None)
+    latest_cpi_val,          # This parameter will receive the CPI value
+    latest_unemployment_val, # This parameter will receive the unemployment value
     latest_vix,
     historical_vix_avg,
     normalized_weights,
-    st.session_state.indicator_selection,
+    indicator_selection_dict, # This parameter will receive st.session_state.indicator_selection
     signal_strengths,
     user_sentiment_weights,
     expert_sentiment_weights,
     use_sentiment,
     use_expert
 )
+    # Now, inside this function (below line 282), you would use these parameter names.
+    # For example:
+    # if news_sentiment_score is not None:
+    #     # Do something with news_sentiment_score
+    #     pass
+
+    # You also need to adjust any internal logic to use these new parameter names.
+    # For example, instead of 'st.session_state.indicator_selection', you'd use 'indicator_selection_dict'.
+
+    total_score = 0
+    max_score = 0
+
     """
     Extended confidence score calculation including indicators, sentiment, expert input, and macroeconomic factors.
     """
@@ -342,7 +355,21 @@ def calculate_confidence_score(
     confidence_score = (total_score / max_score) * 100 if max_score else 0
     direction = "Bullish" if confidence_score > 60 else "Bearish" if confidence_score < 40 else "Neutral"
 
-    return confidence_score, direction, reasons
+    # ✅ Add confidence level band
+    if confidence_score > 80:
+        confidence_level = "High"
+    elif confidence_score > 60:
+        confidence_level = "Moderate"
+    else:
+        confidence_level = "Low"
+
+    # ✅ Return a dictionary instead of a tuple
+    return {
+        "confidence_score": confidence_score,
+        "direction": direction,
+        "confidence_level": confidence_level,
+        "reasons": reasons
+    }
 
 
 
