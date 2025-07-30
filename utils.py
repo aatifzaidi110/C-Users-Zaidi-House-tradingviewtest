@@ -265,21 +265,21 @@ def calculate_indicators(df, indicator_selection, is_intraday):
 
 def calculate_confidence_score(
     last_row,
-    news_sentiment,
-    recom_score,
-    latest_gdp,
-    latest_cpi,
-    latest_unemployment,
+    finviz_data.get('news_sentiment_score'),
+    finviz_data.get('recom_score'),
+    latest_gdp.iloc[-1] if latest_gdp is not None and not latest_gdp.empty and len(latest_gdp) > 0 else None,
+    latest_cpi.iloc[-1] if latest_cpi is not None and not latest_cpi.empty and len(latest_cpi) > 0 else None,
+    latest_unemployment.iloc[-1] if latest_unemployment is not None and not latest_unemployment.empty and len(latest_unemployment) > 0 else None,
     latest_vix,
     historical_vix_avg,
     normalized_weights,
-    indicator_selection,
+    st.session_state.indicator_selection,
     signal_strengths,
     user_sentiment_weights,
     expert_sentiment_weights,
     use_sentiment,
     use_expert
-):
+)
     """
     Extended confidence score calculation including indicators, sentiment, expert input, and macroeconomic factors.
     """
