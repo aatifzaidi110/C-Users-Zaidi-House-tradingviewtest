@@ -327,6 +327,8 @@ if analyze_button and ticker:
 
         if 'MACD' in df_calculated.columns and 'MACD_Signal' in df_calculated.columns:
             macd_diff = last_row['MACD'] - last_row['MACD_Signal']
+            if isinstance(macd_diff, pd.Series):
+                macd_diff = macd_diff.item()
             signal_strengths['MACD'] = 1 if macd_diff > 0 else 0
 
         if 'ADX' in df_calculated.columns:
