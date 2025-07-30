@@ -369,7 +369,7 @@ if analyze_button and ticker:
 
         # Calculate Confidence Scores
         # Pass the full indicator_selection and normalized_weights to calculate_confidence_score
-        scores, overall_confidence, trade_direction = calculate_confidence_score(
+        confidence_result  = calculate_confidence_score(
             last_row,
             finviz_data.get('news_sentiment_score'),
             finviz_data.get('recom_score'),
@@ -386,6 +386,14 @@ if analyze_button and ticker:
             use_sentiment,
             use_expert
         )
+        scores = confidence_result["confidence_score"]
+        overall_confidence = confidence_result["confidence_level"]
+        trade_direction = confidence_result["direction"]
+
+        # Debug Prints
+        print("✅ Confidence Score:", scores)
+        print("📊 Confidence Level:", overall_confidence)
+        print("📈 Direction:", trade_direction)
 
 
         # Get options chain expiration dates
