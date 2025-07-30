@@ -178,11 +178,9 @@ def get_vix_data(start_date, end_date):
 
 
 # === Indicator Calculation Functions ===
-
 def calculate_indicators(df, indicator_selection, is_intraday):
     df_copy = df.copy()
 
-    # Ensure standard OHLCV columns are present
     required_cols = ['Open', 'High', 'Low', 'Close', 'Volume']
     if not all(col in df_copy.columns for col in required_cols):
         raise ValueError("Missing required columns in input DataFrame.")
@@ -217,16 +215,52 @@ def calculate_indicators(df, indicator_selection, is_intraday):
         df_copy['Stoch_K'] = stoch.stoch()
         df_copy['Stoch_D'] = stoch.stoch_signal()
 
-    # === Add more indicators as needed below (e.g., CCI, OBV, etc.) ===
+    # === Ichimoku Cloud ===
+    if indicator_selection.get("Ichimoku Cloud"):
+        ichi = ta.trend.IchimokuIndicator(df_copy['High'], df_copy['Low'])
+        df_copy['Tenkan_sen'] = ichi.ichimoku_conversion_line()
+        df_copy['Kijun_sen'] = ichi.ichimoku_base_line()
+        df_copy['Senkou_span_a'] = ichi.ichimoku_a()
+        df_copy['Senkou_span_b'] = ichi.ichimoku_b()
 
-    # Optional: Drop rows where indicators are NaN
+    # === Parabolic SAR ===
+    if indicator_selection.get("Parabolic SAR"):
+        psar = ta.trend.PSARIndicator(df_copy['High'], df_copy['Low'], df_copy['Close'])
+        df_copy['Parabolic_SAR'] = psar.psar()
+
+    # === ADX ===
+    if indicator_selection.get("ADX"):
+        adx = ta.trend.ADXIndicator(df_copy['High'], df_copy['Low'], df_copy['Close'])
+        df_copy['ADX'] = adx.adx()
+
+    # === CCI ===
+    if indicator_selection.get("CCI"):
+        cci = ta.trend.CCIIndicator(df_copy['High'], df_copy['Low'], df_copy['Close'])
+        df_copy['CCI'] = cci.cci()
+
+    # === ROC ===
+    if indicator_selection.get("ROC"):
+        roc = ta.momentum.ROCIndicator(df_copy['Close'])
+        df_copy['ROC'] = roc.roc()
+
+    # === OBV ===
+    if indicator_selection.get("OBV"):
+        obv = ta.volume.OnBalanceVolumeIndicator(df_copy['Close'], df_copy['Volume'])
+        df_copy['OBV'] = obv.on_balance_volume()
+
+    # === Volume Spike ===
+    if indicator_selection.get("Volume Spike"):
+        df_copy['Volume_Spike'] = df_copy['Volume'].pct_change() > 1.5  # basic spike flag
+
+    # Drop NaNs after indicator calculations
     df_copy.dropna(inplace=True)
 
+    # Debug logs
     print("✅ [calculate_indicators] Output shape:", df_copy.shape)
     print("✅ [calculate_indicators] Columns:", df_copy.columns.tolist())
 
-
     return df_copy
+
 
     # Combine current and required columns, then create a unique list for reindex
     all_cols = list(set(current_col_names + required_cols))
