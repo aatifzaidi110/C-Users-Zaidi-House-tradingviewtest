@@ -548,9 +548,9 @@ def calculate_confidence_score(
             st.markdown("### 📚 Glossary")
             st.info("The glossary content will be displayed here.") # Placeholder for actual glossary content
 
-else:
-        st.warning("No data fetched for the given ticker and timeframe. Please check the ticker symbol and try again.")
-        st.info("Ensure the ticker is valid and data is available for the selected period. Intraday data typically has a limited history (e.g., 7 days).")
+        else:
+            st.warning("No data fetched for the given ticker and timeframe. Please check the ticker symbol and try again.")
+            st.info("Ensure the ticker is valid and data is available for the selected period. Intraday data typically has a limited history (e.g., 7 days).")
 
 elif run_scanner_button: # This block is for the scanner
     st.header("⚡ Stock Scanner Results")
