@@ -369,7 +369,7 @@ if analyze_button and ticker:
 
         # Calculate Confidence Scores
         # Pass the full indicator_selection and normalized_weights to calculate_confidence_score
-        def calculate_confidence_score(
+def calculate_confidence_score(
             last_row=last_row,
             news_sentiment=finviz_data.get('news_sentiment_score'),
             recom_score=finviz_data.get('recom_score'),
