@@ -254,7 +254,6 @@ def calculate_indicators(df, indicator_selection, is_intraday):
         df_copy['Volume_Spike'] = df_copy['Volume'].pct_change() > 1.5  # basic spike flag
 
     # In utils.py
-
     def calculate_indicators(df, indicator_selection, is_intraday):
         df_copy = df.copy()
         print(f"DEBUG: calculate_indicators input df_copy shape: {df_copy.shape}") # Add this line (around line 257)
@@ -269,14 +268,13 @@ def calculate_indicators(df, indicator_selection, is_intraday):
         # df_copy.dropna(inplace=True) # This line is around line 257 in image_d1b9a9.png.
         # You might want to comment it out by adding a '#' at the beginning,
         # or change it as discussed (e.g., df_copy.dropna(subset=['Close'], inplace=True))
+        df_copy.dropna(subset=['Close'], inplace=True)
 
         print(f"DEBUG: calculate_indicators df_copy shape AFTER operations: {df_copy.shape}") # Add this line (around line 260)
         print(f"DEBUG: calculate_indicators df_copy columns: {df_copy.columns.tolist()}") # Add this line (around line 261)
+        
         return df_copy
-
-    # Drop NaNs after indicator calculations
-    df_copy.dropna(inplace=True)
-
+    
     # Debug logs
     print("✅ [calculate_indicators] Output shape:", df_copy.shape)
     print("✅ [calculate_indicators] Columns:", df_copy.columns.tolist())
