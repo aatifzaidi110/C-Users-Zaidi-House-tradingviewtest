@@ -66,7 +66,14 @@ display_scanner_tab # Ensure display_scanner_tab is imported
 st.set_page_config(layout="wide", page_title="Advanced Stock Analyzer")
 
 st.sidebar.header("Configuration")
-ticker = st.sidebar.text_input("Enter Stock Ticker (e.g., AAPL)")
+ticker = st.sidebar.text_input("Enter Stock Ticker (e.g., AAPL)", key="ticker_input")
+
+# Store the ticker in session_state safely
+if 'ticker' not in st.session_state:
+    st.session_state.ticker = ticker
+else:
+    st.session_state.ticker = ticker
+st.session_state.ticker = ticker
 analyze = st.sidebar.button("Analyze Ticker")
 clear = st.sidebar.button("Clear Cache")
 
