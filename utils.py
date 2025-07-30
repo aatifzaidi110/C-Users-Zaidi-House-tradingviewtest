@@ -280,7 +280,7 @@ def calculate_confidence_score(
     expert_sentiment_weights,
     use_sentiment,
     use_expert
-)
+    )
     # Now, inside this function (below line 282), you would use these parameter names.
     # For example:
     # if news_sentiment_score is not None:
