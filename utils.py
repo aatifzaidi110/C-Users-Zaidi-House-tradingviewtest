@@ -290,7 +290,7 @@ def calculate_indicators(df, indicator_selection, is_intraday):
 
 
 def calculate_confidence_score(
-   last_row,
+    last_row,
     # These are the *names* of the parameters that will receive the values
     news_sentiment_score,    # This parameter will receive finviz_data.get('news_sentiment_score')
     recom_score,             # This parameter will receive finviz_data.get('recom_score')
@@ -305,8 +305,12 @@ def calculate_confidence_score(
     user_sentiment_weights,
     expert_sentiment_weights,
     use_sentiment,
-    use_expert
-    ):
+    use_expert # THIS IS THE LAST PARAMETER. NO COMMA AFTER IT.
+): # <--- THIS LINE MUST BE EXACTLY THIS: '):' with no leading spaces before the ')' and no other characters
+   # No comments on this line unless they are after the ':'
+   # The first line of the function body (e.g., total_score = 0) must be indented
+    total_score = 0
+    max_score = 0
     
     total_score = 0
     max_score = 0
