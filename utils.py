@@ -262,6 +262,55 @@ def calculate_indicators(df, indicator_selection, is_intraday):
     return df_copy
 
 
+def calculate_confidence_score(
+    last_row,
+    news_sentiment,
+    recom_score,
+    normalized_weights,
+    indicator_selection,
+    signal_strengths,
+    user_sentiment_weights,
+    expert_sentiment_weights,
+    use_sentiment,
+    use_expert
+):
+    """
+    Extended confidence score calculation including sentiment and expert input.
+    """
+    total_score = 0
+    max_score = 0
+    reasons = []
+
+    for indicator, strength in signal_strengths.items():
+        if indicator_selection.get(indicator):
+            weight = normalized_weights.get(indicator, 1)
+            total_score += weight * strength
+            max_score += weight
+            reasons.append(f"• {indicator}: {strength:.2f} (weight {weight:.2f})")
+
+    # Add sentiment if enabled
+    if use_sentiment and news_sentiment is not None:
+        sentiment_weight = user_sentiment_weights.get("sentiment", 1)
+        total_score += sentiment_weight * news_sentiment
+        max_score += sentiment_weight
+        reasons.append(f"• News Sentiment: {news_sentiment:.2f} (weight {sentiment_weight:.2f})")
+
+    # Add expert recommendation if enabled
+    if use_expert and recom_score is not None:
+        expert_weight = expert_sentiment_weights.get("expert", 1)
+        total_score += expert_weight * recom_score
+        max_score += expert_weight
+        reasons.append(f"• Expert Score: {recom_score:.2f} (weight {expert_weight:.2f})")
+
+    # Final score
+    confidence_score = (total_score / max_score) * 100 if max_score else 0
+
+    # Determine direction
+    direction = "Bullish" if confidence_score > 60 else "Bearish" if confidence_score < 40 else "Neutral"
+
+    return confidence_score, direction, reasons
+
+
     # Combine current and required columns, then create a unique list for reindex
     all_cols = list(set(current_col_names + required_cols))
     
