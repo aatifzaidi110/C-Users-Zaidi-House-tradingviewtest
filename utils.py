@@ -412,7 +412,6 @@ def calculate_confidence_score(
         test_confidence_score_calculation()
         test_yfinance_data_fetch()
 
-
     
     # Combine current and required columns, then create a unique list for reindex
     all_cols = list(set(current_col_names + required_cols))
