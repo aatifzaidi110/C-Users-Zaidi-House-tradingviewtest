@@ -387,7 +387,33 @@ def calculate_confidence_score(
         "confidence_level": confidence_level,
         "reasons": reasons
     }
+# === Unit Tests ===
+    def test_confidence_score_calculation():
+        """Unit test for confidence score calculation."""
+        test_row = pd.Series({'Close': 150, 'RSI': 45})
+        result = calculate_confidence_score(
+            last_row=test_row,
+            news_sentiment_score=75,
+            analyst_recom_score=80,
+            latest_gdp=2.5,
+            latest_cpi=2.8,
+            latest_unemployment=3.9,
+            latest_vix=15,
+            historical_vix_avg=20,
+            normalized_weights={"RSI Momentum": 0.5},
+            indicator_selection={"RSI Momentum": True},
+            signal_strengths={"RSI Momentum": 0.7}
+        )
+        assert 0 <= result["confidence_score"] <= 100
+        assert result["direction"] in ["Bullish", "Bearish", "Neutral"]
+        print("✅ Confidence score test passed")
 
+    if __name__ == "__main__":
+        test_confidence_score_calculation()
+        test_yfinance_data_fetch()
+
+
+    
     # Combine current and required columns, then create a unique list for reindex
     all_cols = list(set(current_col_names + required_cols))
     
