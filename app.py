@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt # Needed for plt.close() in display_components
 import yfinance as yf # Keep this import here for direct yf usage if any, though it's also in utils
 from datetime import datetime, date, timedelta # ADDED THIS LINE: Import the datetime module
 
+print("⚠️ Imported calculate_confidence_score from:", calculate_confidence_score.__code__.co_filename)
 print("Current working directory:", os.getcwd())
 print("Directory contents:", os.listdir())
 print("=== DEBUG INFO ===")
