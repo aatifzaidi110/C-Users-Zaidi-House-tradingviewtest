@@ -257,7 +257,7 @@ if 'ticker' not in st.session_state:
                                                                 if isinstance(df_result, pd.DataFrame):
                                                                     df = df_result
                                                                 elif isinstance(df_result, tuple) and len(df_result) > 0 and isinstance(df_result[0], pd.DataFrame):
-                                                                df = df_result[0]
+                                                                 df = df_result[0]
                                                                 # If df_result is None or an unexpected type, df remains an empty DataFrame
 
 
