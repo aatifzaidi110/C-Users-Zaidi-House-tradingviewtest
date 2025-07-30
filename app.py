@@ -32,7 +32,7 @@ try:
     print("✅ Imported from:", calculate_confidence_score.__code__.co_filename)
 
 except ImportError as e:
-print(f"❌ Initial import of calculate_confidence_score failed: {e}")
+    print(f"❌ Initial import of calculate_confidence_score failed: {e}")
 # Consider raising the error or stopping the app if this is critical
 # st.error("Application startup failed due to missing utility functions.")
 # st.stop()
