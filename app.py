@@ -321,17 +321,17 @@ if analyze_button and ticker:
         # === Generate Signal Strengths ===
 signal_strengths = {}
 
-if 'RSI' in df_calculated.columns:
-    rsi_value = last_row['RSI']
-    signal_strengths['RSI Momentum'] = 1 - abs(rsi_value - 50) / 50
+    if 'RSI' in df_calculated.columns:
+        rsi_value = last_row['RSI']
+        signal_strengths['RSI Momentum'] = 1 - abs(rsi_value - 50) / 50
 
-if 'MACD' in df_calculated.columns and 'MACD_Signal' in df_calculated.columns:
-    macd_diff = last_row['MACD'] - last_row['MACD_Signal']
-    signal_strengths['MACD'] = 1 if macd_diff > 0 else 0
+    if 'MACD' in df_calculated.columns and 'MACD_Signal' in df_calculated.columns:
+        macd_diff = last_row['MACD'] - last_row['MACD_Signal']
+        signal_strengths['MACD'] = 1 if macd_diff > 0 else 0
 
-if 'ADX' in df_calculated.columns:
-    adx_value = last_row['ADX']
-    signal_strengths['ADX'] = min(adx_value / 40, 1)
+    if 'ADX' in df_calculated.columns:
+        adx_value = last_row['ADX']
+        signal_strengths['ADX'] = min(adx_value / 40, 1)
 
 
         # Calculate Confidence Scores
@@ -496,7 +496,7 @@ if 'ADX' in df_calculated.columns:
             display_investor_sentiment_tab(
                 ticker, # Assuming ticker is available
                 current_price, # Assuming current_price is available
-                prev_close, # Assuming prev_close is available
+                , # Assuming  is available
                 overall_confidence,
                 trade_direction,
                 latest_vix, # Pass scalar VIX
