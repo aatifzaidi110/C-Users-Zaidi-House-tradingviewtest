@@ -180,24 +180,49 @@ def get_vix_data(start_date, end_date):
 # === Indicator Calculation Functions ===
 
 def calculate_indicators(df, indicator_selection, is_intraday):
-    """
-    Calculates selected technical indicators for the given DataFrame.
-    Args:
-        df (pd.DataFrame): Historical stock data.
-        indicator_selection (dict): Dictionary of selected indicators.
-        is_intraday (bool): True if data is intraday, False otherwise.
-    Returns:
-        pd.DataFrame: DataFrame with calculated indicators.
-    """
-    df_copy = df.copy() # Work on a copy to avoid modifying original DataFrame
+    df_copy = df.copy()
 
+    # Ensure standard OHLCV columns are present
     required_cols = ['Open', 'High', 'Low', 'Close', 'Volume']
-    
-    # Get current column names as a list of strings, handling MultiIndex
-    if isinstance(df_copy.columns, pd.MultiIndex):
-        current_col_names = [col[0] if isinstance(col, tuple) else col for col in df_copy.columns]
-    else:
-        current_col_names = df_copy.columns.tolist()
+    if not all(col in df_copy.columns for col in required_cols):
+        raise ValueError("Missing required columns in input DataFrame.")
+
+    # === EMA Trend ===
+    if indicator_selection.get("EMA Trend"):
+        df_copy['EMA_20'] = ta.trend.ema_indicator(df_copy['Close'], window=20)
+        df_copy['EMA_50'] = ta.trend.ema_indicator(df_copy['Close'], window=50)
+
+    # === MACD ===
+    if indicator_selection.get("MACD"):
+        macd = ta.trend.MACD(df_copy['Close'])
+        df_copy['MACD'] = macd.macd()
+        df_copy['MACD_Signal'] = macd.macd_signal()
+        df_copy['MACD_Diff'] = macd.macd_diff()
+
+    # === RSI ===
+    if indicator_selection.get("RSI Momentum"):
+        rsi = ta.momentum.RSIIndicator(df_copy['Close'], window=14)
+        df_copy['RSI'] = rsi.rsi()
+
+    # === Bollinger Bands ===
+    if indicator_selection.get("Bollinger Bands"):
+        bb = ta.volatility.BollingerBands(df_copy['Close'], window=20)
+        df_copy['BB_High'] = bb.bollinger_hband()
+        df_copy['BB_Low'] = bb.bollinger_lband()
+        df_copy['BB_Mid'] = bb.bollinger_mavg()
+
+    # === Stochastic Oscillator ===
+    if indicator_selection.get("Stochastic"):
+        stoch = ta.momentum.StochasticOscillator(df_copy['High'], df_copy['Low'], df_copy['Close'])
+        df_copy['Stoch_K'] = stoch.stoch()
+        df_copy['Stoch_D'] = stoch.stoch_signal()
+
+    # === Add more indicators as needed below (e.g., CCI, OBV, etc.) ===
+
+    # Optional: Drop rows where indicators are NaN
+    df_copy.dropna(inplace=True)
+
+    return df_copy
 
     # Combine current and required columns, then create a unique list for reindex
     all_cols = list(set(current_col_names + required_cols))
