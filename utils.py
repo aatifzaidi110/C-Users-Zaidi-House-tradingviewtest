@@ -272,6 +272,8 @@ def calculate_indicators(df, indicator_selection, is_intraday):
 
         print(f"DEBUG: calculate_indicators df_copy shape AFTER operations: {df_copy.shape}") # Add this line (around line 260)
         print(f"DEBUG: calculate_indicators df_copy columns: {df_copy.columns.tolist()}") # Add this line (around line 261)
+
+        df_copy.dropna(subset=['Close'], inplace=True) # [cite: 19]
         
         return df_copy
     
@@ -385,10 +387,6 @@ def calculate_confidence_score(
         "confidence_level": confidence_level,
         "reasons": reasons
     }
-
-
-
-
 
     # Combine current and required columns, then create a unique list for reindex
     all_cols = list(set(current_col_names + required_cols))
