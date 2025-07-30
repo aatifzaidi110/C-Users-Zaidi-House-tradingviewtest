@@ -96,14 +96,15 @@ analyze_button = st.sidebar.button("Analyze Ticker")
 if st.sidebar.button("Clear Cache"):
     st.cache_data.clear()
     st.rerun()
-
-# Trading selection 
+# --- Trading Style Selection ---
 trading_style = st.selectbox("Trading Style", [
     "Scalp Trading (1m)",
     "Day Trading (5m)",
     "Swing Trading (1h)",
     "Position Trading (1d)"
 ])
+
+# Map trading style to interval and duration (days)
 interval_map = {
     "Scalp Trading (1m)": ("1m", 5),      # 5 days max for 1m data
     "Day Trading (5m)": ("5m", 15),       # 15 days
@@ -111,16 +112,26 @@ interval_map = {
     "Position Trading (1d)": ("1d", 365)  # 1 year
 }
 
+# Apply selected mapping
 interval, days = interval_map[trading_style]
+st.session_state.data_interval = interval  # Set interval to session state
 start_date = datetime.today() - timedelta(days=days)
 end_date = datetime.today()
+st.session_state.start_date = start_date
+st.session_state.end_date = end_date
 
+# Infer if intraday
 is_intraday = interval in ["1m", "2m", "5m", "15m", "30m", "60m", "90m", "1h"]
 
-start_date = datetime.today() - timedelta(days=days)
-end_date = datetime.today()
+# Display timeframe summary for debug/info (optional)
+st.sidebar.markdown(f"**Interval:** `{interval}` — **Days:** `{days}`")
 
-selected_timeframe = timeframe  # <-- ✅ This is required
+# ✅ Set selected_timeframe safely based on interval
+selected_timeframe = interval  # This replaces the incorrect `timeframe` reference
+
+# ✅ Rest of your application logic can now use `selected_timeframe` safely
+# Note: Already used in analyze_button condition block
+
 
 # Timeframe Selection
 #timeframe_options = {
