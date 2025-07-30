@@ -7,6 +7,14 @@ import matplotlib.pyplot as plt # Needed for plt.close() in display_components
 import yfinance as yf # Keep this import here for direct yf usage if any, though it's also in utils
 from datetime import datetime, date, timedelta # ADDED THIS LINE: Import the datetime module
 
+# Add current directory to path
+sys.path.append(os.path.dirname(os.path.abspath(__file__))) 
+
+# ✅ Debug print after successful import
+import inspect
+print("✅ Signature:", inspect.signature(calculate_confidence_score))
+print("✅ Imported from:", calculate_confidence_score.__code__.co_filename)
+
 print("🧭 sys.path:", sys.path)
 print("📁 Current directory contents:", os.listdir())
 print("⚠️ Imported calculate_confidence_score from:", calculate_confidence_score.__code__.co_filename)
@@ -24,9 +32,6 @@ except ImportError as e:
     print("❌ Import failed:", e)
 
 
-# Add current directory to path
-sys.path.append(os.path.dirname(os.path.abspath(__file__))) 
-
 # Import functions from modules
 from utils import (
     get_finviz_data, get_data, get_options_chain,
@@ -38,8 +43,6 @@ from utils import (
     scan_for_trades # Changed from run_stock_scanner to scan_for_trades
 )
 import inspect
-print("✅ Signature:", inspect.signature(calculate_confidence_score))
-print("⚠️ Imported calculate_confidence_score from:", calculate_confidence_score.__code__.co_filename)
 
 from display_components import (
     _display_common_header, # Ensure this is imported directly
