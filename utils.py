@@ -12,7 +12,6 @@ import ta
 import requests
 from bs4 import BeautifulSoup
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
-from utils import calculate_confidence_score
 from datetime import datetime, date, timedelta
 import nltk
 
