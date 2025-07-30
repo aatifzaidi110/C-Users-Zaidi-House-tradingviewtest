@@ -369,23 +369,24 @@ if analyze_button and ticker:
 
         # Calculate Confidence Scores
         # Pass the full indicator_selection and normalized_weights to calculate_confidence_score
-        confidence_result  = calculate_confidence_score(
-            last_row,
-            finviz_data.get('news_sentiment_score'),
-            finviz_data.get('recom_score'),
-            latest_gdp.iloc[-1] if latest_gdp is not None and not latest_gdp.empty and len(latest_gdp) > 0 else None,
-            latest_cpi.iloc[-1] if latest_cpi is not None and not latest_cpi.empty and len(latest_cpi) > 0 else None,
-            latest_unemployment.iloc[-1] if latest_unemployment is not None and not latest_unemployment.empty and len(latest_unemployment) > 0 else None,
-            latest_vix,
-            historical_vix_avg,
-            normalized_weights,
-            st.session_state.indicator_selection,
-            signal_strengths,
-            user_sentiment_weights,
-            expert_sentiment_weights,
-            use_sentiment,
-            use_expert
+        confidence_result = calculate_confidence_score(
+            last_row=last_row,
+            news_sentiment=finviz_data.get('news_sentiment_score'),
+            recom_score=finviz_data.get('recom_score'),
+            latest_gdp=latest_gdp.iloc[-1] if latest_gdp is not None and not latest_gdp.empty and len(latest_gdp) > 0 else None,
+            latest_cpi=latest_cpi.iloc[-1] if latest_cpi is not None and not latest_cpi.empty and len(latest_cpi) > 0 else None,
+            latest_unemployment=latest_unemployment.iloc[-1] if latest_unemployment is not None and not latest_unemployment.empty and len(latest_unemployment) > 0 else None,
+            latest_vix=latest_vix,
+            historical_vix_avg=historical_vix_avg,
+            normalized_weights=normalized_weights,
+            indicator_selection=st.session_state.indicator_selection,
+            signal_strengths=signal_strengths,
+            user_sentiment_weights=user_sentiment_weights,
+            expert_sentiment_weights=expert_sentiment_weights,
+            use_sentiment=use_sentiment,
+            use_expert=use_expert
         )
+
         scores = confidence_result["confidence_score"]
         overall_confidence = confidence_result["confidence_level"]
         trade_direction = confidence_result["direction"]
