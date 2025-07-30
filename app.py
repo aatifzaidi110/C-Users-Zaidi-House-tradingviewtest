@@ -498,7 +498,7 @@ def calculate_confidence_score(
                 st.info("No calculated data available to generate a trade plan.")
 
 
-   with tabs[3]: # 📜 Trade Log
+       with tabs[3]: # 📜 Trade Log
             display_trade_log_tab(
                 "trade_log.csv", # Placeholder, actual file name constructed inside function
                 ticker,
