@@ -572,11 +572,11 @@ if scanner_ticker_list:
                 display_scanner_tab(scanner_results_df)
             else:
                 st.info("No qualifying stocks found based on your criteria.")
-    else:
-        st.info("Please enter tickers in the 'Tickers for Scanner' box in the sidebar to run the scanner.")
+            else:
+            st.info("Please enter tickers in the 'Tickers for Scanner' box in the sidebar to run the scanner.")
         
-else:
-st.info("Enter a stock ticker in the sidebar and click 'Analyze Ticker' to begin analysis, or configure and run the 'Stock Scanner'.")
+            else:
+            st.info("Enter a stock ticker in the sidebar and click 'Analyze Ticker' to begin analysis, or configure and run the 'Stock Scanner'.")
 
 
 if __name__ == "__main__":
