@@ -502,7 +502,7 @@ if analyze_button and ticker:
             display_investor_sentiment_tab(
                 ticker, # Assuming ticker is available
                 current_price, # Assuming current_price is available
-                , # Assuming  is available
+                # Assuming  is available
                 overall_confidence,
                 trade_direction,
                 latest_vix, # Pass scalar VIX
