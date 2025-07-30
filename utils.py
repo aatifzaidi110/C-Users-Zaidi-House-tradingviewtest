@@ -179,6 +179,7 @@ def get_vix_data(start_date, end_date):
 
 
 # === Indicator Calculation Functions ===
+
 def calculate_indicators(df, indicator_selection, is_intraday):
     df_copy = df.copy()
 
@@ -188,37 +189,37 @@ def calculate_indicators(df, indicator_selection, is_intraday):
 
     # === EMA Trend ===
     if indicator_selection.get("EMA Trend"):
-        df_copy['EMA_20'] = ta.trend.ema_indicator(df_copy['Close'], window=20)
-        df_copy['EMA_50'] = ta.trend.ema_indicator(df_copy['Close'], window=50)
+        df_copy['EMA_20'] = ta.trend.ema_indicator(df_copy['Close'].squeeze(), window=20)
+        df_copy['EMA_50'] = ta.trend.ema_indicator(df_copy['Close'].squeeze(), window=50)
 
     # === MACD ===
     if indicator_selection.get("MACD"):
-        macd = ta.trend.MACD(df_copy['Close'])
+        macd = ta.trend.MACD(df_copy['Close'].squeeze())
         df_copy['MACD'] = macd.macd()
         df_copy['MACD_Signal'] = macd.macd_signal()
         df_copy['MACD_Diff'] = macd.macd_diff()
 
     # === RSI ===
     if indicator_selection.get("RSI Momentum"):
-        rsi = ta.momentum.RSIIndicator(df_copy['Close'], window=14)
+        rsi = ta.momentum.RSIIndicator(df_copy['Close'].squeeze(), window=14)
         df_copy['RSI'] = rsi.rsi()
 
     # === Bollinger Bands ===
     if indicator_selection.get("Bollinger Bands"):
-        bb = ta.volatility.BollingerBands(df_copy['Close'], window=20)
+        bb = ta.volatility.BollingerBands(df_copy['Close'].squeeze(), window=20)
         df_copy['BB_High'] = bb.bollinger_hband()
         df_copy['BB_Low'] = bb.bollinger_lband()
         df_copy['BB_Mid'] = bb.bollinger_mavg()
 
     # === Stochastic Oscillator ===
     if indicator_selection.get("Stochastic"):
-        stoch = ta.momentum.StochasticOscillator(df_copy['High'], df_copy['Low'], df_copy['Close'])
+        stoch = ta.momentum.StochasticOscillator(df_copy['High'].squeeze(), df_copy['Low'].squeeze(), df_copy['Close'].squeeze())
         df_copy['Stoch_K'] = stoch.stoch()
         df_copy['Stoch_D'] = stoch.stoch_signal()
 
     # === Ichimoku Cloud ===
     if indicator_selection.get("Ichimoku Cloud"):
-        ichi = ta.trend.IchimokuIndicator(df_copy['High'], df_copy['Low'])
+        ichi = ta.trend.IchimokuIndicator(df_copy['High'].squeeze(), df_copy['Low'].squeeze())
         df_copy['Tenkan_sen'] = ichi.ichimoku_conversion_line()
         df_copy['Kijun_sen'] = ichi.ichimoku_base_line()
         df_copy['Senkou_span_a'] = ichi.ichimoku_a()
@@ -226,27 +227,27 @@ def calculate_indicators(df, indicator_selection, is_intraday):
 
     # === Parabolic SAR ===
     if indicator_selection.get("Parabolic SAR"):
-        psar = ta.trend.PSARIndicator(df_copy['High'], df_copy['Low'], df_copy['Close'])
+        psar = ta.trend.PSARIndicator(df_copy['High'].squeeze(), df_copy['Low'].squeeze(), df_copy['Close'].squeeze())
         df_copy['Parabolic_SAR'] = psar.psar()
 
     # === ADX ===
     if indicator_selection.get("ADX"):
-        adx = ta.trend.ADXIndicator(df_copy['High'], df_copy['Low'], df_copy['Close'])
+        adx = ta.trend.ADXIndicator(df_copy['High'].squeeze(), df_copy['Low'].squeeze(), df_copy['Close'].squeeze())
         df_copy['ADX'] = adx.adx()
 
     # === CCI ===
     if indicator_selection.get("CCI"):
-        cci = ta.trend.CCIIndicator(df_copy['High'], df_copy['Low'], df_copy['Close'])
+        cci = ta.trend.CCIIndicator(df_copy['High'].squeeze(), df_copy['Low'].squeeze(), df_copy['Close'].squeeze())
         df_copy['CCI'] = cci.cci()
 
     # === ROC ===
     if indicator_selection.get("ROC"):
-        roc = ta.momentum.ROCIndicator(df_copy['Close'])
+        roc = ta.momentum.ROCIndicator(df_copy['Close'].squeeze())
         df_copy['ROC'] = roc.roc()
 
     # === OBV ===
     if indicator_selection.get("OBV"):
-        obv = ta.volume.OnBalanceVolumeIndicator(df_copy['Close'], df_copy['Volume'])
+        obv = ta.volume.OnBalanceVolumeIndicator(df_copy['Close'].squeeze(), df_copy['Volume'].squeeze())
         df_copy['OBV'] = obv.on_balance_volume()
 
     # === Volume Spike ===
@@ -261,6 +262,8 @@ def calculate_indicators(df, indicator_selection, is_intraday):
     print("✅ [calculate_indicators] Columns:", df_copy.columns.tolist())
 
     return df_copy
+
+
 def calculate_confidence_score(
     last_row,
     news_sentiment,
