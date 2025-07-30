@@ -281,15 +281,7 @@ def calculate_confidence_score(
     use_sentiment,
     use_expert
     ):
-    # Now, inside this function (below line 282), you would use these parameter names.
-    # For example:
-    # if news_sentiment_score is not None:
-    #     # Do something with news_sentiment_score
-    #     pass
-
-    # You also need to adjust any internal logic to use these new parameter names.
-    # For example, instead of 'st.session_state.indicator_selection', you'd use 'indicator_selection_dict'.
-
+    
     total_score = 0
     max_score = 0
 
