@@ -39,6 +39,7 @@ from utils import (
 )
 import inspect
 print("✅ Signature:", inspect.signature(calculate_confidence_score))
+print("⚠️ Imported calculate_confidence_score from:", calculate_confidence_score.__code__.co_filename)
 
 from display_components import (
     _display_common_header, # Ensure this is imported directly
