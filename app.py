@@ -318,6 +318,22 @@ if analyze_button and ticker:
         current_price = last_row['Close']
         prev_close = df_calculated.iloc[-2]['Close'] if len(df_calculated) >= 2 else current_price
 
+        # === Generate Signal Strengths ===
+signal_strengths = {}
+
+if 'RSI' in df_calculated.columns:
+    rsi_value = last_row['RSI']
+    signal_strengths['RSI Momentum'] = 1 - abs(rsi_value - 50) / 50
+
+if 'MACD' in df_calculated.columns and 'MACD_Signal' in df_calculated.columns:
+    macd_diff = last_row['MACD'] - last_row['MACD_Signal']
+    signal_strengths['MACD'] = 1 if macd_diff > 0 else 0
+
+if 'ADX' in df_calculated.columns:
+    adx_value = last_row['ADX']
+    signal_strengths['ADX'] = min(adx_value / 40, 1)
+
+
         # Calculate Confidence Scores
         # Pass the full indicator_selection and normalized_weights to calculate_confidence_score
         scores, overall_confidence, trade_direction = calculate_confidence_score(
