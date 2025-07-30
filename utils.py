@@ -253,6 +253,32 @@ def calculate_indicators(df, indicator_selection, is_intraday):
     if indicator_selection.get("Volume Spike"):
         df_copy['Volume_Spike'] = df_copy['Volume'].pct_change() > 1.5  # basic spike flag
 
+    # In utils.py
+
+    def calculate_indicators(df, indicator_selection, is_intraday):
+        df_copy = df.copy()
+        print(f"DEBUG: calculate_indicators input df_copy shape: {df_copy.shape}") # Add this line (around line 257)
+
+        # ... Your existing indicator calculation logic goes here ...
+        # This section includes all the code that adds indicators like RSI, SMA, etc., to df_copy.
+        # For example, around lines 200-250 in your original utils.py (not fully shown in provided images)
+        # df_copy['RSI'] = ta.momentum.RSIIndicator(df_copy['Close'], window=14).rsi()
+        # df_copy['SMA_20'] = ta.trend.SMAIndicator(df_copy['Close'], window=20).sma_indicator()
+        # ... and so on for other indicators ...
+
+
+        # Potentially problematic line - consider commenting or modifying:
+        # df_copy.dropna(inplace=True) # This line is around line 257 in image_d1b9a9.png.
+                                      # You might want to comment it out by adding a '#' at the beginning,
+                                      # or change it as discussed (e.g., df_copy.dropna(subset=['Close'], inplace=True))
+
+
+        print(f"DEBUG: calculate_indicators df_copy shape AFTER operations: {df_copy.shape}") # Add this line (around line 260)
+        print(f"DEBUG: calculate_indicators df_copy columns: {df_copy.columns.tolist()}") # Add this line (around line 261)
+
+    return df_copy
+
+    
     # Drop NaNs after indicator calculations
     df_copy.dropna(inplace=True)
 
