@@ -261,12 +261,15 @@ def calculate_indicators(df, indicator_selection, is_intraday):
     print("✅ [calculate_indicators] Columns:", df_copy.columns.tolist())
 
     return df_copy
-
-
 def calculate_confidence_score(
     last_row,
     news_sentiment,
     recom_score,
+    latest_gdp,
+    latest_cpi,
+    latest_unemployment,
+    latest_vix,
+    historical_vix_avg,
     normalized_weights,
     indicator_selection,
     signal_strengths,
@@ -276,12 +279,13 @@ def calculate_confidence_score(
     use_expert
 ):
     """
-    Extended confidence score calculation including sentiment and expert input.
+    Extended confidence score calculation including indicators, sentiment, expert input, and macroeconomic factors.
     """
     total_score = 0
     max_score = 0
     reasons = []
 
+    # === Indicator scores ===
     for indicator, strength in signal_strengths.items():
         if indicator_selection.get(indicator):
             weight = normalized_weights.get(indicator, 1)
@@ -289,27 +293,57 @@ def calculate_confidence_score(
             max_score += weight
             reasons.append(f"• {indicator}: {strength:.2f} (weight {weight:.2f})")
 
-    # Add sentiment if enabled
+    # === News Sentiment ===
     if use_sentiment and news_sentiment is not None:
         sentiment_weight = user_sentiment_weights.get("sentiment", 1)
         total_score += sentiment_weight * news_sentiment
         max_score += sentiment_weight
         reasons.append(f"• News Sentiment: {news_sentiment:.2f} (weight {sentiment_weight:.2f})")
 
-    # Add expert recommendation if enabled
+    # === Expert Score ===
     if use_expert and recom_score is not None:
         expert_weight = expert_sentiment_weights.get("expert", 1)
         total_score += expert_weight * recom_score
         max_score += expert_weight
         reasons.append(f"• Expert Score: {recom_score:.2f} (weight {expert_weight:.2f})")
 
-    # Final score
-    confidence_score = (total_score / max_score) * 100 if max_score else 0
+    # === Macroeconomic Inputs ===
+    if latest_gdp is not None:
+        gdp_weight = 1.0
+        score = 1 if latest_gdp > 2.0 else 0.5 if latest_gdp > 1.0 else 0
+        total_score += gdp_weight * score
+        max_score += gdp_weight
+        reasons.append(f"• GDP: {latest_gdp:.2f} (score {score:.2f}, weight {gdp_weight})")
 
-    # Determine direction
+    if latest_cpi is not None:
+        cpi_weight = 1.0
+        score = 1 if latest_cpi < 3.0 else 0.5 if latest_cpi < 5.0 else 0
+        total_score += cpi_weight * score
+        max_score += cpi_weight
+        reasons.append(f"• CPI: {latest_cpi:.2f} (score {score:.2f}, weight {cpi_weight})")
+
+    if latest_unemployment is not None:
+        unemp_weight = 1.0
+        score = 1 if latest_unemployment < 4.5 else 0.5 if latest_unemployment < 6 else 0
+        total_score += unemp_weight * score
+        max_score += unemp_weight
+        reasons.append(f"• Unemployment: {latest_unemployment:.2f} (score {score:.2f}, weight {unemp_weight})")
+
+    if latest_vix is not None and historical_vix_avg is not None:
+        vix_weight = 1.0
+        score = 1 if latest_vix < historical_vix_avg else 0.5 if latest_vix < historical_vix_avg * 1.2 else 0
+        total_score += vix_weight * score
+        max_score += vix_weight
+        reasons.append(f"• VIX: {latest_vix:.2f} (score {score:.2f}, weight {vix_weight})")
+
+    # === Final Score ===
+    confidence_score = (total_score / max_score) * 100 if max_score else 0
     direction = "Bullish" if confidence_score > 60 else "Bearish" if confidence_score < 40 else "Neutral"
 
     return confidence_score, direction, reasons
+
+
+
 
 
     # Combine current and required columns, then create a unique list for reindex
