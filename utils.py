@@ -1,4 +1,4 @@
-# utils.py - Final Version (with distutils workaround for Python 3.10+)
+# utils.py - Final Version (with distutils workaround for Python 3.10+ 0729) 
 print("--- utils.py VERSION CHECK: Loading Final Version with all functions and scanner (v4.1) ---\n") # Added newline for better log readability
 
 # IMPORTANT: Import setuptools first to provide distutils compatibility for older libraries like pandas_datareader
