@@ -385,7 +385,7 @@ if analyze_button and ticker:
             expert_sentiment_weights=expert_sentiment_weights,
             use_sentiment=use_sentiment,
             use_expert=use_expert
-        ):
+        )
         scores = confidence_result["confidence_score"]
         overall_confidence = confidence_result["confidence_level"]
         trade_direction = confidence_result["direction"]
