@@ -222,6 +222,10 @@ def calculate_indicators(df, indicator_selection, is_intraday):
     # Optional: Drop rows where indicators are NaN
     df_copy.dropna(inplace=True)
 
+    print("✅ [calculate_indicators] Output shape:", df_copy.shape)
+    print("✅ [calculate_indicators] Columns:", df_copy.columns.tolist())
+
+
     return df_copy
 
     # Combine current and required columns, then create a unique list for reindex
