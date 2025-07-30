@@ -8,16 +8,10 @@ import yfinance as yf # Keep this import here for direct yf usage if any, though
 from datetime import datetime, date, timedelta # ADDED THIS LINE: Import the datetime module
 
 # Add current directory to path
-sys.path.append(os.path.dirname(os.path.abspath(__file__))) 
-
-# ✅ Debug print after successful import
-import inspect
-print("✅ Signature:", inspect.signature(calculate_confidence_score))
-print("✅ Imported from:", calculate_confidence_score.__code__.co_filename)
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 print("🧭 sys.path:", sys.path)
 print("📁 Current directory contents:", os.listdir())
-print("⚠️ Imported calculate_confidence_score from:", calculate_confidence_score.__code__.co_filename)
 print("Current working directory:", os.getcwd())
 print("Directory contents:", os.listdir())
 print("=== DEBUG INFO ===")
@@ -25,24 +19,39 @@ print("Current directory:", os.getcwd())
 print("Directory contents:", os.listdir())
 print("Python path:", sys.path)
 print("=================")
+
+# --- Import functions from modules ---
 try:
+    # Attempt to import calculate_confidence_score first, for early debug check
     from utils import calculate_confidence_score
-    print("✅ Successfully imported calculate_confidence_score")
+    print("✅ Successfully imported calculate_confidence_score (early check)")
+
+    # ✅ Debug print after successful import (MOVED HERE)
+    import inspect
+    print("✅ Signature:", inspect.signature(calculate_confidence_score))
+    print("✅ Imported from:", calculate_confidence_score.__code__.co_filename)
+
 except ImportError as e:
-    print("❌ Import failed:", e)
+    print(f"❌ Initial import of calculate_confidence_score failed: {e}")
+    # Consider raising the error or stopping the app if this is critical
+    # st.error("Application startup failed due to missing utility functions.")
+    # st.stop()
 
 
-# Import functions from modules
+# Import all other functions from modules (including calculate_confidence_score again, which is fine)
 from utils import (
     get_finviz_data, get_data, get_options_chain,
     calculate_indicators, calculate_pivot_points,
     generate_signals_for_row, backtest_strategy, get_moneyness, analyze_options_chain,
     suggest_options_strategy, generate_directional_trade_plan,
-    calculate_confidence_score, convert_finviz_recom_to_score,
+    calculate_confidence_score, # Redundant but harmless if already imported
+    convert_finviz_recom_to_score,
     get_economic_data_fred, get_vix_data, calculate_economic_score, calculate_sentiment_score,
     scan_for_trades # Changed from run_stock_scanner to scan_for_trades
 )
-import inspect
+# You can remove `import inspect` here if it's already at the top level
+# or if you only need it for the debug prints. If it's used elsewhere, keep it.
+# import inspect # This line is redundant if already imported above and not used again.
 
 from display_components import (
     _display_common_header, # Ensure this is imported directly
@@ -52,6 +61,7 @@ from display_components import (
     display_scanner_tab # Ensure display_scanner_tab is imported
 )
 
+# ... rest of your app.py code ...
 # --- Configuration ---
 # Set Streamlit page configuration
 st.set_page_config(layout="wide", page_title="Advanced Stock Analyzer")
