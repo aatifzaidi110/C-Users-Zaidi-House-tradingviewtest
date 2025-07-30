@@ -31,8 +31,7 @@ try:
     print("✅ Signature:", inspect.signature(calculate_confidence_score))
     print("✅ Imported from:", calculate_confidence_score.__code__.co_filename)
 
-except ImportError as e:
-    print(f"❌ Initial import of calculate_confidence_score failed: {e}")
+except ImportError as e:print(f"❌ Initial import of calculate_confidence_score failed: {e}")
 # Consider raising the error or stopping the app if this is critical
 # st.error("Application startup failed due to missing utility functions.")
 # st.stop()
@@ -199,7 +198,7 @@ if 'ticker' not in st.session_state:
                                             (indicator == "Pivot Points" and is_intraday):
                                                 st.session_state.indicator_selection[indicator] = st.sidebar.checkbox(indicator, value=selected, disabled=True, help="Automatically disabled for this timeframe.")
                                             else:
-                                            st.session_state.indicator_selection[indicator] = st.sidebar.checkbox(indicator, value=selected)
+                                             st.session_state.indicator_selection[indicator] = st.sidebar.checkbox(indicator, value=selected)
 
 
                                             # Confidence Score Weights
@@ -223,14 +222,14 @@ if 'ticker' not in st.session_state:
                                                     for component, weight in st.session_state.confidence_weights.items():
                                                         normalized_weights[component] = weight / total_weight
                                                     else:
-                                                    st.sidebar.warning("Total weight is 0. Please adjust weights.")
+                                                     st.sidebar.warning("Total weight is 0. Please adjust weights.")
                                                     # Default to equal weights if total is 0 to avoid division by zero
                                                     num_components = len(st.session_state.confidence_weights)
                                                     if num_components > 0:
                                                         for component in st.session_state.confidence_weights.keys():
                                                             normalized_weights[component] = 1 / num_components
                                                         else:
-                                                        normalized_weights = {component: 0 for component in st.session_state.confidence_weights.keys()} # Should not happen
+                                                         normalized_weights = {component: 0 for component in st.session_state.confidence_weights.keys()} # Should not happen
 
 
                                                         # Stock Scanner Configuration
@@ -267,7 +266,7 @@ if 'ticker' not in st.session_state:
                                                                     ticker_obj = yf.Ticker(ticker)
                                                                     info = ticker_obj.info # Fetch ticker info for company profile
                                                                 except Exception as e:
-                                                                st.warning(f"Could not fetch ticker info for {ticker}: {e}")
+                                                                 st.warning(f"Could not fetch ticker info for {ticker}: {e}")
                                                                 print(f"Error fetching ticker info for {ticker}: {e}")
 
 
@@ -289,7 +288,7 @@ if 'ticker' not in st.session_state:
                                                                     if isinstance(vix_data_raw[0], pd.DataFrame):
                                                                         vix_data = vix_data_raw[0]
                                                                     elif isinstance(vix_data_raw, pd.DataFrame):
-                                                                    vix_data = vix_data_raw # If it's already a DataFrame, use it directly
+                                                                     vix_data = vix_data_raw # If it's already a DataFrame, use it directly
 
                                                                     latest_vix = None
                                                                     historical_vix_avg = None
@@ -301,8 +300,8 @@ if 'ticker' not in st.session_state:
                                                                             if not latest_vix_val_candidate.empty:
                                                                                 latest_vix_val = latest_vix_val_candidate.item() # Get the scalar value
                                                                             else:
-                                                                            latest_vix_val = None
-                                                                            else:
+                                                                             latest_vix_val = None
+                                                                        else:
                                                                             latest_vix_val = latest_vix_val_candidate
 
                                                                             if pd.notna(latest_vix_val):
@@ -313,8 +312,8 @@ if 'ticker' not in st.session_state:
                                                                                     if not historical_vix_avg_val_candidate.empty:
                                                                                         historical_vix_avg_val = historical_vix_avg_val_candidate.item() # Get the scalar value
                                                                                     else:
-                                                                                    historical_vix_avg_val = None
-                                                                                    else:
+                                                                                     historical_vix_avg_val = None
+                                                                                else:
                                                                                     historical_vix_avg_val = historical_vix_avg_val_candidate
 
                                                                                     if pd.notna(historical_vix_avg_val):
@@ -407,7 +406,7 @@ if 'ticker' not in st.session_state:
                                                                                                                         tabs = st.tabs(tab_titles)
 
                                                                                                                         with tabs[0]: # 📊 Technical Analysis
-                                                                                                                        display_technical_analysis_tab(
+                                                                                                                         display_technical_analysis_tab(
                                                                                                                         ticker,
                                                                                                                         df_calculated,
                                                                                                                         is_intraday,
@@ -416,7 +415,7 @@ if 'ticker' not in st.session_state:
                                                                                                                         )
 
                                                                                                                         with tabs[1]: # 🔮 Options Analysis
-                                                                                                                        display_options_analysis_tab(
+                                                                                                                         display_options_analysis_tab(
                                                                                                                         ticker,
                                                                                                                         current_price,
                                                                                                                         options_chain, # Pass expirations
@@ -425,7 +424,7 @@ if 'ticker' not in st.session_state:
                                                                                                                         )
 
                                                                                                                         with tabs[2]: # 💡 Trade Plan
-                                                                                                                        st.subheader("🗺️ Directional Trade Plan (Based on Current Data)")
+                                                                                                                         st.subheader("🗺️ Directional Trade Plan (Based on Current Data)")
                                                                                                                         if not df_calculated.empty:
                                                                                                                             try:
                                                                                                                                 # Ensure generate_directional_trade_plan receives the correct arguments
@@ -480,7 +479,7 @@ if 'ticker' not in st.session_state:
 
                                                                                                                                             st.write("**Technical Signals & Entry Criteria:**")
                                                                                                                                             for criteria in trade_plan_result.get('technical_signals', []): 
-                                                                                                                                            st.markdown(f"- {criteria}")
+                                                                                                                                             st.markdown(f"- {criteria}")
 
                                                                                                                                             # Exit criteria are part of the main rationale or target/stop
                                                                                                                                             st.write("**Exit Criteria:**")
@@ -490,16 +489,16 @@ if 'ticker' not in st.session_state:
                                                                                                                                             st.markdown(f"- Stop Loss: {stop_loss_str}")
 
                                                                                                                                         else:
-                                                                                                                                        st.info("Could not generate a directional trade plan. Ensure sufficient data and valid indicator selections.")
-                                                                                                                                        except Exception as e:
+                                                                                                                                         st.info("Could not generate a directional trade plan. Ensure sufficient data and valid indicator selections.")
+                                                                                                                            except Exception as e:
                                                                                                                                         st.error(f"An error occurred while generating the trade plan: {e}")
                                                                                                                                         st.exception(e) # For debugging
-                                                                                                                                        else:
+                                                                                                                            else:
                                                                                                                                         st.info("No calculated data available to generate a trade plan.")
 
 
                                                                                                                                         with tabs[3]: # 📜 Trade Log
-                                                                                                                                        display_trade_log_tab(
+                                                                                                                                         display_trade_log_tab(
                                                                                                                                         "trade_log.csv", # Placeholder, actual file name constructed inside function
                                                                                                                                         ticker,
                                                                                                                                         selected_timeframe,
@@ -510,18 +509,18 @@ if 'ticker' not in st.session_state:
                                                                                                                                         )
 
                                                                                                                                         with tabs[4]: # 🤖 Backtesting
-                                                                                                                                        if not df_calculated.empty:
+                                                                                                                                         if not df_calculated.empty:
                                                                                                                                             display_backtesting_tab(
                                                                                                                                             df_calculated.copy(), # Pass a copy of df_calculated
                                                                                                                                             st.session_state.indicator_selection, # Pass the full selection dict
                                                                                                                                             normalized_weights # Pass normalized weights
                                                                                                                                             )
-                                                                                                                                        else:
-                                                                                                                                        st.info("No historical data available for backtesting.")
+                                                                                                                                         else:
+                                                                                                                                          st.info("No historical data available for backtesting.")
 
                                                                                                                                         with tabs[5]: # 🌍 Economic & Sentiment
                                                                                                                                         # Display Economic Data
-                                                                                                                                        display_economic_data_tab(
+                                                                                                                                         display_economic_data_tab(
                                                                                                                                         ticker, # Assuming ticker is available
                                                                                                                                         current_price, # Assuming current_price is available
                                                                                                                                         prev_close, # Assuming prev_close is available
@@ -545,14 +544,14 @@ if 'ticker' not in st.session_state:
                                                                                                                                         )
 
                                                                                                                                         with tabs[6]: # 📚 Glossary
-                                                                                                                                        st.markdown("### 📚 Glossary")
+                                                                                                                                         st.markdown("### 📚 Glossary")
                                                                                                                                         st.info("The glossary content will be displayed here.") # Placeholder for actual glossary content
 
-                                                                                                                                        else:
+                                                                                                                        else:
                                                                                                                                         st.warning("No data fetched for the given ticker and timeframe. Please check the ticker symbol and try again.")
                                                                                                                                         st.info("Ensure the ticker is valid and data is available for the selected period. Intraday data typically has a limited history (e.g., 7 days).")
 
-                                                                                                                                        elif run_scanner_button: # This block is for the scanner
+                                                                                                                elif run_scanner_button: # This block is for the scanner
                                                                                                                                         st.header("⚡ Stock Scanner Results")
                                                                                                                                         if scanner_ticker_list:
                                                                                                                                             with st.spinner(f"Running scanner for {len(scanner_ticker_list)} tickers with '{selected_trading_style}' style..."):
@@ -571,11 +570,11 @@ if 'ticker' not in st.session_state:
                                                                                                                                                 if not scanner_results_df.empty:
                                                                                                                                                     display_scanner_tab(scanner_results_df)
                                                                                                                                                 else:
-                                                                                                                                                st.info("No qualifying stocks found based on your criteria.")
-                                                                                                                                                else:
+                                                                                                                                                 st.info("No qualifying stocks found based on your criteria.")
+                                                                                                                                        else:
                                                                                                                                                 st.info("Please enter tickers in the 'Tickers for Scanner' box in the sidebar to run the scanner.")
 
-                                                                                                                                                else:
+                                                                                                                else:
                                                                                                                                                 st.info("Enter a stock ticker in the sidebar and click 'Analyze Ticker' to begin analysis, or configure and run the 'Stock Scanner'.")
 
 
