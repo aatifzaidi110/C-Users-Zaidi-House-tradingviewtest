@@ -80,60 +80,73 @@ if clear:
     st.cache_data.clear()
     st.cache_resource.clear()
     st.success("🔁 Cache cleared.")
-if analyze:
-    if not ticker:
-        st.warning("⚠️ Please enter a stock ticker symbol.")
-    else:
-        st.markdown(f"## Analyzing {ticker.upper()}")
-        try:
-            df = yf.download(ticker, period="3mo", interval="1h")
 
-            # --- CORRECTED CODE FOR MULTIINDEX HANDLING ---
-            # Ensure columns are single-level (not MultiIndex)
-            if isinstance(df.columns, pd.MultiIndex):
-                # This drops the second level of the MultiIndex (e.g., 'AAPL')
-                # and keeps the first level (e.g., 'Close') as the column name.
-                df.columns = df.columns.droplevel(1)
-                # --- END OF CORRECTED CODE ---
-
-            if 'Adj Close' in df.columns and 'Close' not in df.columns:
-                df['Close'] = df['Adj Close']
+   
+    # --- Start of the main analysis logic block ---
+    if analyze:
+        if not ticker:
+            st.warning("⚠️ Please enter a stock ticker symbol.")
+        else:
+            st.markdown(f"## Analyzing {ticker.upper()}")
             
-            # Drop rows with any NaN values in critical columns before indicator calculation
-            # This is important if some OHLCV data points are missing
-            df.dropna(subset=['Open', 'High', 'Low', 'Close', 'Volume'], inplace=True)
+            # --- START OF THE TRY BLOCK ---
+            # The 'try' keyword defines the start of the block to monitor for errors.
+            # Its indentation is crucial.
+            try: 
+                df = yf.download(ticker, period="3mo", interval="1h")
 
-            if df.empty:
-                st.warning(f"No data available for {ticker} with the selected period/interval. Please try a different ticker or timeframe.")
-                return
+                # Ensure columns are single-level (not MultiIndex)
+                if isinstance(df.columns, pd.MultiIndex):
+                    df.columns = df.columns.droplevel(1)
+                
+                # Ensure 'Close' column exists (handling 'Adj Close' from yfinance)
+                if 'Adj Close' in df.columns and 'Close' not in df.columns:
+                    df['Close'] = df['Adj Close']
+                
+                # Drop rows with any NaN values in critical columns before indicator calculation
+                df.dropna(subset=['Open', 'High', 'Low', 'Close', 'Volume'], inplace=True)
 
-            # indicators_df = calculate_indicators(df, selected_indicators, is_intraday_data)
-            # Determine if it's intraday data (you need to define this based on your app's logic)
-            is_intraday_data = "1h" in st.session_state.get('interval', "1d") # Example placeholder
-
-            # Assume selected_indicators is defined by Streamlit widgets earlier in your app
-            # For this example, let's just make a sample dictionary
-            selected_indicators = {
+                if df.empty:
+                    st.warning(f"No data available for {ticker} with the selected period/interval. Please try a different ticker or timeframe.")
+                    return # This 'return' must be correctly indented within this 'if df.empty' block
+                
+                # --- Placeholder for determining is_intraday_data and selected_indicators ---
+                # You should replace these with actual logic from your Streamlit UI
+                is_intraday_data = True # Example: based on selected interval
+                selected_indicators = {
                     "EMA Trend": True, "MACD": True, "RSI Momentum": True,
                     "Bollinger Bands": True, "Stochastic": True, "Ichimoku Cloud": False,
                     "Parabolic SAR": False, "ADX": False, "CCI": False,
                     "ROC": False, "OBV": False, "Volume Spike": False
-            }
+                }
+                # --- End of placeholders ---
 
-            # Call calculate_indicators from utils.py
-            indicators_df = calculate_indicators(df, selected_indicators, is_intraday_data)
+                # Call calculate_indicators (from utils.py)
+                indicators_df = calculate_indicators(df, selected_indicators, is_intraday_data)
 
-            if not indicators_df.empty:
-                st.subheader("Technical Indicators (last 5 rows):")
-                st.dataframe(indicators_df.tail()) # Display last few rows of indicators
-            else:
-                st.warning("Could not calculate indicators. Data might be insufficient or all NaN.")
+                if not indicators_df.empty:
+                    st.subheader("Technical Indicators (last 5 rows):")
+                    st.dataframe(indicators_df.tail()) 
 
-        except Exception as e:
-            st.error(f"Error analyzing ticker: {e}")
-            st.warning("Please ensure the ticker is valid and try again.")
+                    # Continue with the rest of your app's logic here, 
+                    # e.g., signal analysis, confidence scoring, charting.
+                    # Example:
+                    # bullish, bearish = analyze_signals(indicators_df)
+                    # confidence = calculate_confidence_score(bullish, bearish, signal_strength=1.0, normalized_weights=None)
+                    # st.write(f"Confidence Score: {confidence}")
 
-            
+                else:
+                    st.warning("Could not calculate indicators. Data might be insufficient or all NaN.")
+
+            # --- START OF THE EXCEPT BLOCK ---
+            # This 'except' keyword MUST be at the SAME INDENTATION LEVEL as the 'try' keyword above it.
+            except Exception as e: 
+                st.error(f"Error analyzing ticker: {e}")
+                st.warning("Please ensure the ticker is valid and try again.")
+                
+    # --- End of the main analysis logic block ---
+
+
             df.columns = df.columns.droplevel(1)
             df.dropna(inplace=True)
             indicator_selection = {
