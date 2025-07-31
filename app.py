@@ -80,32 +80,32 @@ if clear:
     st.cache_data.clear()
     st.cache_resource.clear()
     st.success("🔁 Cache cleared.")
-if analyze:
-    if not ticker:
-        st.warning("⚠️ Please enter a stock ticker symbol.")
-    else:
-        st.markdown(f"## Analyzing {ticker.upper()}")
-        try:
-            df = yf.download(ticker, period="3mo", interval="1h")
+    if analyze:
+        if not ticker:
+            st.warning("⚠️ Please enter a stock ticker symbol.")
+        else:
+            st.markdown(f"## Analyzing {ticker.upper()}")
+            try:
+                df = yf.download(ticker, period="3mo", interval="1h")
 
-            # --- CORRECTED CODE FOR MULTIINDEX HANDLING ---
-            # Ensure columns are single-level (not MultiIndex)
-            if isinstance(df.columns, pd.MultiIndex):
-                # This drops the second level of the MultiIndex (e.g., 'AAPL')
-                # and keeps the first level (e.g., 'Close') as the column name.
-                df.columns = df.columns.droplevel(1)
-            # --- END OF CORRECTED CODE ---
+                # --- CORRECTED CODE FOR MULTIINDEX HANDLING ---
+                # Ensure columns are single-level (not MultiIndex)
+                if isinstance(df.columns, pd.MultiIndex):
+                    # This drops the second level of the MultiIndex (e.g., 'AAPL')
+                    # and keeps the first level (e.g., 'Close') as the column name.
+                    df.columns = df.columns.droplevel(1)
+                    # --- END OF CORRECTED CODE ---
 
-            if 'Adj Close' in df.columns and 'Close' not in df.columns:
-                df['Close'] = df['Adj Close']
+                if 'Adj Close' in df.columns and 'Close' not in df.columns:
+                    df['Close'] = df['Adj Close']
             
-            # Drop rows with any NaN values in critical columns before indicator calculation
-            # This is important if some OHLCV data points are missing
-            df.dropna(subset=['Open', 'High', 'Low', 'Close', 'Volume'], inplace=True)
+                # Drop rows with any NaN values in critical columns before indicator calculation
+                # This is important if some OHLCV data points are missing
+                df.dropna(subset=['Open', 'High', 'Low', 'Close', 'Volume'], inplace=True)
 
-            if df.empty:
-                st.warning(f"No data available for {ticker} with the selected period/interval. Please try a different ticker or timeframe.")
-            return
+                if df.empty:
+                    st.warning(f"No data available for {ticker} with the selected period/interval. Please try a different ticker or timeframe.")
+                    return
 
             # ... (rest of your app.py code that calls calculate_indicators) ...
             # For example:
