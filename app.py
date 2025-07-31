@@ -80,7 +80,6 @@ if clear:
     st.cache_data.clear()
     st.cache_resource.clear()
     st.success("🔁 Cache cleared.")
-
 if analyze:
     if not ticker:
         st.warning("⚠️ Please enter a stock ticker symbol.")
@@ -88,11 +87,15 @@ if analyze:
         st.markdown(f"## Analyzing {ticker.upper()}")
         try:
             df = yf.download(ticker, period="3mo", interval="1h")
-            # Ensure columns are single-level (not MultiIndex)
 
+            # --- CORRECTED CODE FOR MULTIINDEX HANDLING ---
+            # Ensure columns are single-level (not MultiIndex)
             if isinstance(df.columns, pd.MultiIndex):
-            # This drops the second level of the MultiIndex (e.g., 'AAPL')
-            # and keeps the first level (e.g., 'Close') as the column name.
+                # This drops the second level of the MultiIndex (e.g., 'AAPL')
+                # and keeps the first level (e.g., 'Close') as the column name.
+                df.columns = df.columns.droplevel(1)
+            # --- END OF CORRECTED CODE ---
+
             if 'Adj Close' in df.columns and 'Close' not in df.columns:
                 df['Close'] = df['Adj Close']
             
@@ -111,8 +114,6 @@ if analyze:
         except Exception as e:
             st.error(f"Error analyzing ticker: {e}")
             st.warning("Please ensure the ticker is valid and try again.")
-
-
 
             
             df.columns = df.columns.droplevel(1)
