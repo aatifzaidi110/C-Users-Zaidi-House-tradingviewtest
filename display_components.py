@@ -11,7 +11,7 @@ import os # Import the os module for path operations
 from utils import (
     backtest_strategy, calculate_indicators, generate_signals_for_row,
     suggest_options_strategy, get_options_chain, get_data, get_finviz_data,
-    calculate_pivot_points, get_moneyness, analyze_options_chain,
+    calculate_pivot_points, analyze_options_chain,
     generate_directional_trade_plan, get_indicator_summary_text, # Ensure get_indicator_summary_text is imported
     get_economic_data_fred, get_vix_data, calculate_economic_score, calculate_sentiment_score,
     calculate_confidence_score # Added this import as it's used in display_backtesting_tab
