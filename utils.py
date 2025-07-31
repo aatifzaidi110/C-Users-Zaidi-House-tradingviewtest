@@ -233,45 +233,102 @@ def calculate_pivot_points(df):
     }])
 
 
-def calculate_indicators(df, indicator_selection, is_intraday=False):
-    """
-    Calculates selected technical indicators and adds them to the DataFrame.
-    Returns the DataFrame with new indicator columns.
-    """
-    df_copy = df.copy() # Work on a copy to avoid modifying original DataFrame
-    
-    # Ensure there's enough data for indicator calculation
-    if len(df_copy) < 20: # Minimum data for most common indicators (e.g., 14-period RSI)
-        return pd.DataFrame() # Return empty if not enough data
+def calculate_indicators(df, indicator_selection, is_intraday):
+    df_copy = df.copy()
 
-    if indicator_selection.get("SMA"):
-        df_copy["SMA_20"] = calculate_sma(df_copy, 20)
-        df_copy["SMA_50"] = calculate_sma(df_copy, 50)
-    if indicator_selection.get("EMA"):
-        df_copy["EMA_20"] = calculate_ema(df_copy, 20)
-        df_copy["EMA_50"] = calculate_ema(df_copy, 50)
+    required_cols = ['Open', 'High', 'Low', 'Close', 'Volume']
+    if not all(col in df_copy.columns for col in required_cols):
+        # Handle missing columns more robustly if needed, or raise a specific error
+        # For now, let's ensure they exist as NaN if not present, but this is usually not the case with yfinance data
+        missing_cols = [col for col in required_cols if col not in df_copy.columns]
+        if missing_cols:
+            print(f"Warning: Missing required columns for indicators: {missing_cols}. Filling with NaN.")
+            for col in missing_cols:
+                df_copy[col] = np.nan # Add missing columns, filled with NaN
+
+    # Ensure core columns are numeric and 1-dimensional Series
+    for col in ['Open', 'High', 'Low', 'Close', 'Volume']:
+        if col in df_copy.columns:
+            # Convert to numeric, forcing errors to NaN, and ensure it's a Series
+            df_copy[col] = pd.to_numeric(df_copy[col], errors='coerce').squeeze()
+            if df_copy[col].ndim > 1: # Double-check after squeeze if it's still 2D
+                print(f"Warning: Column '{col}' is still {df_copy[col].ndim}-dimensional after squeeze. Attempting iloc[:, 0].")
+                df_copy[col] = df_copy[col].iloc[:, 0] # Fallback for stubborn 2D single-column DataFrames
+
+    # === EMA Trend ===
+    if indicator_selection.get("EMA Trend"):
+        df_copy['EMA_20'] = ta.trend.ema_indicator(df_copy['Close'], window=20)
+        df_copy['EMA_50'] = ta.trend.ema_indicator(df_copy['Close'], window=50)
+
+    # === MACD ===
     if indicator_selection.get("MACD"):
-        df_copy["MACD"], df_copy["MACD_Signal"], df_copy["MACD_Diff"] = calculate_macd(df_copy)
-    if indicator_selection.get("RSI"):
-        df_copy["RSI"] = calculate_rsi(df_copy, 14)
+        macd = ta.trend.MACD(df_copy['Close'])
+        df_copy['MACD'] = macd.macd()
+        df_copy['MACD_Signal'] = macd.macd_signal()
+        df_copy['MACD_Diff'] = macd.macd_diff()
+
+    # === RSI ===
+    if indicator_selection.get("RSI Momentum"):
+        rsi = ta.momentum.RSIIndicator(df_copy['Close'], window=14)
+        df_copy['RSI'] = rsi.rsi()
+
+    # === Bollinger Bands ===
     if indicator_selection.get("Bollinger Bands"):
-        df_copy["BB_High"], df_copy["BB_Low"], df_copy["BB_Mid"] = calculate_bollinger_bands(df_copy)
-    if indicator_selection.get("Stochastic Oscillator"):
-        df_copy["Stoch_K"], df_copy["Stoch_D"] = calculate_stochastic_oscillator(df_copy)
+        bb = ta.volatility.BollingerBands(df_copy['Close'], window=20)
+        df_copy['BB_High'] = bb.bollinger_hband()
+        df_copy['BB_Low'] = bb.bollinger_lband()
+        df_copy['BB_Mid'] = bb.bollinger_mavg()
+
+    # === Stochastic Oscillator ===
+    if indicator_selection.get("Stochastic"):
+        stoch = ta.momentum.StochasticOscillator(df_copy['High'], df_copy['Low'], df_copy['Close'])
+        df_copy['Stoch_K'] = stoch.stoch()
+        df_copy['Stoch_D'] = stoch.stoch_signal()
+
+    # === Ichimoku Cloud ===
     if indicator_selection.get("Ichimoku Cloud"):
-        df_copy["Ichimoku_Conversion"], df_copy["Ichimoku_Base"], df_copy["Ichimoku_A"], df_copy["Ichimoku_B"] = calculate_ichimoku_cloud(df_copy)
+        ichi = ta.trend.IchimokuIndicator(df_copy['High'], df_copy['Low'])
+        df_copy['Tenkan_sen'] = ichi.ichimoku_conversion_line()
+        df_copy['Kijun_sen'] = ichi.ichimoku_base_line()
+        df_copy['Senkou_span_a'] = ichi.ichimoku_a()
+        df_copy['Senkou_span_b'] = ichi.ichimoku_b()
+
+    # === Parabolic SAR ===
     if indicator_selection.get("Parabolic SAR"):
-        df_copy["PSAR"] = calculate_parabolic_sar(df_copy)
+        psar = ta.trend.PSARIndicator(df_copy['High'], df_copy['Low'], df_copy['Close'])
+        df_copy['Parabolic_SAR'] = psar.psar()
+
+    # === ADX ===
     if indicator_selection.get("ADX"):
-        df_copy["ADX"], df_copy["ADX_Pos"], df_copy["ADX_Neg"] = calculate_adx(df_copy)
+        adx = ta.trend.ADXIndicator(df_copy['High'], df_copy['Low'], df_copy['Close'])
+        df_copy['ADX'] = adx.adx()
+
+    # === CCI ===
     if indicator_selection.get("CCI"):
-        df_copy["CCI"] = calculate_cci(df_copy)
+        cci = ta.trend.CCIIndicator(df_copy['High'], df_copy['Low'], df_copy['Close'])
+        df_copy['CCI'] = cci.cci()
+
+    # === ROC ===
     if indicator_selection.get("ROC"):
-        df_copy["ROC"] = calculate_roc(df_copy)
+        roc = ta.momentum.ROCIndicator(df_copy['Close'])
+        df_copy['ROC'] = roc.roc()
+
+    # === OBV ===
     if indicator_selection.get("OBV"):
-        df_copy["OBV"] = calculate_obv(df_copy)
+        obv = ta.volume.OnBalanceVolumeIndicator(df_copy['Close'], df_copy['Volume'])
+        df_copy['OBV'] = obv.on_balance_volume()
+
+    # === Volume Spike ===
     if indicator_selection.get("Volume Spike"):
-        df_copy["Volume_Spike"] = calculate_volume_spike(df_copy) # This will be boolean or based on threshold
+        df_copy['Volume_Spike'] = df_copy['Volume'].pct_change() > 1.5  # basic spike flag
+
+    df_copy.dropna(subset=['Close'], inplace=True) # [cite: 19]
+
+    # Debug logs
+    print("✅ [calculate_indicators] Output shape:", df_copy.shape)
+    print("✅ [calculate_indicators] Columns:", df_copy.columns.tolist())
+
+    return df_copy
     
     # Calculate ATR for potential stop-loss/target calculations, always include it if possible
     df_copy['ATR'] = ta.volatility.average_true_range(df_copy['High'], df_copy['Low'], df_copy['Close'], window=14)
