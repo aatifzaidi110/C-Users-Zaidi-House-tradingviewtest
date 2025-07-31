@@ -1145,6 +1145,18 @@ def scan_for_trades(
                 # Add technical signal details
                 entry_criteria_details.extend(trade_plan_result.get('technical_signals', []))
 
+                 # Ensure last_day_df is correctly prepared for pivot calculation
+                # ... (existing code to get df and last_day_df) ...
+
+                pivot_points_df = calculate_pivot_points(last_day_df)
+                
+                # Check if pivot_points_df is not empty and get the last pivot points as a dictionary
+                last_pivot = {}
+                if not pivot_points_df.empty:
+                    # Convert to dictionary and ensure values are floats if not already
+                    last_pivot = {k: float(v) for k, v in pivot_points_df.iloc[-1].to_dict().items()}
+
+                # ... (rest of your existing code for preparing scanned_results) ...
 
                 scanned_results.append({
                     "Ticker": ticker,
@@ -1156,6 +1168,7 @@ def scan_for_trades(
                     "Entry Zone Start": f"${trade_plan_result.get('entry_zone_start', 'N/A'):.2f}",
                     "Entry Zone End": f"${trade_plan_result.get('entry_zone_end', 'N/A'):.2f}",
                     "Reward/Risk": f"{trade_plan_result.get('reward_risk_ratio', 'N/A'):.1f}:1",
+                    # Ensure you use .get() for dictionary access, providing a default if key not present
                     "Pivot (P)": f"${last_pivot.get('Pivot', 'N/A'):.2f}",
                     "Resistance 1 (R1)": f"${last_pivot.get('R1', 'N/A'):.2f}",
                     "Resistance 2 (R2)": f"${last_pivot.get('R2', 'N/A'):.2f}",
