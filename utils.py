@@ -236,6 +236,10 @@ def calculate_pivot_points(df):
 def calculate_indicators(df, indicator_selection, is_intraday):
     df_copy = df.copy()
 
+    # Add this debug print BEFORE the type conversion loop
+    print(f"DEBUG (pre-conversion): Input df_copy columns: {df_copy.columns.tolist()}")
+    print(f"DEBUG (pre-conversion): Input df_copy 'Close' type: {type(df_copy.get('Close'))}, ndim: {df_copy.get('Close').ndim if 'Close' in df_copy.columns else 'N/A'}")
+
     required_cols = ['Open', 'High', 'Low', 'Close', 'Volume']
     if not all(col in df_copy.columns for col in required_cols):
         # Handle missing columns more robustly if needed, or raise a specific error
@@ -255,8 +259,13 @@ def calculate_indicators(df, indicator_selection, is_intraday):
                 print(f"Warning: Column '{col}' is still {df_copy[col].ndim}-dimensional after squeeze. Attempting iloc[:, 0].")
                 df_copy[col] = df_copy[col].iloc[:, 0] # Fallback for stubborn 2D single-column DataFrames
 
+                # Add this debug print AFTER the type conversion for each core column
+                print(f"DEBUG (post-conversion): Column '{col}' type: {type(df_copy[col])}, ndim: {df_copy[col].ndim}")
+
     # === EMA Trend ===
     if indicator_selection.get("EMA Trend"):
+        # Add a debug print right before calling ta.trend.ema_indicator
+        print(f"DEBUG (EMA): df_copy['Close'] type: {type(df_copy['Close'])}, ndim: {df_copy['Close'].ndim}")
         df_copy['EMA_20'] = ta.trend.ema_indicator(df_copy['Close'], window=20)
         df_copy['EMA_50'] = ta.trend.ema_indicator(df_copy['Close'], window=50)
 
