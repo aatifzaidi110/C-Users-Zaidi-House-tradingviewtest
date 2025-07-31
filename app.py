@@ -105,7 +105,7 @@ if analyze:
 
             if df.empty:
                 st.warning(f"No data available for {ticker} with the selected period/interval. Please try a different ticker or timeframe.")
-                return
+            return
 
             # ... (rest of your app.py code that calls calculate_indicators) ...
             # For example:
