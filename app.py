@@ -178,8 +178,8 @@ if clear:
 
             st.markdown("### ✅ Confidence Score Result")
             st.write(confidence_result)
-        else:
-            st.warning("Could not calculate indicators. Data might be insufficient or all NaN after processing.")
+    else:
+        st.warning("Could not calculate indicators. Data might be insufficient or all NaN after processing.")
     except Exception as e:
         st.error(f"❌ Error analyzing ticker: {e}")
         st.warning("Please ensure the ticker is valid and try again.")
