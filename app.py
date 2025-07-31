@@ -120,8 +120,8 @@ if analyze:
                     "ROC": False, "OBV": False, "Volume Spike": False
             }
 
-                # Call calculate_indicators from utils.py
-                indicators_df = calculate_indicators(df, selected_indicators, is_intraday_data)
+            # Call calculate_indicators from utils.py
+            indicators_df = calculate_indicators(df, selected_indicators, is_intraday_data)
 
             if not indicators_df.empty:
                 st.subheader("Technical Indicators (last 5 rows):")
