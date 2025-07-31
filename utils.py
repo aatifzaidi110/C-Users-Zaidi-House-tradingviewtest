@@ -232,45 +232,49 @@ def calculate_pivot_points(df):
         'S1': s1, 'S2': s2, 'S3': s3
     }])
 
-
 def calculate_indicators(df, indicator_selection, is_intraday):
     df_copy = df.copy()
 
     # Add this debug print BEFORE the type conversion loop
     print(f"DEBUG (pre-conversion): Input df_copy columns: {df_copy.columns.tolist()}")
-    print(f"DEBUG (pre-conversion): Input df_copy 'Close' type: {type(df_copy.get('Close'))}, ndim: {df_copy.get('Close').ndim if 'Close' in df_copy.columns else 'N/A'}")
+    print(f"DEBUG (pre-conversion): Input df_copy 'Close' type: {type(df_copy.get('Close'))}, ndim: {df_copy.get('Close').ndim if 'Close' in df_copy.columns and isinstance(df_copy.get('Close'), (pd.Series, np.ndarray)) else 'N/A'}")
 
     required_cols = ['Open', 'High', 'Low', 'Close', 'Volume']
     if not all(col in df_copy.columns for col in required_cols):
-        # Handle missing columns more robustly if needed, or raise a specific error
-        # For now, let's ensure they exist as NaN if not present, but this is usually not the case with yfinance data
         missing_cols = [col for col in required_cols if col not in df_copy.columns]
         if missing_cols:
             print(f"Warning: Missing required columns for indicators: {missing_cols}. Filling with NaN.")
             for col in missing_cols:
-                df_copy[col] = np.nan # Add missing columns, filled with NaN
+                df_copy[col] = np.nan
 
     # Ensure core columns are numeric and 1-dimensional Series
     for col in ['Open', 'High', 'Low', 'Close', 'Volume']:
         if col in df_copy.columns:
             # Convert to numeric, forcing errors to NaN, and ensure it's a Series
-            df_copy[col] = pd.to_numeric(df_copy[col], errors='coerce').squeeze()
-            if df_copy[col].ndim > 1: # Double-check after squeeze if it's still 2D
-                print(f"Warning: Column '{col}' is still {df_copy[col].ndim}-dimensional after squeeze. Attempting iloc[:, 0].")
-                df_copy[col] = df_copy[col].iloc[:, 0] # Fallback for stubborn 2D single-column DataFrames
+            # Handle potential scalar result after squeeze if column was all NaNs or empty
+            temp_series = pd.to_numeric(df_copy[col], errors='coerce').squeeze()
+            if isinstance(temp_series, pd.Series):
+                df_copy[col] = temp_series
+            else: # It's a scalar (e.g., NaN)
+                df_copy[col] = pd.Series([temp_series] * len(df_copy.index), index=df_copy.index)
+                print(f"Warning: Column '{col}' converted to scalar, re-casting as Series of {temp_series}.")
 
-                # Add this debug print AFTER the type conversion for each core column
-                print(f"DEBUG (post-conversion): Column '{col}' type: {type(df_copy[col])}, ndim: {df_copy[col].ndim}")
+            if df_copy[col].ndim > 1:
+                print(f"Warning: Column '{col}' is still {df_copy[col].ndim}-dimensional after initial processing. Attempting iloc[:, 0].")
+                df_copy[col] = df_copy[col].iloc[:, 0]
+
+            # Add this debug print AFTER the type conversion for each core column
+            print(f"DEBUG (post-conversion): Column '{col}' type: {type(df_copy[col])}, ndim: {df_copy[col].ndim}")
 
     # === EMA Trend ===
     if indicator_selection.get("EMA Trend"):
-        # Add a debug print right before calling ta.trend.ema_indicator
         print(f"DEBUG (EMA): df_copy['Close'] type: {type(df_copy['Close'])}, ndim: {df_copy['Close'].ndim}")
         df_copy['EMA_20'] = ta.trend.ema_indicator(df_copy['Close'], window=20)
         df_copy['EMA_50'] = ta.trend.ema_indicator(df_copy['Close'], window=50)
 
     # === MACD ===
     if indicator_selection.get("MACD"):
+        print(f"DEBUG (MACD): df_copy['Close'] type: {type(df_copy['Close'])}, ndim: {df_copy['Close'].ndim}")
         macd = ta.trend.MACD(df_copy['Close'])
         df_copy['MACD'] = macd.macd()
         df_copy['MACD_Signal'] = macd.macd_signal()
@@ -278,11 +282,13 @@ def calculate_indicators(df, indicator_selection, is_intraday):
 
     # === RSI ===
     if indicator_selection.get("RSI Momentum"):
+        print(f"DEBUG (RSI): df_copy['Close'] type: {type(df_copy['Close'])}, ndim: {df_copy['Close'].ndim}")
         rsi = ta.momentum.RSIIndicator(df_copy['Close'], window=14)
         df_copy['RSI'] = rsi.rsi()
 
     # === Bollinger Bands ===
     if indicator_selection.get("Bollinger Bands"):
+        print(f"DEBUG (BB): df_copy['Close'] type: {type(df_copy['Close'])}, ndim: {df_copy['Close'].ndim}")
         bb = ta.volatility.BollingerBands(df_copy['Close'], window=20)
         df_copy['BB_High'] = bb.bollinger_hband()
         df_copy['BB_Low'] = bb.bollinger_lband()
@@ -290,12 +296,14 @@ def calculate_indicators(df, indicator_selection, is_intraday):
 
     # === Stochastic Oscillator ===
     if indicator_selection.get("Stochastic"):
+        print(f"DEBUG (Stoch): High type: {type(df_copy['High'])}, ndim: {df_copy['High'].ndim}; Low type: {type(df_copy['Low'])}, ndim: {df_copy['Low'].ndim}; Close type: {type(df_copy['Close'])}, ndim: {df_copy['Close'].ndim}")
         stoch = ta.momentum.StochasticOscillator(df_copy['High'], df_copy['Low'], df_copy['Close'])
         df_copy['Stoch_K'] = stoch.stoch()
         df_copy['Stoch_D'] = stoch.stoch_signal()
 
     # === Ichimoku Cloud ===
     if indicator_selection.get("Ichimoku Cloud"):
+        print(f"DEBUG (Ichimoku): High type: {type(df_copy['High'])}, ndim: {df_copy['High'].ndim}; Low type: {type(df_copy['Low'])}, ndim: {df_copy['Low'].ndim}")
         ichi = ta.trend.IchimokuIndicator(df_copy['High'], df_copy['Low'])
         df_copy['Tenkan_sen'] = ichi.ichimoku_conversion_line()
         df_copy['Kijun_sen'] = ichi.ichimoku_base_line()
@@ -304,36 +312,41 @@ def calculate_indicators(df, indicator_selection, is_intraday):
 
     # === Parabolic SAR ===
     if indicator_selection.get("Parabolic SAR"):
+        print(f"DEBUG (PSAR): High type: {type(df_copy['High'])}, ndim: {df_copy['High'].ndim}; Low type: {type(df_copy['Low'])}, ndim: {df_copy['Low'].ndim}; Close type: {type(df_copy['Close'])}, ndim: {df_copy['Close'].ndim}")
         psar = ta.trend.PSARIndicator(df_copy['High'], df_copy['Low'], df_copy['Close'])
         df_copy['Parabolic_SAR'] = psar.psar()
 
     # === ADX ===
     if indicator_selection.get("ADX"):
+        print(f"DEBUG (ADX): High type: {type(df_copy['High'])}, ndim: {df_copy['High'].ndim}; Low type: {type(df_copy['Low'])}, ndim: {df_copy['Low'].ndim}; Close type: {type(df_copy['Close'])}, ndim: {df_copy['Close'].ndim}")
         adx = ta.trend.ADXIndicator(df_copy['High'], df_copy['Low'], df_copy['Close'])
         df_copy['ADX'] = adx.adx()
 
     # === CCI ===
     if indicator_selection.get("CCI"):
+        print(f"DEBUG (CCI): High type: {type(df_copy['High'])}, ndim: {df_copy['High'].ndim}; Low type: {type(df_copy['Low'])}, ndim: {df_copy['Low'].ndim}; Close type: {type(df_copy['Close'])}, ndim: {df_copy['Close'].ndim}")
         cci = ta.trend.CCIIndicator(df_copy['High'], df_copy['Low'], df_copy['Close'])
         df_copy['CCI'] = cci.cci()
 
     # === ROC ===
     if indicator_selection.get("ROC"):
+        print(f"DEBUG (ROC): df_copy['Close'] type: {type(df_copy['Close'])}, ndim: {df_copy['Close'].ndim}")
         roc = ta.momentum.ROCIndicator(df_copy['Close'])
         df_copy['ROC'] = roc.roc()
 
     # === OBV ===
     if indicator_selection.get("OBV"):
+        print(f"DEBUG (OBV): Close type: {type(df_copy['Close'])}, ndim: {df_copy['Close'].ndim}; Volume type: {type(df_copy['Volume'])}, ndim: {df_copy['Volume'].ndim}")
         obv = ta.volume.OnBalanceVolumeIndicator(df_copy['Close'], df_copy['Volume'])
         df_copy['OBV'] = obv.on_balance_volume()
 
     # === Volume Spike ===
     if indicator_selection.get("Volume Spike"):
-        df_copy['Volume_Spike'] = df_copy['Volume'].pct_change() > 1.5  # basic spike flag
+        print(f"DEBUG (Volume Spike): df_copy['Volume'] type: {type(df_copy['Volume'])}, ndim: {df_copy['Volume'].ndim}")
+        df_copy['Volume_Spike'] = df_copy['Volume'].pct_change() > 1.5
 
-    df_copy.dropna(subset=['Close'], inplace=True) # [cite: 19]
+    df_copy.dropna(subset=['Close'], inplace=True)
 
-    # Debug logs
     print("✅ [calculate_indicators] Output shape:", df_copy.shape)
     print("✅ [calculate_indicators] Columns:", df_copy.columns.tolist())
 
