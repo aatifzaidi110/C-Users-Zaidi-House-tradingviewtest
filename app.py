@@ -43,8 +43,7 @@ get_finviz_data, get_data, get_options_chain,
 calculate_indicators, calculate_pivot_points,
 generate_signals_for_row, backtest_strategy, analyze_options_chain,
 suggest_options_strategy, generate_directional_trade_plan,
-calculate_confidence_score, # Redundant but harmless if already imported
-convert_finviz_recom_to_score,
+calculate_confidence_score, 
 get_economic_data_fred, get_vix_data, calculate_economic_score, calculate_sentiment_score,
 scan_for_trades # Changed from run_stock_scanner to scan_for_trades
 )
